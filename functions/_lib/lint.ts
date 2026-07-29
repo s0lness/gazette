@@ -140,3 +140,92 @@ export function lintDaily(body: string): LintResult {
   const errors = [...t.errors, ...p.errors];
   return { ok: errors.length === 0, errors };
 }
+
+// ---- Tweet-shaped post lint ------------------------------------------------
+// A post = REQUIRED headline (1..200, single line) + OPTIONAL body (old 5-section
+// markdown, now optional depth) + OPTIONAL image. The artifact requirement is
+// satisfied by any concrete artifact across headline+body, OR by an attached image.
+
+const HEADLINE_MAX = 200;
+
+export interface PostInput {
+  headline: string;
+  body?: string | null;
+  hasImage?: boolean;
+}
+
+export function lintPost({ headline, body, hasImage }: PostInput): LintResult {
+  const errors: LintError[] = [];
+  const h = (headline ?? "").trim();
+  const b = (body ?? "").trim();
+
+  if (h.length === 0) {
+    errors.push({ code: "headline_required", message: "A headline is required (the tweet)." });
+  } else {
+    if (h.length > HEADLINE_MAX) {
+      errors.push({
+        code: "headline_too_long",
+        message: `Headline is ${h.length} chars, over the ${HEADLINE_MAX} char limit.`,
+      });
+    }
+    if (/[\r\n]/.test(headline)) {
+      errors.push({
+        code: "headline_multiline",
+        message: "Headline must be a single line (no newlines).",
+      });
+    }
+  }
+
+  // Artifact: a concrete reference in headline+body, or an attached image counts.
+  if (!hasImage && !hasArtifact(h + "\n" + b)) {
+    errors.push({
+      code: "no_artifact",
+      message:
+        "Include a concrete artifact (a URL, a path with an extension, or a commit hash 7-40 hex) in the headline or body, or attach an image.",
+    });
+  }
+
+  // Body is optional; if present, section length cap applies only to sections that exist.
+  if (b.length > BODY_MAX) {
+    errors.push({
+      code: "body_too_long",
+      message: `Body is ${b.length} chars, over the ${BODY_MAX} char limit.`,
+    });
+  }
+  if (b.length > 0) {
+    const sections = splitSections(b);
+    for (const [name, content] of sections) {
+      if (content.length > SECTION_MAX) {
+        errors.push({
+          code: "section_too_long",
+          message: `Section "## ${name}" is ${content.length} chars, over the ${SECTION_MAX} char limit.`,
+        });
+      }
+    }
+  }
+
+  // Privacy applies to headline AND body.
+  const priv = privacyLint(h + "\n" + b);
+  errors.push(...priv.errors);
+
+  return { ok: errors.length === 0, errors };
+}
+
+// Comment body lint: privacy + length cap.
+const COMMENT_MAX = 500;
+
+export function lintComment(body: string): LintResult {
+  const errors: LintError[] = [];
+  const b = (body ?? "").trim();
+  if (b.length === 0) {
+    errors.push({ code: "empty", message: "Comment is empty." });
+  } else if (b.length > COMMENT_MAX) {
+    errors.push({
+      code: "comment_too_long",
+      message: `Comment is ${b.length} chars, over the ${COMMENT_MAX} char limit.`,
+    });
+  }
+  const priv = privacyLint(b);
+  errors.push(...priv.errors);
+  return { ok: errors.length === 0, errors };
+}

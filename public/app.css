@@ -166,3 +166,72 @@ pre.code { background: var(--surface); border: 1px solid var(--line); border-rad
   padding: 0.75rem 0.9rem; margin: 1rem 0 0; font-size: 0.9rem; line-height: 1.5;
 }
 .join-gate code { font-size: 0.85em; }
+
+/* ---- Tweet card ---------------------------------------------------------- */
+.tweet { border-top: 1px solid var(--line); padding: 1.1rem 0; }
+.tweet:first-child { border-top: none; }
+.tw-head { display: flex; align-items: baseline; gap: 0.55rem; margin-bottom: 0.5rem; }
+.tw-who { text-decoration: none; font-weight: 600; }
+.tw-who:hover { text-decoration: underline; }
+.tw-when { color: var(--muted); font-size: 0.82rem; margin-left: auto; }
+
+/* The headline IS the tweet: large and prominent. */
+.tw-headline { font-size: 1.15rem; line-height: 1.4; font-weight: 600; letter-spacing: -0.01em; margin: 0 0 0.55rem; white-space: pre-wrap; word-break: break-word; }
+
+.tw-img { display: block; margin: 0 0 0.6rem; }
+.tw-img img { display: block; max-width: 100%; height: auto; border-radius: var(--radius); border: 1px solid var(--line); }
+
+/* Action bar: reactions + comment toggle. */
+.tw-actions { display: flex; align-items: center; gap: 0.4rem; margin: 0.2rem 0 0.1rem; }
+.tw-react, .tw-comment-btn {
+  display: inline-flex; align-items: center; gap: 0.3rem;
+  padding: 0.28rem 0.55rem; border: 1px solid var(--line); border-radius: 999px;
+  background: transparent; color: var(--muted); cursor: pointer;
+  font: inherit; font-size: 0.82rem; line-height: 1;
+}
+.tw-react:hover, .tw-comment-btn:hover { color: var(--fg); border-color: var(--accent); }
+.tw-react.on { color: var(--fg); border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.tw-glyph { font-size: 0.95rem; line-height: 1; }
+.tw-count { font-variant-numeric: tabular-nums; min-width: 0.7em; text-align: center; }
+.tw-comment-btn { margin-left: auto; }
+
+/* Comment region. */
+.tw-comments { margin: 0.7rem 0 0.2rem; padding: 0.7rem 0 0; border-top: 1px solid var(--line); }
+.tw-thread { display: flex; flex-direction: column; gap: 0.6rem; margin-bottom: 0.6rem; }
+.tw-c { font-size: 0.9rem; }
+.tw-c.tw-pending { opacity: 0.55; }
+.tw-c-who { font-weight: 600; text-decoration: none; }
+.tw-c-who:hover { text-decoration: underline; }
+.tw-c-when { color: var(--muted); font-size: 0.78rem; margin-left: 0.4rem; }
+.tw-c-body { white-space: pre-wrap; word-break: break-word; margin-top: 0.1rem; }
+.tw-c-empty { color: var(--muted); font-size: 0.88rem; margin: 0; }
+.tw-reply { display: flex; gap: 0.5rem; align-items: flex-end; }
+.tw-reply-in { flex: 1 1 auto; min-height: 2.1rem; resize: vertical; }
+.tw-reply-send { flex: 0 0 auto; }
+.tw-reply-note { color: var(--muted); font-size: 0.82rem; margin: 0.4rem 0 0; }
+
+/* Details disclosure holding the structured body. Collapsed by default. */
+.tw-details { margin-top: 0.7rem; }
+.tw-details > summary { cursor: pointer; color: var(--muted); font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em; list-style: none; }
+.tw-details > summary::-webkit-details-marker { display: none; }
+.tw-details > summary::before { content: "\25B8"; display: inline-block; margin-right: 0.35rem; transition: transform 0.12s ease; }
+.tw-details[open] > summary::before { transform: rotate(90deg); }
+.tw-details > summary:hover { color: var(--fg); }
+.tw-details .md { margin-top: 0.5rem; }
+
+@media (prefers-reduced-motion: reduce) {
+  .tw-details > summary::before { transition: none; }
+}
+
+/* ---- Copy button on snippets -------------------------------------------- */
+.copyable { position: relative; }
+.gz-copy {
+  position: absolute; top: 0.4rem; right: 0.4rem;
+  padding: 0.15rem 0.5rem; border: 1px solid var(--line); border-radius: 999px;
+  background: color-mix(in srgb, var(--surface) 90%, transparent);
+  color: var(--muted); cursor: pointer;
+  font: inherit; font-size: 0.72rem; line-height: 1.4;
+  -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px);
+}
+.gz-copy:hover { color: var(--fg); border-color: var(--accent); }
+.gz-copy.copied { color: var(--positive); border-color: var(--positive); }

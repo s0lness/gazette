@@ -1,34 +1,14 @@
-// Homepage: the wall when not authed, the live feed when authed+canRead.
-// All fetches go through gzFetch, so the token rides along and 401/403 bounce to
-// the wall. When authed, polls every 12s (gzLivePoll) and refetches on focus so
-// new dailies and members appear without a reload. New entries fade+slide in;
-// relative timestamps tick locally via gz.js.
+// Homepage: the wall when not authed, the live tweet feed when authed+canRead.
+// Each daily renders as a tweet card (window.gzTweet). Polls every 12s (gzLivePoll)
+// and refetches on focus so new dailies, reactions, and comments appear without a
+// reload. New cards fade+slide in; relative timestamps tick locally via gz.js.
+// Reactions and comments are optimistic (tweet.js) and reconcile on the next poll,
+// so a repaint is skipped while a reply is in progress.
 (function () {
-  function entryHTML(e) {
-    const dot = e.status === "active" ? "active" : "lapsed";
-    const name = e.display_name ? e.display_name : e.handle;
-    return (
-      '<article class="entry" data-key="' + escAttr(feedKey(e)) + '">' +
-      '<div class="entry-head">' +
-      '<span class="dot ' + dot + '" title="' + e.status + '"></span>' +
-      '<a href="/a/' + encodeURIComponent(e.handle) + '">' + escAttr(name) + "</a>" +
-      '<span class="entry-date">' + window.gzTime(e.created_at, e.date) + "</span>" +
-      "</div>" +
-      '<div class="md">' + window.gzMarkdown(e.body_md) + "</div>" +
-      "</article>"
-    );
-  }
-
-  // Stable identity for a feed daily: one per handle per day.
-  function feedKey(e) {
-    return e.handle + "|" + e.date;
-  }
-
   function escAttr(s) {
     return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
   }
 
-  // Animate only the genuinely new keys in. Existing rows are not re-animated.
   function markNew(container, prevKeys) {
     if (window.gzReduceMotion()) return;
     const rows = container.querySelectorAll("[data-key]");
@@ -48,11 +28,11 @@
   async function loadFeed() {
     const feed = document.getElementById("feed");
     if (!feed) return;
+    window.gzTweet.wire(feed);
     let data;
     try {
       const r = await window.gzFetch("/api/feed");
       data = await r.json();
-      // The feed rows name their authors, but not "me"; the chip is best-effort.
     } catch (err) {
       if (err && err.gzGated) return; // wall already raised
       if (lastFeed === null) feed.innerHTML = '<p class="muted">Could not load the feed.</p>';
@@ -61,14 +41,15 @@
     revealFeed();
     const key = JSON.stringify(data);
     if (key === lastFeed) return; // unchanged, no repaint
+    if (lastFeed !== null && window.gzTweet.busy(feed)) return; // mid-reply: catch up next tick
     const first = lastFeed === null;
     const prevKeys = keySet(feed);
     lastFeed = key;
     if (!data.entries || data.entries.length === 0) {
-      feed.innerHTML = '<p class="muted">No dailies yet. Be the first: <a href="/join.html">join</a>.</p>';
+      feed.innerHTML = '<p class="muted">No posts yet. Be the first: <a href="/join.html">join</a>.</p>';
       return;
     }
-    feed.innerHTML = data.entries.map(entryHTML).join("");
+    feed.innerHTML = data.entries.map(window.gzTweet.cardHTML).join("");
     if (!first) markNew(feed, prevKeys);
   }
 

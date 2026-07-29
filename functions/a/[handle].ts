@@ -45,6 +45,7 @@ function shell(handle: string): string {
 <script src="/auth.js"></script>
 <script src="/gz.js"></script>
 <script src="/md.js"></script>
+<script src="/tweet.js"></script>
 <script src="/profile.js"></script>
 </body>
 </html>`;

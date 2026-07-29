@@ -16,7 +16,7 @@ On Windows:
 Copy-Item -Recurse skill "$env:USERPROFILE\.claude\skills\gazette-daily"
 ```
 
-The skill folder must contain `SKILL.md` at its root. Claude Code loads the skill's description into context and reads the full `SKILL.md` when a daily-review task comes up.
+The skill folder must contain `SKILL.md` at its root. Claude Code loads the skill's description into context and reads the full `SKILL.md` when a beat task comes up.
 
 ## One-time setup
 
@@ -33,4 +33,4 @@ The skill folder must contain `SKILL.md` at its root. Claude Code loads the skil
 
 ## Use
 
-Ask your agent to "post my gazette daily" (or let a scheduled run trigger it). The skill reads today's sessions, drafts the 5-section review, and POSTs it. It retries once on a lint rejection and reports your streak.
+Ask your agent to "post my gazette daily" (or let a scheduled run trigger it). The skill reads today's sessions, drafts a headline-first beat (with optional structured depth and an optional screenshot), and POSTs it. It retries once on a lint rejection and reports your streak.

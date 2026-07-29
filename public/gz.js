@@ -97,9 +97,95 @@
     if (!document.hidden) start();
   }
 
+  // ---- copy buttons -------------------------------------------------------
+  // Any <pre> (or block) marked with class "copyable" gets a small ghost "copy"
+  // button in its top-right that copies the block's exact text. A single delegated
+  // click handler covers static pages AND runtime-injected blocks (the wall). Call
+  // gzDecorateCopy(root) after injecting HTML to add buttons to any new blocks.
+
+  function copyText(text, btn) {
+    var done = function () {
+      var prev = btn.getAttribute("data-label") || "copy";
+      btn.textContent = "copied";
+      btn.classList.add("copied");
+      setTimeout(function () {
+        btn.textContent = prev;
+        btn.classList.remove("copied");
+      }, 1500);
+    };
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(done, function () { fallbackCopy(text); done(); });
+        return;
+      }
+    } catch (e) {}
+    fallbackCopy(text);
+    done();
+  }
+
+  function fallbackCopy(text) {
+    try {
+      var ta = document.createElement("textarea");
+      ta.value = text;
+      ta.style.position = "fixed";
+      ta.style.opacity = "0";
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      document.body.removeChild(ta);
+    } catch (e) {}
+  }
+
+  // The exact text to copy for a block: explicit data-copy-text wins, else the
+  // block's textContent minus any button label.
+  function snippetText(block, btn) {
+    var explicit = block.getAttribute("data-copy-text");
+    if (explicit != null) return explicit;
+    var clone = block.cloneNode(true);
+    var b = clone.querySelector(".gz-copy");
+    if (b) b.remove();
+    return clone.textContent.replace(/\s+$/, "");
+  }
+
+  // Add a copy button to every .copyable block under root that lacks one.
+  function gzDecorateCopy(root) {
+    root = root || document;
+    var blocks = root.querySelectorAll(".copyable");
+    for (var i = 0; i < blocks.length; i++) {
+      var block = blocks[i];
+      if (block.querySelector(".gz-copy")) continue;
+      var btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "gz-copy";
+      btn.textContent = "copy";
+      btn.setAttribute("data-label", "copy");
+      // Ensure positioning context without clobbering existing inline styles.
+      if (getComputedStyle(block).position === "static") block.style.position = "relative";
+      block.appendChild(btn);
+    }
+  }
+
+  // One delegated handler for every copy button, static or injected.
+  document.addEventListener("click", function (ev) {
+    var btn = ev.target && ev.target.closest ? ev.target.closest(".gz-copy") : null;
+    if (!btn) return;
+    ev.preventDefault();
+    var block = btn.closest ? btn.closest(".copyable") : null;
+    if (!block) return;
+    copyText(snippetText(block, btn), btn);
+  });
+
+  // Decorate any static copyable blocks on load.
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", function () { gzDecorateCopy(document); });
+  } else {
+    gzDecorateCopy(document);
+  }
+
   window.gzRelTime = gzRelTime;
   window.gzTime = gzTime;
   window.gzLivePoll = gzLivePoll;
   window.gzReduceMotion = gzReduceMotion;
   window.gzRefreshTimes = refreshTimes;
+  window.gzDecorateCopy = gzDecorateCopy;
 })();

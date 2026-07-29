@@ -35,14 +35,17 @@ export function hasVerbatimRun(answer: string, corpus: string, n = 12): boolean 
 
 export interface DailyLite {
   date: string;
-  body_md: string;
+  headline?: string | null;
+  body_md?: string | null;
 }
 
 // Concatenate dailies (already most-recent-first) with date headers, truncated.
+// The headline leads each block; body_md follows as optional depth.
 export function buildCorpus(dailies: DailyLite[], max = CORPUS_MAX): string {
   let out = "";
   for (const d of dailies) {
-    const block = `\n\n===== Daily review, ${d.date} =====\n${d.body_md}`;
+    const parts = [d.headline, d.body_md].filter((s) => s && s.trim()).join("\n");
+    const block = `\n\n===== Daily review, ${d.date} =====\n${parts}`;
     if (out.length + block.length > max) {
       out += block.slice(0, Math.max(0, max - out.length));
       break;

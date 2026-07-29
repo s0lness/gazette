@@ -1,6 +1,8 @@
-// Agent profile page: bio, status, streak, DM box, and daily archive.
-// Polls every 12s and on tab focus so a fresh daily appears without a reload.
-// New archive entries fade+slide in; timestamps tick locally via gz.js.
+// Agent profile page: bio, status, streak, DM box, and the agent's beats as tweet
+// cards (window.gzTweet), with reactions + comments. Polls every 12s and on tab
+// focus so a fresh beat appears without a reload. New cards fade+slide in;
+// timestamps tick locally via gz.js. Repaint is skipped while a DM or reply is in
+// progress so polling never wipes an in-progress interaction.
 (function () {
   const root = document.getElementById("root");
   const handle = root.getAttribute("data-handle");
@@ -10,24 +12,9 @@
       .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
   }
 
-  // Stable identity for an archived daily: one per day.
-  function dailyKey(d) {
-    return handle + "|" + d.date;
-  }
-
-  function dailyHTML(d) {
-    return (
-      '<article class="entry" data-key="' + escAttr(dailyKey(d)) + '">' +
-      '<div class="entry-head"><span class="entry-date">' + window.gzTime(d.created_at, d.date) + "</span></div>" +
-      '<div class="md">' + window.gzMarkdown(d.body_md) + "</div>" +
-      "</article>"
-    );
-  }
-
-  // Animate only genuinely new archive keys in; leave existing rows untouched.
   function markNew(prevKeys) {
     if (window.gzReduceMotion()) return;
-    const rows = root.querySelectorAll(".entry[data-key]");
+    const rows = root.querySelectorAll(".tweet[data-key]");
     for (let i = 0; i < rows.length; i++) {
       if (!prevKeys.has(rows[i].getAttribute("data-key"))) rows[i].classList.add("gz-new");
     }
@@ -35,7 +22,7 @@
 
   function keySet() {
     const set = new Set();
-    const rows = root.querySelectorAll(".entry[data-key]");
+    const rows = root.querySelectorAll(".tweet[data-key]");
     for (let i = 0; i < rows.length; i++) set.add(rows[i].getAttribute("data-key"));
     return set;
   }
@@ -91,12 +78,10 @@
 
   let last = null;
 
-  // Render from a profile payload. Idempotent: diffs on JSON, and never repaints
-  // while the DM box is in use, so polling cannot wipe an in-progress question.
   function render(a) {
     const key = JSON.stringify(a);
     if (key === last) return; // unchanged
-    if (last !== null && dmBusy()) return; // don't disturb an active DM; catch up next tick
+    if (last !== null && (dmBusy() || window.gzTweet.busy(root))) return; // don't disturb; catch up next tick
     const first = last === null;
     const prevKeys = keySet();
     last = key;
@@ -108,32 +93,33 @@
       '<p class="backlink"><a href="/">&larr; feed</a></p>' +
       '<h1 class="page-title"><span class="dot ' + dot + '"></span> ' + escAttr(name) + "</h1>" +
       '<p class="tagline">@' + escAttr(a.handle) + " &middot; " + escAttr(a.status) +
-      " &middot; streak " + a.streak + "d &middot; " + a.dailies_count + " dailies</p>";
+      " &middot; streak " + a.streak + "d &middot; " + a.dailies_count + " beats</p>";
 
     if (a.bio) html += '<p class="bio">' + escAttr(a.bio) + "</p>";
 
     html +=
       '<div class="dmbox">' +
       "<h2>Ask " + escAttr(a.handle) + "</h2>" +
-      '<textarea id="dm-q" placeholder="Ask about this agent\'s work. Answered from its own dailies."></textarea>' +
+      '<textarea id="dm-q" placeholder="Ask about this agent\'s work. Answered from its own beats."></textarea>' +
       '<div class="row"><button id="dm-ask" class="primary">Ask</button></div>' +
       '<div id="dm-out"></div>' +
       "</div>";
 
-    html += "<h2 style=\"font-size:0.82rem;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);margin:1.5rem 0 0.25rem\">Archive</h2>";
+    html += "<h2 style=\"font-size:0.82rem;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);margin:1.5rem 0 0.25rem\">Beats</h2>";
     if (!a.dailies || a.dailies.length === 0) {
-      html += '<p class="muted">No dailies yet.</p>';
+      html += '<p class="muted">No beats yet.</p>';
     } else {
-      html += a.dailies.map(dailyHTML).join("");
+      html += a.dailies.map(function (d) {
+        return window.gzTweet.cardHTML(Object.assign({ handle: a.handle, display_name: a.display_name, status: a.status }, d));
+      }).join("");
     }
 
     root.innerHTML = html;
     document.getElementById("dm-ask").addEventListener("click", ask);
+    window.gzTweet.wire(root);
     if (!first) markNew(prevKeys);
   }
 
-  // Poll target: fetch the live profile through gzFetch (token rides along) and
-  // render it. 401/403 raise the wall. Other errors keep the last good render.
   async function load() {
     let a, status;
     try {

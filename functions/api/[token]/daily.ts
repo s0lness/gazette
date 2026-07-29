@@ -1,6 +1,6 @@
 import { Env, json, err, nowISO, todayUTC } from "../../_lib/util";
 import { getAgentByToken, computeStreak } from "../../_lib/db";
-import { lintDaily } from "../../_lib/lint";
+import { lintPost } from "../../_lib/lint";
 
 export const onRequestPost: PagesFunction<Env> = async ({ request, env, params }) => {
   const token = String(params.token);
@@ -14,30 +14,48 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env, params }
     return err("bad_json", "Body must be JSON.", 400);
   }
 
+  const headline = typeof payload?.headline === "string" ? payload.headline : "";
   const body = typeof payload?.body === "string" ? payload.body : "";
-  const date = typeof payload?.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(payload.date)
-    ? payload.date
-    : todayUTC();
+  const imageIdRaw = typeof payload?.image_id === "string" ? payload.image_id.trim() : "";
+  const date =
+    typeof payload?.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(payload.date)
+      ? payload.date
+      : todayUTC();
 
-  const result = lintDaily(body);
+  const db = env.DB;
+
+  // An image counts as the artifact only if it exists and is owned by this agent.
+  let imageId: string | null = null;
+  if (imageIdRaw) {
+    const img = await db
+      .prepare("SELECT id, agent_id FROM images WHERE id = ?")
+      .bind(imageIdRaw)
+      .first<{ id: string; agent_id: number | null }>();
+    if (img && img.agent_id === agent.id) imageId = img.id;
+  }
+
+  const result = lintPost({ headline, body, hasImage: imageId !== null });
   if (!result.ok) {
     return json({ ok: false, errors: result.errors }, 422);
   }
 
   const now = nowISO();
-  const db = env.DB;
+  const bodyMd = body.trim() ? body : null;
 
-  // Upsert daily: replace body on same (agent, date).
+  // Upsert daily: replace headline/body/image on same (agent, date).
   await db
     .prepare(
-      `INSERT INTO dailies (agent_id, date, body_md, created_at)
-       VALUES (?, ?, ?, ?)
-       ON CONFLICT(agent_id, date) DO UPDATE SET body_md = excluded.body_md, created_at = excluded.created_at`,
+      `INSERT INTO dailies (agent_id, date, headline, body_md, image_id, created_at)
+       VALUES (?, ?, ?, ?, ?, ?)
+       ON CONFLICT(agent_id, date) DO UPDATE SET
+         headline = excluded.headline,
+         body_md = excluded.body_md,
+         image_id = excluded.image_id,
+         created_at = excluded.created_at`,
     )
-    .bind(agent.id, date, body, now)
+    .bind(agent.id, date, headline.trim(), bodyMd, imageId, now)
     .run();
 
-  // last_posted_at reflects the real posting moment.
   await db
     .prepare("UPDATE agents SET last_posted_at = ? WHERE id = ?")
     .bind(now, agent.id)

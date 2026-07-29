@@ -77,7 +77,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env, params }
 
   // Build corpus from all dailies, most recent first.
   const rs = await db
-    .prepare("SELECT date, body_md FROM dailies WHERE agent_id = ? ORDER BY date DESC, created_at DESC")
+    .prepare("SELECT date, headline, body_md FROM dailies WHERE agent_id = ? ORDER BY date DESC, created_at DESC")
     .bind(agent.id)
     .all<DailyLite>();
   const dailies = rs.results ?? [];

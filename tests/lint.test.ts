@@ -1,5 +1,12 @@
 import { expect, test, describe } from "bun:test";
-import { templateLint, privacyLint, hasArtifact, lintDaily } from "../functions/_lib/lint";
+import {
+  templateLint,
+  privacyLint,
+  hasArtifact,
+  lintDaily,
+  lintPost,
+  lintComment,
+} from "../functions/_lib/lint";
 
 const goodBody = `## Shipped
 Merged the auth module in commit a1b2c3d4e5.
@@ -165,6 +172,104 @@ x
 ## Tomorrow
 x`;
     const r = lintDaily(body);
+    expect(r.ok).toBe(false);
+    expect(r.errors.some((e) => e.code === "privacy")).toBe(true);
+  });
+});
+
+describe("lintPost", () => {
+  test("headline with an artifact passes, no body needed", () => {
+    const r = lintPost({ headline: "Shipped the tweet feed in commit a1b2c3d" });
+    expect(r.ok).toBe(true);
+    expect(r.errors).toHaveLength(0);
+  });
+
+  test("headline is required", () => {
+    const r = lintPost({ headline: "   ", body: "did work in src/app.ts" });
+    expect(r.ok).toBe(false);
+    expect(r.errors.some((e) => e.code === "headline_required")).toBe(true);
+  });
+
+  test("headline over 200 chars fails", () => {
+    const r = lintPost({ headline: "x".repeat(201) + " src/a.ts" });
+    expect(r.ok).toBe(false);
+    expect(r.errors.some((e) => e.code === "headline_too_long")).toBe(true);
+  });
+
+  test("headline with a newline fails", () => {
+    const r = lintPost({ headline: "line one\nline two src/a.ts" });
+    expect(r.ok).toBe(false);
+    expect(r.errors.some((e) => e.code === "headline_multiline")).toBe(true);
+  });
+
+  test("no artifact anywhere and no image fails", () => {
+    const r = lintPost({ headline: "just talked to some people today" });
+    expect(r.ok).toBe(false);
+    expect(r.errors.some((e) => e.code === "no_artifact")).toBe(true);
+  });
+
+  test("an attached image satisfies the artifact requirement", () => {
+    const r = lintPost({ headline: "shipped a redesign, no link handy", hasImage: true });
+    expect(r.ok).toBe(true);
+  });
+
+  test("artifact can live in the body instead of the headline", () => {
+    const r = lintPost({ headline: "big day, lots done", body: "merged https://x.com/pr/1" });
+    expect(r.ok).toBe(true);
+  });
+
+  test("privacy lint catches a secret in the headline", () => {
+    const r = lintPost({ headline: "shipped with key sk-abcdefghijklmnop1234 oops" });
+    expect(r.ok).toBe(false);
+    expect(r.errors.some((e) => e.code === "privacy")).toBe(true);
+  });
+
+  test("privacy lint catches a secret in the body", () => {
+    const r = lintPost({
+      headline: "shipped src/app.ts today",
+      body: "notes: ping me at agent@example.com",
+    });
+    expect(r.ok).toBe(false);
+    expect(r.errors.some((e) => e.code === "privacy")).toBe(true);
+  });
+
+  test("sections are optional now (partial body passes)", () => {
+    const r = lintPost({
+      headline: "shipped src/app.ts",
+      body: "## Shipped\njust the one section, no others",
+    });
+    expect(r.ok).toBe(true);
+  });
+
+  test("over-long section still fails when a section exists", () => {
+    const r = lintPost({
+      headline: "shipped src/app.ts",
+      body: "## Shipped\n" + "x".repeat(950),
+    });
+    expect(r.ok).toBe(false);
+    expect(r.errors.some((e) => e.code === "section_too_long")).toBe(true);
+  });
+});
+
+describe("lintComment", () => {
+  test("a normal comment passes", () => {
+    expect(lintComment("nice work, love the feed").ok).toBe(true);
+  });
+
+  test("an empty comment fails", () => {
+    const r = lintComment("   ");
+    expect(r.ok).toBe(false);
+    expect(r.errors.some((e) => e.code === "empty")).toBe(true);
+  });
+
+  test("over 500 chars fails", () => {
+    const r = lintComment("x".repeat(501));
+    expect(r.ok).toBe(false);
+    expect(r.errors.some((e) => e.code === "comment_too_long")).toBe(true);
+  });
+
+  test("privacy lint catches a secret in a comment", () => {
+    const r = lintComment("here is my key sk-abcdefghijklmnop1234");
     expect(r.ok).toBe(false);
     expect(r.errors.some((e) => e.code === "privacy")).toBe(true);
   });
