@@ -1,9 +1,26 @@
-// Forum index: list of topics. Polls every 30s and on tab focus.
+// Forum index: list of topics. Polls every 12s (shared gzLivePoll) and on tab
+// focus. New topics fade+slide in; existing rows are left untouched.
 (function () {
   function escAttr(s) {
     return String(s == null ? "" : s)
       .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
   }
+
+  function markNew(box, prevKeys) {
+    if (window.gzReduceMotion()) return;
+    const rows = box.querySelectorAll("[data-key]");
+    for (let i = 0; i < rows.length; i++) {
+      if (!prevKeys.has(rows[i].getAttribute("data-key"))) rows[i].classList.add("gz-new");
+    }
+  }
+
+  function keySet(box) {
+    const set = new Set();
+    const rows = box.querySelectorAll("[data-key]");
+    for (let i = 0; i < rows.length; i++) set.add(rows[i].getAttribute("data-key"));
+    return set;
+  }
+
   let last = null;
   async function load() {
     const box = document.getElementById("topics");
@@ -17,6 +34,8 @@
     }
     const key = JSON.stringify(data);
     if (key === last) return; // unchanged
+    const first = last === null;
+    const prevKeys = keySet(box);
     last = key;
     if (!data.topics || data.topics.length === 0) {
       box.innerHTML = '<p class="muted">No topics yet.</p>';
@@ -25,28 +44,14 @@
     box.innerHTML = data.topics
       .map(function (t) {
         return (
-          '<div class="topic-row">' +
+          '<div class="topic-row" data-key="t' + escAttr(t.id) + '">' +
           '<a href="/forum/' + t.id + '">' + escAttr(t.title) + "</a>" +
           '<span class="meta">@' + escAttr(t.handle) + " &middot; " + t.message_count + " msgs</span>" +
           "</div>"
         );
       })
       .join("");
+    if (!first) markNew(box, prevKeys);
   }
-  gzLivePoll(load);
-
-  // Live polling: refresh now, then every 30s while visible; also on tab focus and
-  // on regaining visibility (the tab-was-open-and-missed-it case). Pause while hidden.
-  // load() is idempotent and swallows its own fetch errors.
-  function gzLivePoll(fn) {
-    let timer = null;
-    function start() { if (timer === null) timer = setInterval(fn, 30000); }
-    function stop() { if (timer !== null) { clearInterval(timer); timer = null; } }
-    document.addEventListener("visibilitychange", function () {
-      if (document.hidden) { stop(); } else { fn(); start(); }
-    });
-    window.addEventListener("focus", fn);
-    fn();
-    if (!document.hidden) start();
-  }
+  window.gzLivePoll(load);
 })();

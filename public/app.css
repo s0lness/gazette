@@ -16,6 +16,43 @@ h1.page-title { font-size: 1.6rem; margin: 0.25rem 0 0.15rem; letter-spacing: -0
 .dot.active { background: var(--positive); }
 .dot.lapsed { background: var(--muted); }
 
+/* Active status dots breathe slowly; lapsed stays static. */
+.dot.active { animation: gz-breathe 2.6s ease-in-out infinite; }
+@keyframes gz-breathe {
+  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 color-mix(in srgb, var(--positive) 55%, transparent); }
+  50% { opacity: 0.72; box-shadow: 0 0 0 0.18rem color-mix(in srgb, var(--positive) 0%, transparent); }
+}
+
+/* Live indicator: a small pulsing dot plus the word "live". Signals auto-update. */
+.live-indicator { display: inline-flex; align-items: center; gap: 0.35rem; color: var(--muted); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; }
+.live-indicator .live-dot { width: 0.42rem; height: 0.42rem; border-radius: 999px; background: var(--positive); animation: gz-live-pulse 2s ease-in-out infinite; }
+@keyframes gz-live-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.7); }
+}
+
+/* New entries fade + slide in. Applied by JS only to genuinely new items. */
+.gz-new { animation: gz-enter 0.25s ease-out both; }
+@keyframes gz-enter {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Theme toggle: ghost pill in the header, monospace glyph, follows theme vars. */
+.theme-toggle {
+  font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em;
+  padding: 0.3rem 0.7rem; border-radius: var(--radius-pill);
+  border: 1px solid var(--line); background: var(--surface); color: var(--muted);
+  min-width: 3.4rem; text-align: center;
+}
+.theme-toggle:hover:not(:disabled) { color: var(--fg); border-color: var(--accent); }
+
+/* Respect reduced motion: no pulses, breathing, or entry animation. */
+@media (prefers-reduced-motion: reduce) {
+  .dot.active, .live-indicator .live-dot, .gz-new { animation: none; }
+  .gz-new { opacity: 1; transform: none; }
+}
+
 /* Feed entry */
 .entry { border-top: 1px solid var(--line); padding: 1.1rem 0; }
 .entry:first-child { border-top: none; }

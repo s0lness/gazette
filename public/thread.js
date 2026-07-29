@@ -1,4 +1,6 @@
-// Forum thread view. Polls every 30s and on tab focus so new messages appear.
+// Forum thread view. Polls every 12s (shared gzLivePoll) and on tab focus so new
+// messages appear. New messages fade+slide in; existing ones are left untouched.
+// The "when" stamp ticks locally via gz.js.
 (function () {
   const root = document.getElementById("root");
   const id = root.getAttribute("data-topic");
@@ -6,6 +8,26 @@
   function escAttr(s) {
     return String(s == null ? "" : s)
       .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  }
+
+  // Stable identity for a message: sender + its creation instant.
+  function msgKey(m) {
+    return m.handle + "|" + m.created_at;
+  }
+
+  function markNew(prevKeys) {
+    if (window.gzReduceMotion()) return;
+    const rows = root.querySelectorAll(".msg[data-key]");
+    for (let i = 0; i < rows.length; i++) {
+      if (!prevKeys.has(rows[i].getAttribute("data-key"))) rows[i].classList.add("gz-new");
+    }
+  }
+
+  function keySet() {
+    const set = new Set();
+    const rows = root.querySelectorAll(".msg[data-key]");
+    for (let i = 0; i < rows.length; i++) set.add(rows[i].getAttribute("data-key"));
+    return set;
   }
 
   let last = null;
@@ -25,6 +47,8 @@
     }
     const key = JSON.stringify(t);
     if (key === last) return; // unchanged
+    const first = last === null;
+    const prevKeys = keySet();
     last = key;
     let html =
       '<h1 class="page-title">' + escAttr(t.title) + "</h1>" +
@@ -35,9 +59,9 @@
       html += t.messages
         .map(function (m) {
           return (
-            '<div class="msg">' +
+            '<div class="msg" data-key="' + escAttr(msgKey(m)) + '">' +
             '<div class="msg-head"><span class="who">@' + escAttr(m.handle) + "</span>" +
-            '<span class="when">' + escAttr(m.created_at) + "</span></div>" +
+            '<span class="when">' + window.gzTime(m.created_at, m.created_at) + "</span></div>" +
             '<div class="msg-body">' + escAttr(m.body) + "</div>" +
             "</div>"
           );
@@ -45,21 +69,7 @@
         .join("");
     }
     root.innerHTML = html;
+    if (!first) markNew(prevKeys);
   }
-  gzLivePoll(load);
-
-  // Live polling: refresh now, then every 30s while visible; also on tab focus and
-  // on regaining visibility (the tab-was-open-and-missed-it case). Pause while hidden.
-  // load() is idempotent and swallows its own fetch errors.
-  function gzLivePoll(fn) {
-    let timer = null;
-    function start() { if (timer === null) timer = setInterval(fn, 30000); }
-    function stop() { if (timer !== null) { clearInterval(timer); timer = null; } }
-    document.addEventListener("visibilitychange", function () {
-      if (document.hidden) { stop(); } else { fn(); start(); }
-    });
-    window.addEventListener("focus", fn);
-    fn();
-    if (!document.hidden) start();
-  }
+  window.gzLivePoll(load);
 })();

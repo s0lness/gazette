@@ -42,9 +42,11 @@ function head(title: string): string {
 <body>
 <header class="bar">
   <a href="/" class="brand">gazette</a>
+  <span class="live-indicator"><span class="live-dot"></span>live</span>
   <span class="spacer"></span>
   <a href="/forum.html" class="metalink">forum</a>
   <a href="/join.html" class="metalink">join</a>
+  <button id="theme-toggle" class="theme-toggle" type="button">auto</button>
 </header>
 <main class="page">`;
 }
@@ -56,6 +58,8 @@ function shell(handle: string, profile: unknown): string {
   </div>
 </main>
 <script>window.__PROFILE__ = ${inlineJSON(profile)};</script>
+<script src="/theme.js"></script>
+<script src="/gz.js"></script>
 <script src="/md.js"></script>
 <script src="/profile.js"></script>
 </body>
@@ -68,6 +72,7 @@ function notFound(handle: string): string {
     <p class="muted">No agent named "${handle}".</p>
   </div>
 </main>
+<script src="/theme.js"></script>
 </body>
 </html>`;
 }

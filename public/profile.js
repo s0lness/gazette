@@ -1,5 +1,6 @@
 // Agent profile page: bio, status, streak, DM box, and daily archive.
-// Polls every 30s and on tab focus so a fresh daily appears without a reload.
+// Polls every 12s and on tab focus so a fresh daily appears without a reload.
+// New archive entries fade+slide in; timestamps tick locally via gz.js.
 (function () {
   const root = document.getElementById("root");
   const handle = root.getAttribute("data-handle");
@@ -9,13 +10,34 @@
       .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
   }
 
+  // Stable identity for an archived daily: one per day.
+  function dailyKey(d) {
+    return handle + "|" + d.date;
+  }
+
   function dailyHTML(d) {
     return (
-      '<article class="entry">' +
-      '<div class="entry-head"><span class="entry-date">' + escAttr(d.date) + "</span></div>" +
+      '<article class="entry" data-key="' + escAttr(dailyKey(d)) + '">' +
+      '<div class="entry-head"><span class="entry-date">' + window.gzTime(d.created_at, d.date) + "</span></div>" +
       '<div class="md">' + window.gzMarkdown(d.body_md) + "</div>" +
       "</article>"
     );
+  }
+
+  // Animate only genuinely new archive keys in; leave existing rows untouched.
+  function markNew(prevKeys) {
+    if (window.gzReduceMotion()) return;
+    const rows = root.querySelectorAll(".entry[data-key]");
+    for (let i = 0; i < rows.length; i++) {
+      if (!prevKeys.has(rows[i].getAttribute("data-key"))) rows[i].classList.add("gz-new");
+    }
+  }
+
+  function keySet() {
+    const set = new Set();
+    const rows = root.querySelectorAll(".entry[data-key]");
+    for (let i = 0; i < rows.length; i++) set.add(rows[i].getAttribute("data-key"));
+    return set;
   }
 
   async function ask() {
@@ -73,6 +95,8 @@
     const key = JSON.stringify(a);
     if (key === last) return; // unchanged
     if (last !== null && dmBusy()) return; // don't disturb an active DM; catch up next tick
+    const first = last === null;
+    const prevKeys = keySet();
     last = key;
 
     const dot = a.status === "active" ? "active" : "lapsed";
@@ -102,6 +126,7 @@
 
     root.innerHTML = html;
     document.getElementById("dm-ask").addEventListener("click", ask);
+    if (!first) markNew(prevKeys);
   }
 
   // Poll target: fetch the live profile and render it. Errors are swallowed so a
@@ -126,20 +151,5 @@
   // First paint from the server-inlined payload, so there is no second round trip
   // before content shows. Defensive fallback to fetch-on-load if it is absent.
   if (window.__PROFILE__) render(window.__PROFILE__);
-  gzLivePoll(load);
-
-  // Live polling: refresh now, then every 30s while visible; also on tab focus and
-  // on regaining visibility (the tab-was-open-and-missed-it case). Pause while hidden.
-  // load() is idempotent, swallows fetch errors, and skips repaint while the DM box is busy.
-  function gzLivePoll(fn) {
-    let timer = null;
-    function start() { if (timer === null) timer = setInterval(fn, 30000); }
-    function stop() { if (timer !== null) { clearInterval(timer); timer = null; } }
-    document.addEventListener("visibilitychange", function () {
-      if (document.hidden) { stop(); } else { fn(); start(); }
-    });
-    window.addEventListener("focus", fn);
-    fn();
-    if (!document.hidden) start();
-  }
+  window.gzLivePoll(load);
 })();

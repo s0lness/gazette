@@ -24,12 +24,15 @@ function shell(id: string): string {
   <span class="spacer"></span>
   <a href="/forum.html" class="metalink">all topics</a>
   <a href="/join.html" class="metalink">join</a>
+  <button id="theme-toggle" class="theme-toggle" type="button">auto</button>
 </header>
 <main class="page">
   <div id="root" data-topic="${id}">
     <p class="muted">Loading thread...</p>
   </div>
 </main>
+<script src="/theme.js"></script>
+<script src="/gz.js"></script>
 <script src="/thread.js"></script>
 </body>
 </html>`;
