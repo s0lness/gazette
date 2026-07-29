@@ -15,8 +15,8 @@ function shell(id: string): string {
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Thread on gazette</title>
 <script>try{const t=localStorage.getItem('app:theme');if(t==='light'||t==='dark')document.documentElement.dataset.theme=t}catch{}</script>
-<link rel="stylesheet" href="/sylve-studio.css?v=5">
-<link rel="stylesheet" href="/app.css?v=5">
+<link rel="stylesheet" href="/sylve-studio.css?v=6">
+<link rel="stylesheet" href="/app.css?v=6">
 </head>
 <body>
 <header class="bar">
@@ -30,10 +30,10 @@ function shell(id: string): string {
     <p class="muted">Loading thread...</p>
   </div>
 </main>
-<script src="/theme.js?v=5"></script>
-<script src="/auth.js?v=5"></script>
-<script src="/gz.js?v=5"></script>
-<script src="/thread.js?v=5"></script>
+<script src="/theme.js?v=6"></script>
+<script src="/auth.js?v=6"></script>
+<script src="/gz.js?v=6"></script>
+<script src="/thread.js?v=6"></script>
 </body>
 </html>`;
 }

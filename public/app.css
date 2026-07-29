@@ -61,7 +61,7 @@ h1.page-title { font-size: 1.6rem; margin: 0.25rem 0 0.15rem; letter-spacing: -0
 
 /* Header member chip: "you are <handle> · log out". */
 .gz-me { display: inline-flex; align-items: center; gap: 0.4rem; font-size: 0.78rem; color: var(--muted); }
-.gz-me .chip-you strong { color: var(--fg); font-weight: 600; }
+.gz-me .chip-you strong { color: var(--fg); font-weight: 400; }
 .gz-me .chip-logout { color: var(--muted); text-decoration: none; border-bottom: 1px dotted var(--line); }
 .gz-me .chip-logout:hover { color: var(--fg); border-color: var(--accent); }
 
@@ -85,7 +85,7 @@ h1.page-title { font-size: 1.6rem; margin: 0.25rem 0 0.15rem; letter-spacing: -0
 .entry { border-top: 1px solid var(--line); padding: 1.1rem 0; }
 .entry:first-child { border-top: none; }
 .entry-head { display: flex; align-items: baseline; gap: 0.55rem; flex-wrap: wrap; margin-bottom: 0.5rem; }
-.entry-head a { text-decoration: none; font-weight: 600; }
+.entry-head a { text-decoration: none; font-weight: 400; }
 .entry-head a:hover { text-decoration: underline; }
 .entry-date { color: var(--muted); font-size: 0.82rem; margin-left: auto; }
 
@@ -102,7 +102,7 @@ h1.page-title { font-size: 1.6rem; margin: 0.25rem 0 0.15rem; letter-spacing: -0
 .rail h2 { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin: 0 0 0.5rem; }
 .member { display: flex; align-items: center; gap: 0.5rem; padding: 0.35rem 0; border-top: 1px solid var(--line); font-size: 0.9rem; }
 .member:first-of-type { border-top: none; }
-.member a { text-decoration: none; font-weight: 600; }
+.member a { text-decoration: none; font-weight: 400; }
 .member a:hover { text-decoration: underline; }
 .member .streak { margin-left: auto; color: var(--muted); font-size: 0.8rem; }
 
@@ -128,13 +128,13 @@ pre.code { background: var(--surface); border: 1px solid var(--line); border-rad
 .msg { border-top: 1px solid var(--line); padding: 0.9rem 0; }
 .msg:first-of-type { border-top: none; }
 .msg-head { display: flex; gap: 0.5rem; align-items: baseline; margin-bottom: 0.3rem; }
-.msg-head .who { font-weight: 600; }
+.msg-head .who { font-weight: 400; }
 .msg-head .when { color: var(--muted); font-size: 0.8rem; margin-left: auto; }
 .msg-body { white-space: pre-wrap; font-size: 0.95rem; }
 
 .topic-row { border-top: 1px solid var(--line); padding: 0.8rem 0; display: flex; align-items: baseline; gap: 0.6rem; }
 .topic-row:first-of-type { border-top: none; }
-.topic-row a { text-decoration: none; font-weight: 600; }
+.topic-row a { text-decoration: none; font-weight: 400; }
 .topic-row a:hover { text-decoration: underline; }
 .topic-row .meta { margin-left: auto; color: var(--muted); font-size: 0.82rem; }
 
@@ -184,12 +184,12 @@ pre.code { background: var(--surface); border: 1px solid var(--line); border-rad
 .tweet { border-top: 1px solid var(--line); padding: 1.1rem 0; }
 .tweet:first-child { border-top: none; }
 .tw-head { display: flex; align-items: baseline; gap: 0.55rem; margin-bottom: 0.5rem; }
-.tw-who { text-decoration: none; font-weight: 600; }
+.tw-who { text-decoration: none; font-weight: 400; }
 .tw-who:hover { text-decoration: underline; }
 .tw-when { color: var(--muted); font-size: 0.82rem; margin-left: auto; }
 
 /* The headline IS the tweet: large and prominent. */
-.tw-headline { font-size: 1.15rem; line-height: 1.4; font-weight: 600; letter-spacing: -0.01em; margin: 0 0 0.55rem; white-space: pre-wrap; word-break: break-word; }
+.tw-headline { font-size: 1.15rem; line-height: 1.4; font-weight: 400; letter-spacing: -0.01em; margin: 0 0 0.55rem; white-space: pre-wrap; word-break: break-word; }
 
 .tw-img { display: block; margin: 0 0 0.6rem; }
 .tw-img img { display: block; max-width: 100%; height: auto; border-radius: var(--radius); border: 1px solid var(--line); }
@@ -213,7 +213,7 @@ pre.code { background: var(--surface); border: 1px solid var(--line); border-rad
 .tw-thread { display: flex; flex-direction: column; gap: 0.6rem; margin-bottom: 0.6rem; }
 .tw-c { font-size: 0.9rem; }
 .tw-c.tw-pending { opacity: 0.55; }
-.tw-c-who { font-weight: 600; text-decoration: none; }
+.tw-c-who { font-weight: 400; text-decoration: none; }
 .tw-c-who:hover { text-decoration: underline; }
 .tw-c-when { color: var(--muted); font-size: 0.78rem; margin-left: 0.4rem; }
 .tw-c-body { white-space: pre-wrap; word-break: break-word; margin-top: 0.1rem; }
