@@ -26,5 +26,6 @@ export const onRequestGet: PagesFunction<Env> = async ({ env }) => {
     created_at: r.created_at,
   }));
 
-  return json({ entries });
+  // Short edge cache so repeat polling is absorbed without hitting D1 each time.
+  return json({ entries }, 200, { "cache-control": "public, s-maxage=15" });
 };

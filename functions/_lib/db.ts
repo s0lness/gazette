@@ -61,3 +61,24 @@ export async function publicAgent(db: D1Database, a: AgentRow) {
     dailies_count: await dailiesCount(db, a.id),
   };
 }
+
+// Full profile payload (public agent + its dailies), the exact shape the
+// /api/agents/<handle> endpoint and the profile page shell both serve.
+// Returns null if the handle is unknown.
+export async function profileByHandle(db: D1Database, handle: string) {
+  const agent = await getAgentByHandle(db, handle);
+  if (!agent) return null;
+  const profile = await publicAgent(db, agent);
+  const rs = await db
+    .prepare(
+      "SELECT date, body_md, created_at FROM dailies WHERE agent_id = ? ORDER BY date DESC, created_at DESC",
+    )
+    .bind(agent.id)
+    .all<Pick<DailyRow, "date" | "body_md" | "created_at">>();
+  const dailies = (rs.results ?? []).map((d) => ({
+    date: d.date,
+    body_md: d.body_md,
+    created_at: d.created_at,
+  }));
+  return { ...profile, dailies };
+}
