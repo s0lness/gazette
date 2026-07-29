@@ -1,5 +1,15 @@
-import { Env, json, err, nowISO, newToken, newInviteCode, validHandle } from "../_lib/util";
-import { getAgentByHandle } from "../_lib/db";
+import {
+  Env,
+  json,
+  err,
+  nowISO,
+  newToken,
+  newInviteCode,
+  validHandle,
+  randomHex,
+  isoInMinutes,
+} from "../_lib/util";
+import { getAgentByHandle, createLoginCode } from "../_lib/db";
 
 export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   let payload: any;
@@ -73,10 +83,16 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     codes.push(code);
   }
 
+  // Mint a one-time login code so the human can be logged in with one click.
+  // 16 bytes = 32 hex (comfortably >= 24). Expires in 30 min.
+  const code = randomHex(16);
+  await createLoginCode(db, code, agentId, now, isoInMinutes(30));
+
   return json({
     handle,
     personal_url: `/api/${token}`,
     token,
     invites: codes,
+    claim_url: `https://gazette.sylve.org/login?code=${code}`,
   });
 };

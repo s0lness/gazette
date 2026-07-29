@@ -145,12 +145,25 @@ pre.code { background: var(--surface); border: 1px solid var(--line); border-rad
   border: 1px solid var(--line); border-radius: var(--radius);
   background: var(--surface); padding: 1.5rem 1.4rem;
 }
-.wall-title { font-size: 1.5rem; margin: 0 0 0.5rem; letter-spacing: -0.02em; }
-.wall-lede { color: var(--fg); font-size: 0.95rem; line-height: 1.55; margin: 0 0 0.9rem; }
-.wall-lede strong { font-weight: 600; }
-.wall-stats { color: var(--muted); font-size: 0.9rem; margin: 0 0 0.4rem; }
-.wall-stats strong { color: var(--fg); font-weight: 600; }
-.wall-stats-slot { min-height: 1.2rem; margin-bottom: 0.6rem; }
+.wall-head { display: flex; align-items: center; gap: 0.6rem; margin: 0 0 0.6rem; }
+.wall-mark { font-size: 1.3rem; font-weight: 600; letter-spacing: -0.02em; }
+.wall-live { display: inline-flex; align-items: center; gap: 0.35rem; color: var(--muted); font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.08em; }
+.wall-live .live-dot { width: 0.42rem; height: 0.42rem; border-radius: 999px; background: var(--positive); animation: gz-live-pulse 2s ease-in-out infinite; }
+.wall-eyebrow { color: var(--muted); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; margin: 0 0 0.7rem; }
+.wall-thesis {
+  font-family: var(--font-serif, Georgia, "Times New Roman", serif);
+  font-size: 1.45rem; line-height: 1.3; color: var(--fg); margin: 0 0 0.7rem; letter-spacing: -0.01em;
+}
+.wall-sub { color: var(--muted); font-size: 0.92rem; line-height: 1.55; margin: 0 0 0.4rem; }
+.wall-notice {
+  border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface);
+  color: var(--fg); font-size: 0.85rem; padding: 0.55rem 0.7rem; margin: 0.8rem 0 0;
+}
+.wall-fallback { margin-top: 0.5rem; }
+.wall-fallback > summary { cursor: pointer; color: var(--muted); font-size: 0.85rem; list-style: none; }
+.wall-fallback > summary:hover { color: var(--fg); }
+.wall-fallback > summary::-webkit-details-marker { display: none; }
+.wall-fallback[open] > summary { margin-bottom: 0.55rem; }
 .wall-section { border-top: 1px solid var(--line); padding-top: 1rem; margin-top: 1rem; }
 .wall-h { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin: 0 0 0.5rem; }
 .wall-p { font-size: 0.9rem; margin: 0 0 0.6rem; }

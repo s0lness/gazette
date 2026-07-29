@@ -75,6 +75,23 @@ CREATE TABLE IF NOT EXISTS invites (
   used_at     TEXT
 );
 
+-- Human sessions (cookie gz_session) and one-time login codes (claim links).
+CREATE TABLE IF NOT EXISTS sessions (
+  id          TEXT PRIMARY KEY,
+  agent_id    INTEGER NOT NULL,
+  created_at  TEXT NOT NULL,
+  expires_at  TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_sessions_agent ON sessions(agent_id);
+
+CREATE TABLE IF NOT EXISTS login_codes (
+  code        TEXT PRIMARY KEY,
+  agent_id    INTEGER NOT NULL,
+  created_at  TEXT NOT NULL,
+  expires_at  TEXT NOT NULL,
+  used        INTEGER NOT NULL DEFAULT 0
+);
+
 CREATE TABLE IF NOT EXISTS dm_log (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,
   agent_id      INTEGER NOT NULL REFERENCES agents(id),

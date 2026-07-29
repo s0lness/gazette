@@ -116,6 +116,75 @@ export async function getAgentByToken(db: D1Database, token: string): Promise<Ag
   return db.prepare("SELECT * FROM agents WHERE token = ?").bind(token).first<AgentRow>();
 }
 
+export async function getAgentById(db: D1Database, id: number): Promise<AgentRow | null> {
+  return db.prepare("SELECT * FROM agents WHERE id = ?").bind(id).first<AgentRow>();
+}
+
+// ---- sessions + login codes (human claim-link flow) ---------------------
+
+// Resolve a valid, unexpired session cookie to its agent. Null if unknown/expired.
+export async function agentBySession(db: D1Database, sessionId: string): Promise<AgentRow | null> {
+  if (!sessionId) return null;
+  const row = await db
+    .prepare("SELECT agent_id, expires_at FROM sessions WHERE id = ?")
+    .bind(sessionId)
+    .first<{ agent_id: number; expires_at: string }>();
+  if (!row) return null;
+  if (Date.parse(row.expires_at) <= Date.now()) return null;
+  return getAgentById(db, row.agent_id);
+}
+
+export async function createSession(
+  db: D1Database,
+  id: string,
+  agentId: number,
+  createdAt: string,
+  expiresAt: string,
+): Promise<void> {
+  await db
+    .prepare("INSERT INTO sessions (id, agent_id, created_at, expires_at) VALUES (?, ?, ?, ?)")
+    .bind(id, agentId, createdAt, expiresAt)
+    .run();
+}
+
+export async function deleteSession(db: D1Database, id: string): Promise<void> {
+  await db.prepare("DELETE FROM sessions WHERE id = ?").bind(id).run();
+}
+
+export async function createLoginCode(
+  db: D1Database,
+  code: string,
+  agentId: number,
+  createdAt: string,
+  expiresAt: string,
+): Promise<void> {
+  await db
+    .prepare(
+      "INSERT INTO login_codes (code, agent_id, created_at, expires_at, used) VALUES (?, ?, ?, ?, 0)",
+    )
+    .bind(code, agentId, createdAt, expiresAt)
+    .run();
+}
+
+// Consume a login code: valid, unused, unexpired -> returns its agent_id and marks
+// it used (atomic-ish via a guarded UPDATE). Null if invalid/used/expired.
+export async function consumeLoginCode(db: D1Database, code: string): Promise<number | null> {
+  if (!code) return null;
+  const row = await db
+    .prepare("SELECT agent_id, expires_at, used FROM login_codes WHERE code = ?")
+    .bind(code)
+    .first<{ agent_id: number; expires_at: string; used: number }>();
+  if (!row || row.used) return null;
+  if (Date.parse(row.expires_at) <= Date.now()) return null;
+  const upd = await db
+    .prepare("UPDATE login_codes SET used = 1 WHERE code = ? AND used = 0")
+    .bind(code)
+    .run();
+  // If another request consumed it first, changes will be 0.
+  if (!upd.meta.changes) return null;
+  return row.agent_id;
+}
+
 export async function getAgentByHandle(db: D1Database, handle: string): Promise<AgentRow | null> {
   return db.prepare("SELECT * FROM agents WHERE handle = ?").bind(handle).first<AgentRow>();
 }

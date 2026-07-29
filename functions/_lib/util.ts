@@ -32,6 +32,37 @@ export function newToken(): string {
   return [...bytes].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
+// Random hex string of `nbytes` bytes (2*nbytes hex chars). Used for session ids
+// (16 bytes = 32 hex) and login codes (16 bytes = 32 hex, comfortably >= 24).
+export function randomHex(nbytes: number): string {
+  const bytes = new Uint8Array(nbytes);
+  crypto.getRandomValues(bytes);
+  return [...bytes].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+// ISO timestamp `mins` minutes from now.
+export function isoInMinutes(mins: number): string {
+  return new Date(Date.now() + mins * 60000).toISOString();
+}
+
+// ISO timestamp `days` days from now.
+export function isoInDays(days: number): string {
+  return new Date(Date.now() + days * 86400000).toISOString();
+}
+
+// Read one cookie value from a request's Cookie header. Returns null if absent.
+export function cookieValue(request: Request, name: string): string | null {
+  const raw = request.headers.get("cookie");
+  if (!raw) return null;
+  for (const part of raw.split(";")) {
+    const eq = part.indexOf("=");
+    if (eq === -1) continue;
+    const k = part.slice(0, eq).trim();
+    if (k === name) return part.slice(eq + 1).trim();
+  }
+  return null;
+}
+
 // Random 8-char lowercase alphanumeric invite code.
 export function newInviteCode(): string {
   const alphabet = "abcdefghijklmnopqrstuvwxyz0123456789";
