@@ -1,0 +1,122 @@
+/*
+  sylve-studio design system  (the "are.na editor" look)
+  Extracted from ~/s0lness-repo/studio (index.html + Studio.vue). Source of truth
+  lives there; this is the portable drop-in copy.
+
+  Identity: warm cream paper, near-black ink, warm borders, MONOSPACE chrome,
+  pill buttons. Light is the base; System follows the OS; an explicit
+  data-theme on <html> overrides both. Dark is a complementary warm dark.
+
+  When to use THIS vs family-budget.css:
+  - sylve-studio: reading/writing tools, prose, anything that wants dark mode and
+    a calm are.na feel. Ink accent (monochrome), pill controls.
+  - family-budget: data/finance dashboards, tables, chips, terracotta accent,
+    fixed light. Both share the warm-paper ground, so they feel related.
+*/
+
+:root {
+  --fg: #1a1a1a;
+  --muted: #8c8475;
+  --line: #e3ddcc;
+  --bg: #f3efe0;
+  --surface: #faf7ec;
+  --hover: #eae4d2;
+  --accent: #1a1a1a;      /* the ink; interactive emphasis references this */
+  --accent-fg: #f7f3e7;
+  --positive: #22aa77;
+  --danger: #bb2233;
+  --warning: #b8860b;
+  --scheme: light;
+  --radius: 8px;
+  --radius-pill: 999px;
+}
+:root[data-theme='dark'] {
+  --fg: #ece7da; --muted: #918a7b; --line: #322e26; --bg: #1a1814;
+  --surface: #211e18; --hover: #2a261f; --accent: #ece7da; --accent-fg: #1a1814;
+  --positive: #4cc38a; --danger: #e0685f; --warning: #d1a24a; --scheme: dark;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --fg: #ece7da; --muted: #918a7b; --line: #322e26; --bg: #1a1814;
+    --surface: #211e18; --hover: #2a261f; --accent: #ece7da; --accent-fg: #1a1814;
+    --positive: #4cc38a; --danger: #e0685f; --warning: #d1a24a; --scheme: dark;
+  }
+}
+
+* { box-sizing: border-box; }
+html { color-scheme: var(--scheme); }
+html, body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  /* Monospace chrome is core to the look. A long-form editor surface should
+     override this back to a reading font (Inter/serif); only the UI is mono. */
+  font-family: ui-monospace, "SF Mono", "SFMono-Regular", Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 15px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+a { color: inherit; }
+
+/* Form controls follow the theme everywhere (no native white in dark mode). */
+button, input, textarea, select { font: inherit; color: var(--fg); background-color: transparent; }
+input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
+
+/* Pill buttons: warm border, ink border on hover, solid ink when primary. */
+button {
+  cursor: pointer;
+  border-radius: var(--radius-pill);
+  padding: 0.45rem 0.95rem;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--fg);
+  transition: border-color .15s ease, background .15s ease, color .15s ease;
+}
+button:hover:not(:disabled) { border-color: var(--accent); }
+button:disabled { opacity: .5; cursor: default; }
+.primary { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+.ghost { background: transparent; border-color: transparent; }
+.ghost:hover:not(:disabled) { background: var(--hover); border-color: transparent; }
+.ghost.icon { padding: 0.45rem 0.7rem; font-weight: 600; }
+.danger { color: var(--danger); }
+/* segmented toggle: mark the active with .on */
+button.on { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+
+/* Inputs / rounded fields */
+input, textarea, select {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  padding: 0.45rem 0.9rem;
+}
+input:focus, textarea:focus, select:focus { outline: none; border-color: var(--accent); }
+textarea { border-radius: var(--radius); }
+
+/* Dashed monospace meta link (e.g. a live URL) */
+.metalink {
+  color: var(--muted); font-size: 0.82rem; text-decoration: none;
+  border-bottom: 1px dashed var(--line); padding-bottom: 1px;
+}
+.metalink:hover { color: var(--fg); border-bottom-color: var(--fg); }
+
+/* Sticky full-width bar: brand/back left, actions far right (Substack-style) */
+.bar {
+  display: flex; align-items: center; gap: 0.5rem;
+  padding: 0.75rem 1.5rem; position: sticky; top: 0; z-index: 5; background: var(--bg);
+}
+.bar .spacer { flex: 1; }
+
+/* Toast: ink chip, floats above the bottom controls */
+.toast {
+  position: fixed; bottom: 4.5rem; left: 50%; transform: translateX(-50%);
+  background: var(--fg); color: var(--bg); padding: 0.5rem 0.9rem;
+  border-radius: var(--radius); font-size: 0.88rem; display: flex; align-items: center; gap: 0.6rem;
+}
+
+/* Modal */
+.overlay { position: fixed; inset: 0; background: rgba(0,0,0,.35); display: grid; place-items: center; z-index: 10; }
+.sheet { background: var(--bg); border: 1px solid var(--line); border-radius: 12px; padding: 1.1rem 1.25rem 1.35rem; width: min(22rem, 90vw); }
+
+/* Anti-flicker: apply the saved theme before paint, in <head>:
+   <script>try{const t=localStorage.getItem('app:theme');
+   if(t==='light'||t==='dark')document.documentElement.dataset.theme=t}catch{}</script> */

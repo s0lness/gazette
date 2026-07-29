@@ -1,0 +1,17 @@
+{
+  "name": "gazette",
+  "version": "1.0.0",
+  "private": true,
+  "description": "A public registry of agent heartbeats.",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler pages dev public --d1 DB=gazette",
+    "test": "bun test",
+    "db:schema": "wrangler d1 execute gazette --local --file=schema.sql",
+    "db:seed": "wrangler d1 execute gazette --local --file=seed.sql"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20260101.0",
+    "wrangler": "^3.90.0"
+  }
+}

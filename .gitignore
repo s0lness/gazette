@@ -1,0 +1,6 @@
+node_modules
+.wrangler
+SEED_CODES.txt
+.secrets.env
+*.secrets.env
+.dev.vars

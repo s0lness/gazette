@@ -1,0 +1,74 @@
+/* gazette-specific layout on top of sylve-studio.css */
+
+.brand { font-weight: 700; text-decoration: none; font-size: 1.05rem; letter-spacing: -0.02em; }
+.tagline { color: var(--muted); font-size: 0.9rem; margin: 0; }
+
+.page { max-width: 62rem; margin: 0 auto; padding: 1.25rem 1.25rem 4rem; }
+.muted { color: var(--muted); }
+h1.page-title { font-size: 1.6rem; margin: 0.25rem 0 0.15rem; letter-spacing: -0.02em; }
+
+/* Two-column layout: feed + right rail. Stacks on mobile. */
+.layout { display: grid; grid-template-columns: 1fr 18rem; gap: 1.75rem; align-items: start; }
+@media (max-width: 760px) { .layout { grid-template-columns: 1fr; } }
+
+/* Status dot */
+.dot { display: inline-block; width: 0.55rem; height: 0.55rem; border-radius: 999px; vertical-align: middle; }
+.dot.active { background: var(--positive); }
+.dot.lapsed { background: var(--muted); }
+
+/* Feed entry */
+.entry { border-top: 1px solid var(--line); padding: 1.1rem 0; }
+.entry:first-child { border-top: none; }
+.entry-head { display: flex; align-items: baseline; gap: 0.55rem; flex-wrap: wrap; margin-bottom: 0.5rem; }
+.entry-head a { text-decoration: none; font-weight: 600; }
+.entry-head a:hover { text-decoration: underline; }
+.entry-date { color: var(--muted); font-size: 0.82rem; margin-left: auto; }
+
+/* Rendered markdown body */
+.md { font-size: 0.95rem; }
+.md h2 { font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin: 0.9rem 0 0.3rem; }
+.md p { margin: 0.3rem 0; }
+.md ul { margin: 0.3rem 0; padding-left: 1.2rem; }
+.md li { margin: 0.12rem 0; }
+.md a { color: var(--fg); text-underline-offset: 2px; }
+.md code, .md strong { }
+
+/* Right rail members list */
+.rail h2 { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin: 0 0 0.5rem; }
+.member { display: flex; align-items: center; gap: 0.5rem; padding: 0.35rem 0; border-top: 1px solid var(--line); font-size: 0.9rem; }
+.member:first-of-type { border-top: none; }
+.member a { text-decoration: none; font-weight: 600; }
+.member a:hover { text-decoration: underline; }
+.member .streak { margin-left: auto; color: var(--muted); font-size: 0.8rem; }
+
+/* Footer note */
+.footnote { margin-top: 2.5rem; padding-top: 1rem; border-top: 1px solid var(--line); color: var(--muted); font-size: 0.85rem; }
+.footnote a { color: var(--fg); }
+
+/* DM box */
+.dmbox { border: 1px solid var(--line); border-radius: var(--radius); padding: 0.9rem; margin: 1rem 0 1.5rem; background: var(--surface); }
+.dmbox h2 { font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin: 0 0 0.5rem; }
+.dmbox textarea { width: 100%; min-height: 4.5rem; margin-bottom: 0.5rem; }
+.dmbox .row { display: flex; align-items: center; gap: 0.6rem; }
+.dm-answer { margin-top: 0.75rem; padding: 0.75rem; border-radius: var(--radius); background: var(--bg); border: 1px solid var(--line); font-size: 0.92rem; white-space: pre-wrap; }
+.dm-note { margin-top: 0.6rem; font-size: 0.85rem; color: var(--muted); }
+
+/* join page code blocks */
+pre.code { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 0.9rem; overflow-x: auto; font-size: 0.85rem; line-height: 1.5; }
+.tmpl { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 0.9rem; overflow-x: auto; font-size: 0.85rem; }
+.rules li { margin: 0.35rem 0; }
+
+/* profile / thread */
+.bio { color: var(--muted); font-size: 0.95rem; margin: 0.2rem 0 1rem; max-width: 40rem; }
+.msg { border-top: 1px solid var(--line); padding: 0.9rem 0; }
+.msg:first-of-type { border-top: none; }
+.msg-head { display: flex; gap: 0.5rem; align-items: baseline; margin-bottom: 0.3rem; }
+.msg-head .who { font-weight: 600; }
+.msg-head .when { color: var(--muted); font-size: 0.8rem; margin-left: auto; }
+.msg-body { white-space: pre-wrap; font-size: 0.95rem; }
+
+.topic-row { border-top: 1px solid var(--line); padding: 0.8rem 0; display: flex; align-items: baseline; gap: 0.6rem; }
+.topic-row:first-of-type { border-top: none; }
+.topic-row a { text-decoration: none; font-weight: 600; }
+.topic-row a:hover { text-decoration: underline; }
+.topic-row .meta { margin-left: auto; color: var(--muted); font-size: 0.82rem; }

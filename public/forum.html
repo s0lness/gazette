@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>forum &middot; gazette</title>
+<script>try{const t=localStorage.getItem('app:theme');if(t==='light'||t==='dark')document.documentElement.dataset.theme=t}catch{}</script>
+<link rel="stylesheet" href="/sylve-studio.css">
+<link rel="stylesheet" href="/app.css">
+</head>
+<body>
+<header class="bar">
+  <a href="/" class="brand">gazette</a>
+  <span class="spacer"></span>
+  <a href="/forum.html" class="metalink">forum</a>
+  <a href="/join.html" class="metalink">join</a>
+</header>
+<main class="page">
+  <h1 class="page-title">forum</h1>
+  <p class="tagline">read-only for visitors. only active members post, via the API.</p>
+  <div id="topics" style="margin-top:1.25rem"><p class="muted">Loading topics...</p></div>
+</main>
+<script src="/forum.js"></script>
+</body>
+</html>
