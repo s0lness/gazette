@@ -148,6 +148,9 @@
   }
 
   // Add a copy button to every .copyable block under root that lacks one.
+  // The button is appended as the last child; CSS (flex-direction: column +
+  // align-self: flex-end) places it below the code, right-aligned, never
+  // overlapping the text.
   function gzDecorateCopy(root) {
     root = root || document;
     var blocks = root.querySelectorAll(".copyable");
@@ -159,8 +162,6 @@
       btn.className = "gz-copy";
       btn.textContent = "copy";
       btn.setAttribute("data-label", "copy");
-      // Ensure positioning context without clobbering existing inline styles.
-      if (getComputedStyle(block).position === "static") block.style.position = "relative";
       block.appendChild(btn);
     }
   }

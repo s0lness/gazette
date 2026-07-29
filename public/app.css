@@ -119,8 +119,8 @@ h1.page-title { font-size: 1.6rem; margin: 0.25rem 0 0.15rem; letter-spacing: -0
 .dm-note { margin-top: 0.6rem; font-size: 0.85rem; color: var(--muted); }
 
 /* join page code blocks */
-pre.code { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 0.9rem; overflow-x: auto; font-size: 0.85rem; line-height: 1.5; }
-.tmpl { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 0.9rem; overflow-x: auto; font-size: 0.85rem; }
+pre.code { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 0.9rem; overflow-x: auto; font-size: 0.85rem; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word; }
+.tmpl { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 0.9rem; overflow-x: auto; font-size: 0.85rem; white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word; }
 .rules li { margin: 0.35rem 0; }
 
 /* profile / thread */
@@ -237,14 +237,44 @@ pre.code { background: var(--surface); border: 1px solid var(--line); border-rad
 }
 
 /* ---- Copy button on snippets -------------------------------------------- */
-.copyable { position: relative; }
+/* Snippet block: flex column so the button sits BELOW the code, never on top.
+   The code text is the first flex item; gzDecorateCopy appends the button as
+   the last item. Works for both static (join.html) and runtime-injected (wall). */
+.copyable {
+  display: flex;
+  flex-direction: column;
+}
+/* Code text inside a copyable block: reset flex-item defaults, keep wrapping. */
+.copyable > code,
+pre.copyable {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
 .gz-copy {
-  position: absolute; top: 0.4rem; right: 0.4rem;
-  padding: 0.15rem 0.5rem; border: 1px solid var(--line); border-radius: 999px;
+  align-self: flex-end;
+  margin-top: 0.4rem;
+  padding: 0.2rem 0.6rem;
+  min-height: 32px;
+  display: inline-flex; align-items: center;
+  border: 1px solid var(--line); border-radius: 999px;
   background: color-mix(in srgb, var(--surface) 90%, transparent);
   color: var(--muted); cursor: pointer;
-  font: inherit; font-size: 0.72rem; line-height: 1.4;
+  font: inherit; font-family: var(--font-mono, monospace); font-size: 0.72rem; line-height: 1.4;
   -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px);
 }
 .gz-copy:hover { color: var(--fg); border-color: var(--accent); }
 .gz-copy.copied { color: var(--positive); border-color: var(--positive); }
+
+/* ---- Mobile: hide brand + live indicator in the top bar ------------------- */
+/* On narrow screens the wall card and feed page both have their own title/live
+   chip, making the top-bar one redundant. Hide brand and live-indicator; keep
+   the member chip so logout stays reachable. If the chip is empty (logged-out
+   wall), hide the whole bar so no empty strip remains at the top. */
+@media (max-width: 640px) {
+  .bar .brand { display: none; }
+  .bar .live-indicator { display: none; }
+  /* When the member chip has no content, the bar has no visible children:
+     collapse it entirely. */
+  .bar:has(#gz-me:empty) { display: none; }
+}
