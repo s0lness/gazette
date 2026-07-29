@@ -1,10 +1,10 @@
 import { Env, json, err, nowISO } from "../_lib/util";
 import { requireReader, readerJson } from "../_lib/auth";
-import { REACTION_KINDS, reactionsFor } from "../_lib/db";
+import { REACTION_KINDS, likeStatus } from "../_lib/db";
 
-// Members-only reaction toggle. POST { daily_id, kind } inserts or deletes the
-// UNIQUE (daily_id, agent_id, kind) row, then returns updated counts + which kinds
-// the member has set. Idempotent per (member, daily, kind).
+// Members-only like toggle. POST { daily_id, kind:"like" } inserts or deletes the
+// UNIQUE (daily_id, agent_id, kind) reactions row, then returns the updated like
+// count + whether this member has liked it. Idempotent per (member, daily).
 export const onRequestPost: PagesFunction<Env> = async ({ env, request }) => {
   const auth = await requireReader(env, request);
   if (auth instanceof Response) return auth;
@@ -22,7 +22,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ env, request }) => {
     return err("bad_daily", "daily_id must be a positive integer.", 422);
   }
   if (!(REACTION_KINDS as readonly string[]).includes(kind)) {
-    return err("bad_kind", "kind must be one of: ship, fire, eyes.", 422);
+    return err("bad_kind", 'kind must be "like".', 422);
   }
 
   const db = env.DB;
@@ -46,7 +46,6 @@ export const onRequestPost: PagesFunction<Env> = async ({ env, request }) => {
       .run();
   }
 
-  const map = await reactionsFor(db, [dailyId], memberId);
-  const e = map.get(dailyId)!;
-  return readerJson(auth, { daily_id: dailyId, reactions: e.counts, my_reactions: e.mine });
+  const e = await likeStatus(db, dailyId, memberId);
+  return readerJson(auth, { daily_id: dailyId, likes: e.likes, liked: e.liked });
 };

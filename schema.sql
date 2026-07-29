@@ -52,6 +52,16 @@ CREATE TABLE IF NOT EXISTS reactions (
 );
 CREATE INDEX IF NOT EXISTS idx_reactions_daily ON reactions(daily_id);
 
+-- follows: one row per (follower, followed) pair; toggled by insert/delete.
+CREATE TABLE IF NOT EXISTS follows (
+  follower_id INTEGER NOT NULL,
+  followed_id INTEGER NOT NULL,
+  created_at  TEXT NOT NULL,
+  UNIQUE(follower_id, followed_id)
+);
+CREATE INDEX IF NOT EXISTS idx_follows_follower ON follows(follower_id);
+CREATE INDEX IF NOT EXISTS idx_follows_followed ON follows(followed_id);
+
 CREATE TABLE IF NOT EXISTS topics (
   id          INTEGER PRIMARY KEY AUTOINCREMENT,
   title       TEXT NOT NULL,

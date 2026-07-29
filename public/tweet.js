@@ -2,9 +2,9 @@
 // A card reads like a tweet: a deterministic monogram avatar, a Twitter-style
 // header (display_name + muted @handle + middot + ticking relative time + a
 // small status dot), the beat TEXT as the body at normal weight, an optional
-// image, a slim action row (reply count + copy-link), a collapsed "details"
-// disclosure holding the structured body_md, and the reply thread + box.
-// Comments are optimistic and reconcile on the next poll. No reactions.
+// image, a slim action row (a single like heart + count, reply count, copy-link),
+// a collapsed "details" disclosure holding the structured body_md, and the reply
+// thread + box. Likes and comments are optimistic and reconcile on the next poll.
 //
 // Exposes: window.gzTweet.cardHTML(e), window.gzTweet.wire(container),
 // window.gzAvatar(handle), and helpers.
@@ -41,13 +41,28 @@
     );
   }
 
-  // The slim action row: a reply affordance (comment count, toggles the thread)
-  // and a quiet copy-link action. No reactions.
+  // Inline heart glyph, no external requests. Outline by default; when liked it
+  // fills with the ink accent (on paper, on brand, never Twitter red).
+  var HEART_SVG =
+    '<svg class="tw-heart" viewBox="0 0 24 24" width="17" height="17" aria-hidden="true">' +
+    '<path d="M12 20.5l-1.35-1.2C6 15.1 3 12.4 3 9.1 3 6.5 5 4.5 7.5 4.5c1.5 0 2.95.7 3.85 1.8.9-1.1 2.35-1.8 3.85-1.8C18.65 4.5 20.65 6.5 20.65 9.1c0 3.3-3 6-6.65 10.2L12 20.5z"/>' +
+    "</svg>";
+
+  // The slim action row: a like (heart + count), a reply affordance (comment count,
+  // toggles the thread), and a quiet copy-link action.
   function actionsHTML(e) {
     var cc = e.comment_count || 0;
     var label = cc ? (cc === 1 ? "1 reply" : cc + " replies") : "reply";
+    var likes = e.likes || 0;
+    var liked = !!e.liked;
     return (
       '<div class="tw-actions">' +
+      '<button type="button" class="tw-like-btn' + (liked ? " liked" : "") +
+      '" aria-pressed="' + (liked ? "true" : "false") +
+      '" title="like" aria-label="like">' +
+      HEART_SVG +
+      '<span class="tw-like-count">' + (likes ? likes : "") + "</span>" +
+      "</button>" +
       '<button type="button" class="tw-comment-btn">' +
       '<span class="tw-reply-label">' + escText(label) + "</span>" +
       "</button>" +
@@ -131,6 +146,47 @@
     var n = cur ? parseInt(cur[1], 10) : 0;
     n = Math.max(0, n + delta);
     label.textContent = n ? (n === 1 ? "1 reply" : n + " replies") : "reply";
+  }
+
+  // Optimistic like toggle. Flips the button + count immediately, POSTs, and
+  // reconciles from the server response. On failure it reverts. The 12s poll is
+  // the ultimate source of truth (a repaint re-reads liked/likes).
+  function toggleLike(card) {
+    var btn = card.querySelector(".tw-like-btn");
+    if (!btn || btn.getAttribute("data-busy") === "1") return;
+    var countEl = btn.querySelector(".tw-like-count");
+    var wasLiked = btn.classList.contains("liked");
+    var cur = parseInt((countEl.textContent || "0").replace(/[^0-9]/g, ""), 10) || 0;
+    var next = wasLiked ? Math.max(0, cur - 1) : cur + 1;
+    setLike(btn, countEl, !wasLiked, next);
+    btn.setAttribute("data-busy", "1");
+    var id = card.getAttribute("data-id");
+    window
+      .gzFetch("/api/react", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ daily_id: Number(id), kind: "like" }),
+      })
+      .then(function (r) { return r.json().then(function (d) { return { status: r.status, data: d }; }); })
+      .then(function (res) {
+        btn.removeAttribute("data-busy");
+        if (res.status === 200 && typeof res.data.likes === "number") {
+          setLike(btn, countEl, !!res.data.liked, res.data.likes);
+        } else {
+          setLike(btn, countEl, wasLiked, cur); // revert
+        }
+      })
+      .catch(function (err) {
+        btn.removeAttribute("data-busy");
+        if (err && err.gzGated) return; // wall raised; leave optimistic state
+        setLike(btn, countEl, wasLiked, cur); // revert
+      });
+  }
+
+  function setLike(btn, countEl, liked, count) {
+    btn.classList.toggle("liked", liked);
+    btn.setAttribute("aria-pressed", liked ? "true" : "false");
+    countEl.textContent = count ? count : "";
   }
 
   function toggleComments(card) {
@@ -242,6 +298,8 @@
     container.addEventListener("click", function (ev) {
       var card = findCard(ev.target);
       if (!card) return;
+      var like = ev.target.closest ? ev.target.closest(".tw-like-btn") : null;
+      if (like && card.contains(like)) { toggleLike(card); return; }
       var cbtn = ev.target.closest ? ev.target.closest(".tw-comment-btn") : null;
       if (cbtn && card.contains(cbtn)) { toggleComments(card); return; }
       var share = ev.target.closest ? ev.target.closest(".tw-share-btn") : null;
@@ -264,6 +322,7 @@
   // so a poll-driven repaint can be skipped (never wipe an in-progress reply).
   function busy(container) {
     if (!container) return false;
+    if (container.querySelector('.tw-like-btn[data-busy="1"]')) return true;
     var boxes = container.querySelectorAll(".tw-comments");
     for (var i = 0; i < boxes.length; i++) {
       if (!boxes[i].hidden) {

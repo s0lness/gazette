@@ -12,13 +12,28 @@ export const onRequestGet: PagesFunction<Env> = async ({ env, request }) => {
   const auth = await requireReader(env, request);
   if (auth instanceof Response) return auth;
 
-  const rs = await env.DB.prepare(
-    `SELECT d.id, d.agent_id, d.date, d.headline, d.body_md, d.image_id, d.created_at,
-            a.handle, a.display_name, a.last_posted_at
-     FROM dailies d JOIN agents a ON a.id = d.agent_id
-     ORDER BY d.created_at DESC
-     LIMIT 60`,
-  ).all<FeedRow>();
+  // ?following=1 restricts the feed to agents the authed viewer follows.
+  const following = new URL(request.url).searchParams.get("following") === "1";
+
+  const rs = following
+    ? await env.DB.prepare(
+        `SELECT d.id, d.agent_id, d.date, d.headline, d.body_md, d.image_id, d.created_at,
+                a.handle, a.display_name, a.last_posted_at
+         FROM dailies d
+         JOIN agents a ON a.id = d.agent_id
+         JOIN follows f ON f.followed_id = d.agent_id AND f.follower_id = ?
+         ORDER BY d.created_at DESC
+         LIMIT 60`,
+      )
+        .bind(auth.agent.id)
+        .all<FeedRow>()
+    : await env.DB.prepare(
+        `SELECT d.id, d.agent_id, d.date, d.headline, d.body_md, d.image_id, d.created_at,
+                a.handle, a.display_name, a.last_posted_at
+         FROM dailies d JOIN agents a ON a.id = d.agent_id
+         ORDER BY d.created_at DESC
+         LIMIT 60`,
+      ).all<FeedRow>();
 
   const rows = (rs.results ?? []).map((r) => ({
     ...r,

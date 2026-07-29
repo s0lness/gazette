@@ -182,6 +182,18 @@ pre.code { background: var(--surface); border: 1px solid var(--line); border-rad
 .join-gate code { font-size: 0.85em; }
 
 /* ---- Tweet card ---------------------------------------------------------- */
+/* Segmented feed scope tabs (All / Following). Two quiet pills, the active one
+   filled with ink. sylve-studio: mono chrome, no Twitter blue. */
+.feed-tabs { display: inline-flex; gap: 0.35rem; padding: 0.25rem; border: 1px solid var(--line); border-radius: 999px; margin-top: 1.25rem; }
+.feed-tab {
+  padding: 0.35rem 0.9rem; min-height: 32px;
+  border: 0; border-radius: 999px; background: transparent;
+  color: var(--muted); cursor: pointer;
+  font: inherit; font-size: 0.82rem; font-weight: 400; line-height: 1;
+}
+.feed-tab:hover { color: var(--fg); }
+.feed-tab.on { background: var(--accent); color: var(--accent-fg); }
+
 /* Timeline feel: hairline divider between beats, no heavy boxed cards. Twitter
    layout: monogram avatar on the left, header + text + actions on the right. */
 .tweet { display: flex; gap: 0.7rem; border-top: 1px solid var(--line); padding: 1.1rem 0; }
@@ -215,22 +227,51 @@ pre.code { background: var(--surface); border: 1px solid var(--line); border-rad
 .tw-img { display: block; margin: 0 0 0.6rem; }
 .tw-img img { display: block; max-width: 100%; height: auto; border-radius: var(--radius); border: 1px solid var(--line); }
 
-/* Slim, quiet action row: reply count + copy-link. No reactions. */
+/* Slim, quiet action row: a single like heart + count, reply count, copy-link. */
 .tw-actions { display: flex; align-items: center; gap: 1.1rem; margin: 0.2rem 0 0.1rem; }
-.tw-comment-btn, .tw-share-btn {
-  display: inline-flex; align-items: center;
+.tw-like-btn, .tw-comment-btn, .tw-share-btn {
+  display: inline-flex; align-items: center; gap: 0.3rem;
   padding: 0.2rem 0; border: 0; background: transparent;
   color: var(--muted); cursor: pointer;
   font: inherit; font-size: 0.82rem; font-weight: 400; line-height: 1;
 }
-.tw-comment-btn:hover, .tw-share-btn:hover { color: var(--accent); }
+.tw-comment-btn:hover, .tw-share-btn:hover, .tw-like-btn:hover { color: var(--accent); }
 .tw-share-btn.copied { color: var(--accent); }
-.tw-reply-label { font-variant-numeric: tabular-nums; }
+.tw-reply-label, .tw-like-count { font-variant-numeric: tabular-nums; }
 
-/* Profile header: larger avatar next to the name + tagline. */
+/* The like heart: outline by default (stroked, no fill), fills with the ink
+   accent when liked. On paper, on brand, never Twitter red. */
+.tw-heart { display: block; fill: none; stroke: currentColor; stroke-width: 1.6; }
+.tw-like-btn.liked { color: var(--accent); }
+.tw-like-btn.liked .tw-heart { fill: var(--accent); stroke: var(--accent); }
+
+/* Profile header: larger avatar next to the name + tagline, follow button trailing. */
 .profile-head { display: flex; align-items: center; gap: 0.9rem; margin-bottom: 0.2rem; }
-.profile-head-text { min-width: 0; }
+.profile-head-text { min-width: 0; flex: 1 1 auto; }
 .profile-head .page-title { margin: 0; }
+
+/* Follow / Following toggle: pill, ink-outline when not following, filled ink when
+   following (Twitter-style). Member-gated; on brand, no Twitter blue. */
+.follow-btn {
+  flex: 0 0 auto; align-self: center;
+  padding: 0.4rem 1rem; min-height: 36px;
+  border: 1px solid var(--accent); border-radius: 999px;
+  background: transparent; color: var(--accent);
+  font: inherit; font-size: 0.85rem; font-weight: 400; line-height: 1; cursor: pointer;
+}
+.follow-btn:hover { background: color-mix(in srgb, var(--accent) 8%, transparent); }
+.follow-btn.following { background: var(--accent); color: var(--accent-fg); }
+/* On hover while following, hint the un-follow. */
+.follow-btn.following:hover .follow-label { visibility: hidden; }
+.follow-btn.following:hover { position: relative; }
+.follow-btn.following:hover::after {
+  content: "Unfollow"; position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+}
+
+/* "N followers . M following" under the header: muted, mono, tabular. */
+.follow-counts { color: var(--muted); font-size: 0.82rem; margin: 0.3rem 0 0.2rem; font-variant-numeric: tabular-nums; }
+.follow-counts strong { font-weight: 400; color: var(--fg); }
 
 /* Comment region. */
 .tw-comments { margin: 0.7rem 0 0.2rem; padding: 0.7rem 0 0; border-top: 1px solid var(--line); }
@@ -330,7 +371,9 @@ pre.copyable {
   .wall-sub { font-size: 0.88rem; }
 
   /* Touch targets: >= 44px effective for anything tappable. */
-  .tw-comment-btn, .tw-share-btn { padding: 0.6rem 0; min-height: 44px; }
+  .tw-like-btn, .tw-comment-btn, .tw-share-btn { padding: 0.6rem 0; min-height: 44px; }
+  .follow-btn { min-height: 44px; padding: 0.5rem 1.1rem; }
+  .feed-tab { min-height: 44px; padding: 0.5rem 1.1rem; }
   .tw-actions { gap: 1.4rem; }
   .tweet { gap: 0.6rem; }
   .tw-avatar { width: 36px; height: 36px; font-size: 0.82rem; }

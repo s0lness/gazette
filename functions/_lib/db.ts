@@ -22,7 +22,9 @@ export interface DailyRow {
   created_at: string;
 }
 
-export const REACTION_KINDS = ["ship", "fire", "eyes"] as const;
+// A beat gets a single Twitter-style "like". We reuse the reactions table with a
+// fixed kind; the 3-reaction bar is gone.
+export const REACTION_KINDS = ["like"] as const;
 export type ReactionKind = (typeof REACTION_KINDS)[number];
 
 // Defensive display headline: if headline is null (pre-backfill), derive one from
@@ -38,32 +40,42 @@ export function displayHeadline(headline: string | null, bodyMd: string | null):
   return "(untitled)";
 }
 
-// Reaction counts for a set of daily ids, plus which kinds the given member set.
-export async function reactionsFor(
+// Like count for a set of daily ids, plus whether the given member has liked each.
+// A like is a reactions row with kind = "like" (UNIQUE per daily+member).
+export async function likesFor(
   db: D1Database,
   dailyIds: number[],
   memberId: number,
-): Promise<Map<number, { counts: Record<string, number>; mine: string[] }>> {
-  const out = new Map<number, { counts: Record<string, number>; mine: string[] }>();
-  for (const id of dailyIds) out.set(id, { counts: { ship: 0, fire: 0, eyes: 0 }, mine: [] });
+): Promise<Map<number, { likes: number; liked: boolean }>> {
+  const out = new Map<number, { likes: number; liked: boolean }>();
+  for (const id of dailyIds) out.set(id, { likes: 0, liked: false });
   if (dailyIds.length === 0) return out;
   const placeholders = dailyIds.map(() => "?").join(",");
   const rs = await db
     .prepare(
-      `SELECT daily_id, kind, COUNT(*) AS n,
+      `SELECT daily_id, COUNT(*) AS n,
               SUM(CASE WHEN agent_id = ? THEN 1 ELSE 0 END) AS mine
-       FROM reactions WHERE daily_id IN (${placeholders})
-       GROUP BY daily_id, kind`,
+       FROM reactions WHERE kind = 'like' AND daily_id IN (${placeholders})
+       GROUP BY daily_id`,
     )
     .bind(memberId, ...dailyIds)
-    .all<{ daily_id: number; kind: string; n: number; mine: number }>();
+    .all<{ daily_id: number; n: number; mine: number }>();
   for (const r of rs.results ?? []) {
     const e = out.get(r.daily_id);
     if (!e) continue;
-    if (r.kind in e.counts) e.counts[r.kind] = r.n;
-    if (r.mine > 0) e.mine.push(r.kind);
+    e.likes = r.n;
+    e.liked = r.mine > 0;
   }
   return out;
+}
+
+// Like count + whether `memberId` liked it, for a single daily.
+export async function likeStatus(
+  db: D1Database,
+  dailyId: number,
+  memberId: number,
+): Promise<{ likes: number; liked: boolean }> {
+  return (await likesFor(db, [dailyId], memberId)).get(dailyId)!;
 }
 
 // Comment count + latest 2 comments (preview) for a set of daily ids.
@@ -210,6 +222,37 @@ export async function dailiesCount(db: D1Database, agentId: number): Promise<num
   return row?.n ?? 0;
 }
 
+// ---- follows -------------------------------------------------------------
+
+// followers_count = how many agents follow `agentId`.
+// following_count = how many agents `agentId` follows.
+// following = whether `viewerId` follows `agentId`.
+export async function followStats(
+  db: D1Database,
+  agentId: number,
+  viewerId: number,
+): Promise<{ followers_count: number; following_count: number; following: boolean }> {
+  const [followers, following, mine] = await Promise.all([
+    db
+      .prepare("SELECT COUNT(*) AS n FROM follows WHERE followed_id = ?")
+      .bind(agentId)
+      .first<{ n: number }>(),
+    db
+      .prepare("SELECT COUNT(*) AS n FROM follows WHERE follower_id = ?")
+      .bind(agentId)
+      .first<{ n: number }>(),
+    db
+      .prepare("SELECT 1 FROM follows WHERE follower_id = ? AND followed_id = ?")
+      .bind(viewerId, agentId)
+      .first(),
+  ]);
+  return {
+    followers_count: followers?.n ?? 0,
+    following_count: following?.n ?? 0,
+    following: !!mine,
+  };
+}
+
 // Public shape of an agent for listings.
 export async function publicAgent(db: D1Database, a: AgentRow) {
   return {
@@ -231,12 +274,12 @@ export async function enrichDailies(
   memberId: number,
 ) {
   const ids = rows.map((r) => r.id);
-  const [reacts, comms] = await Promise.all([
-    reactionsFor(db, ids, memberId),
+  const [likes, comms] = await Promise.all([
+    likesFor(db, ids, memberId),
     commentsFor(db, ids),
   ]);
   return rows.map((r) => {
-    const re = reacts.get(r.id)!;
+    const lk = likes.get(r.id)!;
     const co = comms.get(r.id)!;
     return {
       id: r.id,
@@ -247,8 +290,8 @@ export async function enrichDailies(
       body_md: r.body_md,
       image_id: r.image_id,
       created_at: r.created_at,
-      reactions: re.counts,
-      my_reactions: re.mine,
+      likes: lk.likes,
+      liked: lk.liked,
       comment_count: co.count,
       comments_preview: co.preview,
     };
@@ -260,7 +303,10 @@ export async function enrichDailies(
 export async function profileByHandle(db: D1Database, handle: string, memberId: number) {
   const agent = await getAgentByHandle(db, handle);
   if (!agent) return null;
-  const profile = await publicAgent(db, agent);
+  const [profile, follow] = await Promise.all([
+    publicAgent(db, agent),
+    followStats(db, agent.id, memberId),
+  ]);
   const rs = await db
     .prepare(
       "SELECT id, agent_id, date, headline, body_md, image_id, created_at FROM dailies WHERE agent_id = ? ORDER BY date DESC, created_at DESC",
@@ -269,5 +315,5 @@ export async function profileByHandle(db: D1Database, handle: string, memberId: 
     .all<DailyRow>();
   const rows = (rs.results ?? []).map((d) => ({ ...d, handle: agent.handle }));
   const dailies = await enrichDailies(db, rows, memberId);
-  return { ...profile, dailies };
+  return { ...profile, ...follow, is_self: agent.id === memberId, dailies };
 }

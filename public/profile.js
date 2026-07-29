@@ -77,17 +77,35 @@
   }
 
   let last = null;
+  let followInFlight = false;
 
   function render(a) {
     const key = JSON.stringify(a);
     if (key === last) return; // unchanged
-    if (last !== null && (dmBusy() || window.gzTweet.busy(root))) return; // don't disturb; catch up next tick
+    if (last !== null && (dmBusy() || followInFlight || window.gzTweet.busy(root))) return; // don't disturb; catch up next tick
     const first = last === null;
     const prevKeys = keySet();
     last = key;
 
     const dot = a.status === "active" ? "active" : "lapsed";
     const name = a.display_name ? a.display_name : a.handle;
+
+    // Follow button: Twitter-style toggle, member-gated. Hidden when viewing your
+    // own profile (is_self). Wired after injection.
+    const followBtn = a.is_self
+      ? ""
+      : '<button type="button" id="follow-btn" class="follow-btn' +
+        (a.following ? " following" : "") + '" aria-pressed="' + (a.following ? "true" : "false") +
+        '"><span class="follow-label">' + (a.following ? "Following" : "Follow") + "</span></button>";
+
+    const followers = a.followers_count || 0;
+    const followingN = a.following_count || 0;
+    const counts =
+      '<p class="follow-counts">' +
+      '<span class="fc"><strong id="followers-n">' + followers + "</strong> followers</span>" +
+      ' &middot; ' +
+      '<span class="fc"><strong>' + followingN + "</strong> following</span>" +
+      "</p>";
 
     let html =
       '<p class="backlink"><a href="/">&larr; feed</a></p>' +
@@ -97,7 +115,10 @@
       '<h1 class="page-title"><span class="dot ' + dot + '"></span> ' + escAttr(name) + "</h1>" +
       '<p class="tagline">@' + escAttr(a.handle) + " &middot; " + escAttr(a.status) +
       " &middot; streak " + a.streak + "d &middot; " + a.dailies_count + " beats</p>" +
-      "</div></div>";
+      "</div>" +
+      followBtn +
+      "</div>" +
+      counts;
 
     if (a.bio) html += '<p class="bio">' + escAttr(a.bio) + "</p>";
 
@@ -120,8 +141,53 @@
 
     root.innerHTML = html;
     document.getElementById("dm-ask").addEventListener("click", ask);
+    const fb = document.getElementById("follow-btn");
+    if (fb) fb.addEventListener("click", follow);
     window.gzTweet.wire(root);
     if (!first) markNew(prevKeys);
+  }
+
+  // Optimistic follow toggle. Flips the button + follower count immediately,
+  // POSTs, reconciles from the response, reverts on failure. The 12s poll is the
+  // ultimate source of truth. `followBusy` skips a repaint while a toggle is
+  // in flight so the poll never wipes the optimistic state.
+  function follow() {
+    const btn = document.getElementById("follow-btn");
+    if (!btn || followInFlight) return;
+    const label = btn.querySelector(".follow-label");
+    const nEl = document.getElementById("followers-n");
+    const wasFollowing = btn.classList.contains("following");
+    const cur = parseInt((nEl && nEl.textContent) || "0", 10) || 0;
+    const nextN = wasFollowing ? Math.max(0, cur - 1) : cur + 1;
+    setFollow(btn, label, nEl, !wasFollowing, nextN);
+    followInFlight = true;
+    window
+      .gzFetch("/api/follow", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ handle: handle }),
+      })
+      .then(function (r) { return r.json().then(function (d) { return { status: r.status, data: d }; }); })
+      .then(function (res) {
+        followInFlight = false;
+        if (res.status === 200 && typeof res.data.followers === "number") {
+          setFollow(btn, label, nEl, !!res.data.following, res.data.followers);
+        } else {
+          setFollow(btn, label, nEl, wasFollowing, cur); // revert
+        }
+      })
+      .catch(function (err) {
+        followInFlight = false;
+        if (err && err.gzGated) return; // wall raised
+        setFollow(btn, label, nEl, wasFollowing, cur); // revert
+      });
+  }
+
+  function setFollow(btn, label, nEl, following, n) {
+    btn.classList.toggle("following", following);
+    btn.setAttribute("aria-pressed", following ? "true" : "false");
+    if (label) label.textContent = following ? "Following" : "Follow";
+    if (nEl) nEl.textContent = n;
   }
 
   async function load() {

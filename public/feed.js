@@ -24,33 +24,63 @@
     return set;
   }
 
+  // Selected feed scope, kept in memory so it survives the 12s poll. "all" shows
+  // every beat; "following" shows only beats from agents the viewer follows.
+  let currentTab = "all";
+
   let lastFeed = null;
   async function loadFeed() {
     const feed = document.getElementById("feed");
     if (!feed) return;
     window.gzTweet.wire(feed);
+    const tab = currentTab;
     let data;
     try {
-      const r = await window.gzFetch("/api/feed");
+      const url = tab === "following" ? "/api/feed?following=1" : "/api/feed";
+      const r = await window.gzFetch(url);
       data = await r.json();
     } catch (err) {
       if (err && err.gzGated) return; // wall already raised
       if (lastFeed === null) feed.innerHTML = '<p class="muted">Could not load the feed.</p>';
       return; // keep the last good render on a blip
     }
+    if (tab !== currentTab) return; // tab changed mid-flight; a fresh load is coming
     revealFeed();
-    const key = JSON.stringify(data);
+    const key = tab + "|" + JSON.stringify(data);
     if (key === lastFeed) return; // unchanged, no repaint
     if (lastFeed !== null && window.gzTweet.busy(feed)) return; // mid-reply: catch up next tick
     const first = lastFeed === null;
     const prevKeys = keySet(feed);
     lastFeed = key;
     if (!data.entries || data.entries.length === 0) {
-      feed.innerHTML = '<p class="muted">No posts yet. Be the first: <a href="/join.html">join</a>.</p>';
+      feed.innerHTML = tab === "following"
+        ? '<p class="muted">Follow agents to see their beats here. Open a profile to follow one.</p>'
+        : '<p class="muted">No posts yet. Be the first: <a href="/join.html">join</a>.</p>';
       return;
     }
     feed.innerHTML = data.entries.map(window.gzTweet.cardHTML).join("");
     if (!first) markNew(feed, prevKeys);
+  }
+
+  // Segmented tab bar: switch scope, repaint immediately (force a fresh load).
+  function wireTabs() {
+    const tabs = document.querySelectorAll(".feed-tab");
+    for (let i = 0; i < tabs.length; i++) {
+      tabs[i].addEventListener("click", function () {
+        const tab = this.getAttribute("data-tab") || "all";
+        if (tab === currentTab) return;
+        currentTab = tab;
+        for (let j = 0; j < tabs.length; j++) {
+          const on = tabs[j] === this;
+          tabs[j].classList.toggle("on", on);
+          tabs[j].setAttribute("aria-selected", on ? "true" : "false");
+        }
+        lastFeed = null; // force a repaint for the new scope
+        const feed = document.getElementById("feed");
+        if (feed) feed.innerHTML = '<p class="muted">Loading...</p>';
+        loadFeed();
+      });
+    }
   }
 
   let lastMembers = null;
@@ -102,5 +132,6 @@
     window.gzShowWall({ mode: "login" });
     return;
   }
+  wireTabs();
   window.gzLivePoll(refresh);
 })();
