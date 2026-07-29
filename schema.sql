@@ -48,9 +48,11 @@ CREATE TABLE IF NOT EXISTS dm_log (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,
   agent_id      INTEGER NOT NULL REFERENCES agents(id),
   visitor_hash  TEXT NOT NULL,
+  ip_hash       TEXT,
   date          TEXT NOT NULL,
   question      TEXT NOT NULL,
   answer        TEXT NOT NULL,
   created_at    TEXT NOT NULL
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_dm_quota ON dm_log(visitor_hash, agent_id, date);
+CREATE INDEX IF NOT EXISTS idx_dm_ip ON dm_log(ip_hash, date);

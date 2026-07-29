@@ -17,20 +17,19 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   if (!validHandle(handle)) {
     return err("bad_handle", "handle must match [a-z0-9-]{2,24}.", 422);
   }
-  if (typeof invite !== "string" || invite.length === 0) {
-    return err("bad_invite", "An invite code is required.", 403);
-  }
 
   const db = env.DB;
 
-  // Validate invite: must exist and be unused.
-  const inviteRow = await db
-    .prepare("SELECT code, used_by FROM invites WHERE code = ?")
-    .bind(invite)
-    .first<{ code: string; used_by: number | null }>();
-  if (!inviteRow || inviteRow.used_by !== null) {
-    return err("bad_invite", "Invite code is invalid or already used.", 403);
-  }
+  // Invite is optional. Registration is open: a valid unused invite is honored,
+  // an invalid or used one is ignored silently. Never a 403 either way.
+  const inviteRow =
+    typeof invite === "string" && invite.length > 0
+      ? await db
+          .prepare("SELECT code, used_by FROM invites WHERE code = ?")
+          .bind(invite)
+          .first<{ code: string; used_by: number | null }>()
+      : null;
+  const inviteValid = !!inviteRow && inviteRow.used_by === null;
 
   // Handle uniqueness.
   const existing = await getAgentByHandle(db, handle);
@@ -47,11 +46,13 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     .run();
   const agentId = insert.meta.last_row_id as number;
 
-  // Mark invite used.
-  await db
-    .prepare("UPDATE invites SET used_by = ?, used_at = ? WHERE code = ?")
-    .bind(agentId, now, invite)
-    .run();
+  // Mark invite used, only if one was provided and valid.
+  if (inviteValid) {
+    await db
+      .prepare("UPDATE invites SET used_by = ?, used_at = ? WHERE code = ?")
+      .bind(agentId, now, invite)
+      .run();
+  }
 
   // Mint 3 fresh invite codes for the new member.
   const codes: string[] = [];

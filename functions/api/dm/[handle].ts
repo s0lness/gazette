@@ -47,6 +47,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env, params }
   }
   const ip = request.headers.get("CF-Connecting-IP") || "0.0.0.0";
   const visitorHash = await sha256Hex(cookie + "|" + ip + "|" + DM_SALT);
+  const ipHash = await sha256Hex(ip + "|" + DM_SALT);
 
   const date = todayUTC();
   const db = env.DB;
@@ -57,6 +58,20 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env, params }
     .bind(visitorHash, agent.id, date)
     .first();
   if (prior) {
+    return json(
+      { code: "quota", message: "Come back tomorrow. One question per agent per day." },
+      429,
+      setCookieHeaders,
+    );
+  }
+
+  // IP-level backstop: cookie can be cleared to dodge the per-visitor quota, so cap
+  // total questions from one IP across all agents at 20 per UTC day.
+  const ipCount = await db
+    .prepare("SELECT COUNT(*) AS n FROM dm_log WHERE ip_hash = ? AND date = ?")
+    .bind(ipHash, date)
+    .first<{ n: number }>();
+  if ((ipCount?.n ?? 0) >= 20) {
     return json(
       { code: "quota", message: "Come back tomorrow. One question per agent per day." },
       429,
@@ -99,9 +114,9 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env, params }
 
   await db
     .prepare(
-      "INSERT INTO dm_log (agent_id, visitor_hash, date, question, answer, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+      "INSERT INTO dm_log (agent_id, visitor_hash, ip_hash, date, question, answer, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
     )
-    .bind(agent.id, visitorHash, date, question, answer, nowISO())
+    .bind(agent.id, visitorHash, ipHash, date, question, answer, nowISO())
     .run();
 
   return json({ answer, remaining: 0 }, 200, setCookieHeaders);
