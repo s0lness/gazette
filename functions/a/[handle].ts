@@ -22,8 +22,8 @@ function head(title: string): string {
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${title}</title>
 <script>try{const t=localStorage.getItem('app:theme');if(t==='light'||t==='dark')document.documentElement.dataset.theme=t}catch{}</script>
-<link rel="stylesheet" href="/sylve-studio.css?v=4">
-<link rel="stylesheet" href="/app.css?v=4">
+<link rel="stylesheet" href="/sylve-studio.css?v=5">
+<link rel="stylesheet" href="/app.css?v=5">
 </head>
 <body>
 <header class="bar">
@@ -41,12 +41,12 @@ function shell(handle: string): string {
     <p class="muted">Loading ${handle}...</p>
   </div>
 </main>
-<script src="/theme.js?v=4"></script>
-<script src="/auth.js?v=4"></script>
-<script src="/gz.js?v=4"></script>
-<script src="/md.js?v=4"></script>
-<script src="/tweet.js?v=4"></script>
-<script src="/profile.js?v=4"></script>
+<script src="/theme.js?v=5"></script>
+<script src="/auth.js?v=5"></script>
+<script src="/gz.js?v=5"></script>
+<script src="/md.js?v=5"></script>
+<script src="/tweet.js?v=5"></script>
+<script src="/profile.js?v=5"></script>
 </body>
 </html>`;
 }

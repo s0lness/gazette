@@ -266,15 +266,59 @@ pre.copyable {
 .gz-copy:hover { color: var(--fg); border-color: var(--accent); }
 .gz-copy.copied { color: var(--positive); border-color: var(--positive); }
 
-/* ---- Mobile: hide brand + live indicator in the top bar ------------------- */
-/* On narrow screens the wall card and feed page both have their own title/live
-   chip, making the top-bar one redundant. Hide brand and live-indicator; keep
-   the member chip so logout stays reachable. If the chip is empty (logged-out
-   wall), hide the whole bar so no empty strip remains at the top. */
+/* ==========================================================================
+   Mobile (<= 640px). One consolidated pass. Guiding rule: SUBTRACT.
+   Single column, no horizontal overflow, 44px touch targets, tighter type
+   and spacing, safe-area insets. Desktop above 640px is unchanged.
+   ========================================================================== */
 @media (max-width: 640px) {
-  .bar .brand { display: none; }
+  /* No sideways scroll of the page, ever. */
+  html, body { overflow-x: hidden; }
+
+  /* Tighter page gutters; leave room under the browser chrome + the fab. */
+  .page {
+    padding: 1rem 1rem calc(5rem + env(safe-area-inset-bottom, 0px));
+  }
+  .bar { padding: 0.6rem 1rem; }
+
+  /* Subtract redundant top-bar chrome: the wall card and each page carry their
+     own title/live chip. Keep the member chip so log out stays reachable; if it
+     is empty (logged-out wall) collapse the whole bar. */
+  .bar .brand,
   .bar .live-indicator { display: none; }
-  /* When the member chip has no content, the bar has no visible children:
-     collapse it entirely. */
   .bar:has(#gz-me:empty) { display: none; }
+
+  /* Single column: the members rail duplicates handles already in the feed, so
+     drop it on mobile rather than stack it (subtract). */
+  .layout { grid-template-columns: 1fr; gap: 0; }
+  .rail { display: none; }
+
+  /* Type scale: smaller, comfortable. */
+  h1.page-title { font-size: 1.35rem; }
+  .tw-headline { font-size: 1.05rem; }
+  .md { font-size: 0.92rem; }
+
+  /* The wall reads tighter: thesis stays the visual lead but smaller; the mono
+     subline drops to a comfortable size. */
+  .wall { padding: 0.5rem 0 2rem; }
+  .wall-card { padding: 1.2rem 1.1rem; }
+  .wall-thesis { font-size: 1.2rem; }
+  .wall-sub { font-size: 0.88rem; }
+
+  /* Touch targets: >= 44px effective for anything tappable. */
+  .tw-react, .tw-comment-btn { padding: 0.5rem 0.7rem; min-height: 44px; }
+  .tw-actions { gap: 0.5rem; flex-wrap: wrap; }
+  .gz-copy { min-height: 44px; padding: 0.4rem 0.9rem; }
+  .theme-fab { width: 48px; height: 48px; }
+  .gz-me .chip-logout,
+  .wall-note a,
+  .backlink a { display: inline-block; padding: 0.35rem 0; }
+
+  /* Inputs: full width, >=16px so iOS does not zoom on focus. Big submit. */
+  input, textarea, select { font-size: 16px; }
+  .wall-login { flex-direction: column; align-items: stretch; }
+  .wall-login input, .wall-login button { width: 100%; }
+  .dmbox .row button,
+  .wall-login button,
+  .tw-reply-send { min-height: 44px; }
 }
