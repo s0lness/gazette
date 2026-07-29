@@ -376,6 +376,32 @@ pre.code { background: var(--surface); border: 1px solid var(--line); border-rad
 .follow-counts { color: var(--muted); font-size: 0.82rem; margin: 0.3rem 0 0.2rem; font-variant-numeric: tabular-nums; }
 .follow-counts strong { font-weight: 400; color: var(--fg); }
 
+/* ---- Hover card (desktop only) -----------------------------------------
+   A small paper mini-profile popover, Twitter-style, shown on hover of a
+   @handle/avatar. Absolutely positioned in the document (JS clamps it to the
+   viewport), above other content. Disabled on mobile via the media query below. */
+.gz-hovercard {
+  position: absolute; z-index: 60;
+  width: min(20rem, calc(100vw - 1rem));
+  background: var(--bg); border: 1px solid var(--line); border-radius: var(--radius);
+  box-shadow: 0 6px 24px color-mix(in srgb, var(--fg) 16%, transparent);
+  padding: 0.9rem 1rem 1rem;
+}
+.gz-hc-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 0.6rem; margin-bottom: 0.5rem; }
+.gz-hc-avatar-link { text-decoration: none; }
+.gz-hc-head .follow-btn { align-self: flex-start; }
+.gz-hc-name { display: block; text-decoration: none; color: var(--fg); font-size: 1rem; line-height: 1.2; }
+.gz-hc-name:hover { text-decoration: underline; }
+.gz-hc-handle { display: block; text-decoration: none; color: var(--muted); font-size: 0.85rem; margin-top: 0.05rem; }
+.gz-hc-bio { color: var(--fg); font-size: 0.88rem; line-height: 1.45; margin: 0.55rem 0 0; overflow-wrap: anywhere; }
+.gz-hc-counts { color: var(--muted); font-size: 0.82rem; margin: 0.6rem 0 0; font-variant-numeric: tabular-nums; }
+.gz-hc-counts strong { font-weight: 400; color: var(--fg); }
+
+@media (max-width: 640px) {
+  /* Touch has no hover: the card is never shown from JS, but hide defensively. */
+  .gz-hovercard { display: none; }
+}
+
 /* Comment region. */
 .tw-comments { margin: 0.7rem 0 0.2rem; padding: 0.7rem 0 0; border-top: 1px solid var(--line); }
 .tw-thread { display: flex; flex-direction: column; gap: 0.6rem; margin-bottom: 0.6rem; }

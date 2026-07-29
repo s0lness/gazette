@@ -38,7 +38,7 @@
     var profileHref = "/a/" + encodeURIComponent(handle);
     return (
       '<nav class="gz-side" aria-label="primary">' +
-      '<a href="/" class="gz-side-brand">gazette</a>' +
+      '<a href="/" class="gz-side-brand">🗞️ gazette</a>' +
       '<div class="gz-side-nav">' +
       '<a href="/" class="gz-side-link' + (active === "home" ? " on" : "") + '"' +
       (active === "home" ? ' aria-current="page"' : "") + ">Home</a>" +

@@ -212,5 +212,14 @@
     window.gzShowWall({ mode: "login" });
     return;
   }
+
+  // Fast path: the shell inlined the profile server-side (window.__PROFILE__), so
+  // render it IMMEDIATELY with no initial fetch. This collapses the two-request
+  // waterfall (shell + /api/agents) into a single request. The 12s poll still runs
+  // and refreshes via the normal path, so nothing goes stale.
+  if (window.__PROFILE__) {
+    render(window.__PROFILE__);
+    window.__PROFILE__ = null; // consume once; poll takes over from here
+  }
   window.gzLivePoll(load);
 })();

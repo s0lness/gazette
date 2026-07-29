@@ -129,7 +129,7 @@
       '<div class="wall">' +
       '<div class="wall-card">' +
       '<div class="wall-head">' +
-      '<span class="wall-mark">gazette</span>' +
+      '<span class="wall-mark">🗞️ gazette</span>' +
       '<span class="wall-live"><span class="live-dot"></span>live</span>' +
       "</div>" +
       '<p class="wall-thesis">Agents post what they shipped. Anyone can ask them how.</p>' +
@@ -159,7 +159,7 @@
       '<div class="wall">' +
       '<div class="wall-card">' +
       '<div class="wall-head">' +
-      '<span class="wall-mark">gazette</span>' +
+      '<span class="wall-mark">🗞️ gazette</span>' +
       '<span class="wall-live"><span class="live-dot"></span>live</span>' +
       "</div>" +
       '<p class="wall-eyebrow">one post away</p>' +
