@@ -96,7 +96,8 @@ h1.page-title { font-size: 1.6rem; margin: 0.25rem 0 0.15rem; letter-spacing: -0
 .md ul { margin: 0.3rem 0; padding-left: 1.2rem; }
 .md li { margin: 0.12rem 0; }
 .md a { color: var(--fg); text-underline-offset: 2px; }
-.md code, .md strong { }
+/* Post content never renders bold: hierarchy comes from size and color. */
+.md strong, .md b { font-weight: 400; }
 
 /* Right rail members list */
 .rail h2 { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin: 0 0 0.5rem; }
@@ -181,32 +182,55 @@ pre.code { background: var(--surface); border: 1px solid var(--line); border-rad
 .join-gate code { font-size: 0.85em; }
 
 /* ---- Tweet card ---------------------------------------------------------- */
-.tweet { border-top: 1px solid var(--line); padding: 1.1rem 0; }
+/* Timeline feel: hairline divider between beats, no heavy boxed cards. Twitter
+   layout: monogram avatar on the left, header + text + actions on the right. */
+.tweet { display: flex; gap: 0.7rem; border-top: 1px solid var(--line); padding: 1.1rem 0; }
 .tweet:first-child { border-top: none; }
-.tw-head { display: flex; align-items: baseline; gap: 0.55rem; margin-bottom: 0.5rem; }
-.tw-who { text-decoration: none; font-weight: 400; }
-.tw-who:hover { text-decoration: underline; }
-.tw-when { color: var(--muted); font-size: 0.82rem; margin-left: auto; }
+.tw-avatar-link { flex: 0 0 auto; text-decoration: none; }
+.tw-body { flex: 1 1 auto; min-width: 0; }
 
-/* The headline IS the tweet: large and prominent. */
-.tw-headline { font-size: 1.15rem; line-height: 1.4; font-weight: 400; letter-spacing: -0.01em; margin: 0 0 0.55rem; white-space: pre-wrap; word-break: break-word; }
+/* Deterministic monogram avatar: CSS-only, no images, readable in both themes. */
+.tw-avatar {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 40px; height: 40px; border-radius: 50%;
+  color: #fff; font-size: 0.9rem; font-weight: 400; letter-spacing: 0.01em;
+  line-height: 1; user-select: none;
+}
+.tw-avatar-lg { width: 56px; height: 56px; font-size: 1.2rem; }
+
+/* Header line: display_name (normal weight), muted @handle, status dot, middot,
+   the ticking relative time. One compact row, all NORMAL weight. */
+.tw-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: 0.35rem; margin-bottom: 0.3rem; font-size: 0.86rem; }
+.tw-who { text-decoration: none; font-weight: 400; color: var(--fg); }
+.tw-who:hover { text-decoration: underline; }
+.tw-handle { text-decoration: none; font-weight: 400; color: var(--muted); }
+.tw-handle:hover { text-decoration: underline; }
+.tw-mid { color: var(--muted); }
+.tw-when { color: var(--muted); font-variant-numeric: tabular-nums; }
+
+/* The beat text IS the tweet: readable, comfortable, NORMAL weight. Hierarchy
+   comes from size and the ink color, never from bold. */
+.tw-headline { font-size: 1.15rem; line-height: 1.45; font-weight: 400; letter-spacing: -0.005em; color: var(--fg); margin: 0 0 0.55rem; white-space: pre-wrap; word-break: break-word; }
 
 .tw-img { display: block; margin: 0 0 0.6rem; }
 .tw-img img { display: block; max-width: 100%; height: auto; border-radius: var(--radius); border: 1px solid var(--line); }
 
-/* Action bar: reactions + comment toggle. */
-.tw-actions { display: flex; align-items: center; gap: 0.4rem; margin: 0.2rem 0 0.1rem; }
-.tw-react, .tw-comment-btn {
-  display: inline-flex; align-items: center; gap: 0.3rem;
-  padding: 0.28rem 0.55rem; border: 1px solid var(--line); border-radius: 999px;
-  background: transparent; color: var(--muted); cursor: pointer;
-  font: inherit; font-size: 0.82rem; line-height: 1;
+/* Slim, quiet action row: reply count + copy-link. No reactions. */
+.tw-actions { display: flex; align-items: center; gap: 1.1rem; margin: 0.2rem 0 0.1rem; }
+.tw-comment-btn, .tw-share-btn {
+  display: inline-flex; align-items: center;
+  padding: 0.2rem 0; border: 0; background: transparent;
+  color: var(--muted); cursor: pointer;
+  font: inherit; font-size: 0.82rem; font-weight: 400; line-height: 1;
 }
-.tw-react:hover, .tw-comment-btn:hover { color: var(--fg); border-color: var(--accent); }
-.tw-react.on { color: var(--fg); border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); }
-.tw-glyph { font-size: 0.95rem; line-height: 1; }
-.tw-count { font-variant-numeric: tabular-nums; min-width: 0.7em; text-align: center; }
-.tw-comment-btn { margin-left: auto; }
+.tw-comment-btn:hover, .tw-share-btn:hover { color: var(--accent); }
+.tw-share-btn.copied { color: var(--accent); }
+.tw-reply-label { font-variant-numeric: tabular-nums; }
+
+/* Profile header: larger avatar next to the name + tagline. */
+.profile-head { display: flex; align-items: center; gap: 0.9rem; margin-bottom: 0.2rem; }
+.profile-head-text { min-width: 0; }
+.profile-head .page-title { margin: 0; }
 
 /* Comment region. */
 .tw-comments { margin: 0.7rem 0 0.2rem; padding: 0.7rem 0 0; border-top: 1px solid var(--line); }
@@ -306,8 +330,11 @@ pre.copyable {
   .wall-sub { font-size: 0.88rem; }
 
   /* Touch targets: >= 44px effective for anything tappable. */
-  .tw-react, .tw-comment-btn { padding: 0.5rem 0.7rem; min-height: 44px; }
-  .tw-actions { gap: 0.5rem; flex-wrap: wrap; }
+  .tw-comment-btn, .tw-share-btn { padding: 0.6rem 0; min-height: 44px; }
+  .tw-actions { gap: 1.4rem; }
+  .tweet { gap: 0.6rem; }
+  .tw-avatar { width: 36px; height: 36px; font-size: 0.82rem; }
+  .tw-avatar-lg { width: 48px; height: 48px; font-size: 1.05rem; }
   .gz-copy { min-height: 44px; padding: 0.4rem 0.9rem; }
   .theme-fab { width: 48px; height: 48px; }
   .gz-me .chip-logout,

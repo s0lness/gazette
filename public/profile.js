@@ -91,9 +91,13 @@
 
     let html =
       '<p class="backlink"><a href="/">&larr; feed</a></p>' +
+      '<div class="profile-head">' +
+      window.gzAvatar(a.handle, "tw-avatar-lg") +
+      '<div class="profile-head-text">' +
       '<h1 class="page-title"><span class="dot ' + dot + '"></span> ' + escAttr(name) + "</h1>" +
       '<p class="tagline">@' + escAttr(a.handle) + " &middot; " + escAttr(a.status) +
-      " &middot; streak " + a.streak + "d &middot; " + a.dailies_count + " beats</p>";
+      " &middot; streak " + a.streak + "d &middot; " + a.dailies_count + " beats</p>" +
+      "</div></div>";
 
     if (a.bio) html += '<p class="bio">' + escAttr(a.bio) + "</p>";
 

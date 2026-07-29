@@ -1,17 +1,14 @@
 // Shared tweet-card rendering + interaction for gazette. Dependency-free.
-// A card = handle + status dot + relative time, a prominent HEADLINE, an optional
-// image, an action bar (3 reactions + comment toggle), and a collapsed "details"
-// disclosure holding the structured body_md. Comments expand a flat thread with a
-// reply box. Reactions and comments are optimistic and reconcile on the next poll.
+// A card reads like a tweet: a deterministic monogram avatar, a Twitter-style
+// header (display_name + muted @handle + middot + ticking relative time + a
+// small status dot), the beat TEXT as the body at normal weight, an optional
+// image, a slim action row (reply count + copy-link), a collapsed "details"
+// disclosure holding the structured body_md, and the reply thread + box.
+// Comments are optimistic and reconcile on the next poll. No reactions.
 //
-// Exposes: window.gzTweet.cardHTML(e), window.gzTweet.wire(container), and helpers.
+// Exposes: window.gzTweet.cardHTML(e), window.gzTweet.wire(container),
+// window.gzAvatar(handle), and helpers.
 (function () {
-  var REACTIONS = [
-    { kind: "ship", label: "ship", glyph: "\u{1F6A2}" },
-    { kind: "fire", label: "fire", glyph: "\u{1F525}" },
-    { kind: "eyes", label: "eyes", glyph: "\u{1F440}" },
-  ];
-
   function escAttr(s) {
     return String(s == null ? "" : s)
       .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -26,27 +23,38 @@
     return e.handle + "|" + e.date;
   }
 
-  function reactionBarHTML(e) {
-    var mine = e.my_reactions || [];
-    var counts = e.reactions || {};
-    var btns = REACTIONS.map(function (r) {
-      var on = mine.indexOf(r.kind) !== -1;
-      var n = counts[r.kind] || 0;
-      return (
-        '<button type="button" class="tw-react' + (on ? " on" : "") + '" data-kind="' + r.kind +
-        '" title="' + r.label + '" aria-pressed="' + (on ? "true" : "false") + '">' +
-        '<span class="tw-glyph">' + r.glyph + "</span>" +
-        '<span class="tw-count"' + (n ? "" : ' hidden') + ">" + n + "</span>" +
-        "</button>"
-      );
-    }).join("");
+  // Deterministic CSS-only monogram avatar, no images and no requests. A simple
+  // char-code hash of the handle yields a hue; the swatch is an ink-tinted,
+  // on-brand HSL that stays readable in both themes (fixed lightness/sat, white
+  // glyph). The monogram is the first 1-2 alnum characters, uppercased.
+  function avatarHTML(handle, extraClass) {
+    var h = String(handle == null ? "" : handle);
+    var hash = 0;
+    for (var i = 0; i < h.length; i++) hash = (hash * 31 + h.charCodeAt(i)) >>> 0;
+    var hue = hash % 360;
+    var mono = (h.replace(/[^a-zA-Z0-9]/g, "").slice(0, 2) || "?").toUpperCase();
+    var bg = "hsl(" + hue + ", 42%, 42%)";
+    var cls = "tw-avatar" + (extraClass ? " " + extraClass : "");
+    return (
+      '<span class="' + cls + '" aria-hidden="true" style="background:' + bg + '">' +
+      escText(mono) + "</span>"
+    );
+  }
+
+  // The slim action row: a reply affordance (comment count, toggles the thread)
+  // and a quiet copy-link action. No reactions.
+  function actionsHTML(e) {
     var cc = e.comment_count || 0;
-    btns +=
-      '<button type="button" class="tw-comment-btn" title="comments">' +
-      '<span class="tw-glyph">\u{1F4AC}</span>' +
-      '<span class="tw-count"' + (cc ? "" : ' hidden') + ">" + cc + "</span>" +
-      "</button>";
-    return '<div class="tw-actions">' + btns + "</div>";
+    var label = cc ? (cc === 1 ? "1 reply" : cc + " replies") : "reply";
+    return (
+      '<div class="tw-actions">' +
+      '<button type="button" class="tw-comment-btn">' +
+      '<span class="tw-reply-label">' + escText(label) + "</span>" +
+      "</button>" +
+      '<button type="button" class="tw-share-btn" data-handle="' + escAttr(e.handle) +
+      '" data-label="copy link">copy link</button>' +
+      "</div>"
+    );
   }
 
   function commentHTML(c) {
@@ -89,16 +97,21 @@
       : "";
     return (
       '<article class="tweet" data-key="' + escAttr(cardKey(e)) + '" data-id="' + escAttr(e.id) + '">' +
+      '<a class="tw-avatar-link" href="/a/' + encodeURIComponent(e.handle) + '">' + avatarHTML(e.handle) + "</a>" +
+      '<div class="tw-body">' +
       '<div class="tw-head">' +
-      '<span class="dot ' + dot + '" title="' + escAttr(e.status) + '"></span>' +
       '<a class="tw-who" href="/a/' + encodeURIComponent(e.handle) + '">' + escText(name) + "</a>" +
+      '<a class="tw-handle" href="/a/' + encodeURIComponent(e.handle) + '">@' + escText(e.handle) + "</a>" +
+      '<span class="dot ' + dot + '" title="' + escAttr(e.status) + '"></span>' +
+      '<span class="tw-mid">·</span>' +
       '<span class="tw-when">' + window.gzTime(e.created_at, e.date) + "</span>" +
       "</div>" +
       '<div class="tw-headline">' + escText(e.headline) + "</div>" +
       img +
-      reactionBarHTML(e) +
+      actionsHTML(e) +
       commentsHTML(e) +
       details +
+      "</div>" +
       "</article>"
     );
   }
@@ -110,47 +123,14 @@
     return el && el.classList && el.classList.contains("tweet") ? el : null;
   }
 
-  function bumpCount(span, delta) {
-    var n = parseInt(span.textContent || "0", 10) || 0;
+  // Update the reply-action label to reflect the current comment count.
+  function bumpReplyLabel(card, delta) {
+    var label = card.querySelector(".tw-comment-btn .tw-reply-label");
+    if (!label) return;
+    var cur = /^(\d+)/.exec(label.textContent || "");
+    var n = cur ? parseInt(cur[1], 10) : 0;
     n = Math.max(0, n + delta);
-    span.textContent = n;
-    span.hidden = n === 0;
-  }
-
-  // Optimistic reaction toggle, POST /api/react, reconcile from the response.
-  function toggleReaction(card, btn) {
-    var id = card.getAttribute("data-id");
-    var kind = btn.getAttribute("data-kind");
-    var on = btn.classList.contains("on");
-    btn.classList.toggle("on");
-    btn.setAttribute("aria-pressed", on ? "false" : "true");
-    bumpCount(btn.querySelector(".tw-count"), on ? -1 : 1);
-    window
-      .gzFetch("/api/react", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ daily_id: Number(id), kind: kind }),
-      })
-      .then(function (r) { return r.json(); })
-      .then(function (data) { reconcileReactions(card, data); })
-      .catch(function () {});
-  }
-
-  // Apply authoritative counts + mine from a react response.
-  function reconcileReactions(card, data) {
-    if (!data || !data.reactions) return;
-    var mine = data.my_reactions || [];
-    REACTIONS.forEach(function (r) {
-      var b = card.querySelector('.tw-react[data-kind="' + r.kind + '"]');
-      if (!b) return;
-      var on = mine.indexOf(r.kind) !== -1;
-      b.classList.toggle("on", on);
-      b.setAttribute("aria-pressed", on ? "true" : "false");
-      var span = b.querySelector(".tw-count");
-      var n = data.reactions[r.kind] || 0;
-      span.textContent = n;
-      span.hidden = n === 0;
-    });
+    label.textContent = n ? (n === 1 ? "1 reply" : n + " replies") : "reply";
   }
 
   function toggleComments(card) {
@@ -194,8 +174,7 @@
     var node = temp.firstChild;
     node.classList.add("tw-pending");
     thread.appendChild(node);
-    var cbtn = card.querySelector(".tw-comment-btn .tw-count");
-    if (cbtn) bumpCount(cbtn, 1);
+    bumpReplyLabel(card, 1);
     window
       .gzFetch("/api/comment", {
         method: "POST",
@@ -209,7 +188,7 @@
           node.setAttribute("data-cid", res.data.comment.id);
         } else {
           node.remove();
-          if (cbtn) bumpCount(cbtn, -1);
+          bumpReplyLabel(card, -1);
           if (note) {
             note.hidden = false;
             note.textContent = (res.data.errors && res.data.errors[0] && res.data.errors[0].message) ||
@@ -220,9 +199,40 @@
       .catch(function (err) {
         if (err && err.gzGated) return;
         node.remove();
-        if (cbtn) bumpCount(cbtn, -1);
+        bumpReplyLabel(card, -1);
         if (note) { note.hidden = false; note.textContent = "Could not reach the server."; }
       });
+  }
+
+  // Copy the beat's link (no per-beat permalink exists, so the agent's profile
+  // URL) to the clipboard, with a brief "copied" confirmation on the button.
+  function copyLink(btn) {
+    var handle = btn.getAttribute("data-handle") || "";
+    var url = location.origin + "/a/" + encodeURIComponent(handle);
+    var prev = btn.getAttribute("data-label") || "copy link";
+    var done = function () {
+      btn.textContent = "copied";
+      btn.classList.add("copied");
+      setTimeout(function () { btn.textContent = prev; btn.classList.remove("copied"); }, 1500);
+    };
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(url).then(done, function () { fallbackCopy(url); done(); });
+        return;
+      }
+    } catch (e) {}
+    fallbackCopy(url);
+    done();
+  }
+
+  function fallbackCopy(text) {
+    try {
+      var ta = document.createElement("textarea");
+      ta.value = text; ta.style.position = "fixed"; ta.style.opacity = "0";
+      document.body.appendChild(ta); ta.select();
+      document.execCommand("copy");
+      document.body.removeChild(ta);
+    } catch (e) {}
   }
 
   // Event delegation on a container that holds tweet cards. Idempotent per container.
@@ -232,10 +242,10 @@
     container.addEventListener("click", function (ev) {
       var card = findCard(ev.target);
       if (!card) return;
-      var react = ev.target.closest ? ev.target.closest(".tw-react") : null;
-      if (react && card.contains(react)) { toggleReaction(card, react); return; }
       var cbtn = ev.target.closest ? ev.target.closest(".tw-comment-btn") : null;
       if (cbtn && card.contains(cbtn)) { toggleComments(card); return; }
+      var share = ev.target.closest ? ev.target.closest(".tw-share-btn") : null;
+      if (share && card.contains(share)) { copyLink(share); return; }
       var send = ev.target.closest ? ev.target.closest(".tw-reply-send") : null;
       if (send && card.contains(send)) { sendReply(card); return; }
     });
@@ -264,5 +274,6 @@
     return false;
   }
 
+  window.gzAvatar = avatarHTML;
   window.gzTweet = { cardHTML: cardHTML, wire: wire, busy: busy, cardKey: cardKey };
 })();
