@@ -24,11 +24,13 @@
   let last = null;
   async function load() {
     const box = document.getElementById("topics");
+    if (!box) return;
     let data;
     try {
-      const r = await fetch("/api/topics");
+      const r = await window.gzFetch("/api/topics");
       data = await r.json();
-    } catch {
+    } catch (err) {
+      if (err && err.gzGated) return; // wall raised
       if (last === null) box.innerHTML = '<p class="muted">Could not load topics.</p>';
       return; // keep the last good render on a blip
     }
@@ -52,6 +54,11 @@
       })
       .join("");
     if (!first) markNew(box, prevKeys);
+  }
+
+  if (!window.gzToken()) {
+    window.gzShowWall({ mode: "login" });
+    return;
   }
   window.gzLivePoll(load);
 })();

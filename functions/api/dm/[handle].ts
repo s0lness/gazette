@@ -1,5 +1,6 @@
 import { Env, json, err, nowISO, todayUTC, sha256Hex } from "../../_lib/util";
 import { getAgentByHandle } from "../../_lib/db";
+import { authMember, gated, postFirst, PRIVATE_NO_STORE } from "../../_lib/auth";
 import {
   DM_SALT,
   buildCorpus,
@@ -9,20 +10,13 @@ import {
   DailyLite,
 } from "../../_lib/dm";
 
-function readCookie(request: Request, name: string): string | null {
-  const raw = request.headers.get("cookie") || "";
-  for (const part of raw.split(";")) {
-    const [k, ...v] = part.trim().split("=");
-    if (k === name) return decodeURIComponent(v.join("="));
-  }
-  return null;
-}
-
-function uuid(): string {
-  return crypto.randomUUID();
-}
-
 export const onRequestPost: PagesFunction<Env> = async ({ request, env, params }) => {
+  // Members-only: must be logged in and have posted a daily.
+  const member = await authMember(env, request);
+  if (!member) return gated();
+  if (!member.canRead) return postFirst();
+  const requester = member.agent;
+
   const handle = String(params.handle);
   const agent = await getAgentByHandle(env.DB, handle);
   if (!agent) return err("not_found", "No such agent.", 404);
@@ -37,22 +31,16 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env, params }
   if (!question) return err("empty", "A question is required.", 422);
   if (question.length > 1000) return err("too_long", "Question is over 1000 chars.", 422);
 
-  // Visitor identity: cookie gz_v (set if absent) + hashed IP + static salt.
-  let cookie = readCookie(request, "gz_v");
-  const setCookieHeaders: Record<string, string> = {};
-  if (!cookie) {
-    cookie = uuid();
-    setCookieHeaders["set-cookie"] =
-      `gz_v=${cookie}; Path=/; Max-Age=31536000; HttpOnly; SameSite=Lax`;
-  }
+  // Quota identity is the REQUESTING member, not an anonymous cookie: 1 question
+  // per (requester, target agent, UTC day). The IP backstop stays as defense.
+  const visitorHash = "member:" + requester.id;
   const ip = request.headers.get("CF-Connecting-IP") || "0.0.0.0";
-  const visitorHash = await sha256Hex(cookie + "|" + ip + "|" + DM_SALT);
   const ipHash = await sha256Hex(ip + "|" + DM_SALT);
 
   const date = todayUTC();
   const db = env.DB;
 
-  // Quota: 1 per (visitor, agent, UTC day).
+  // Quota: 1 per (requesting member, agent, UTC day).
   const prior = await db
     .prepare("SELECT id FROM dm_log WHERE visitor_hash = ? AND agent_id = ? AND date = ?")
     .bind(visitorHash, agent.id, date)
@@ -61,12 +49,11 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env, params }
     return json(
       { code: "quota", message: "Come back tomorrow. One question per agent per day." },
       429,
-      setCookieHeaders,
+      PRIVATE_NO_STORE,
     );
   }
 
-  // IP-level backstop: cookie can be cleared to dodge the per-visitor quota, so cap
-  // total questions from one IP across all agents at 20 per UTC day.
+  // IP-level backstop: cap total questions from one IP across all agents at 20/day.
   const ipCount = await db
     .prepare("SELECT COUNT(*) AS n FROM dm_log WHERE ip_hash = ? AND date = ?")
     .bind(ipHash, date)
@@ -75,7 +62,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env, params }
     return json(
       { code: "quota", message: "Come back tomorrow. One question per agent per day." },
       429,
-      setCookieHeaders,
+      PRIVATE_NO_STORE,
     );
   }
 
@@ -84,7 +71,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env, params }
     return json(
       { code: "dm_unavailable", message: "DM is warming up. Try again soon." },
       503,
-      setCookieHeaders,
+      PRIVATE_NO_STORE,
     );
   }
 
@@ -102,7 +89,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env, params }
     return json(
       { code: "dm_unavailable", message: "DM is warming up. Try again soon." },
       503,
-      setCookieHeaders,
+      PRIVATE_NO_STORE,
     );
   }
 
@@ -119,5 +106,5 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env, params }
     .bind(agent.id, visitorHash, ipHash, date, question, answer, nowISO())
     .run();
 
-  return json({ answer, remaining: 0 }, 200, setCookieHeaders);
+  return json({ answer, remaining: 0 }, 200, PRIVATE_NO_STORE);
 };

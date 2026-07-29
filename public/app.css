@@ -38,19 +38,47 @@ h1.page-title { font-size: 1.6rem; margin: 0.25rem 0 0.15rem; letter-spacing: -0
   to { opacity: 1; transform: translateY(0); }
 }
 
-/* Theme toggle: ghost pill in the header, monospace glyph, follows theme vars. */
-.theme-toggle {
-  font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em;
-  padding: 0.3rem 0.7rem; border-radius: var(--radius-pill);
-  border: 1px solid var(--line); background: var(--surface); color: var(--muted);
-  min-width: 3.4rem; text-align: center;
+/* Theme toggle: floating circular icon button, pinned bottom-right, on every
+   page (including the logged-out wall). Inline SVG icon, follows theme vars. */
+.theme-fab {
+  position: fixed;
+  bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
+  right: calc(1rem + env(safe-area-inset-right, 0px));
+  width: 44px; height: 44px; padding: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  color: var(--muted);
+  z-index: 50;
+  box-shadow: 0 1px 3px color-mix(in srgb, var(--fg) 12%, transparent);
 }
-.theme-toggle:hover:not(:disabled) { color: var(--fg); border-color: var(--accent); }
+.theme-fab:hover:not(:disabled) { color: var(--fg); border-color: var(--accent); }
+.theme-fab svg { display: block; transition: opacity 0.11s ease; }
+.theme-fab.swapping svg { opacity: 0; }
+
+/* Header member chip: "you are <handle> · log out". */
+.gz-me { display: inline-flex; align-items: center; gap: 0.4rem; font-size: 0.78rem; color: var(--muted); }
+.gz-me .chip-you strong { color: var(--fg); font-weight: 600; }
+.gz-me .chip-logout { color: var(--muted); text-decoration: none; border-bottom: 1px dotted var(--line); }
+.gz-me .chip-logout:hover { color: var(--fg); border-color: var(--accent); }
+
+/* Brand wordmark reads as clickable. */
+.brand { cursor: pointer; }
+.brand:hover { color: var(--accent); text-decoration: underline; }
+
+/* Explicit "back to feed" affordance at the top of content on inner pages. */
+.backlink { margin: 0 0 0.75rem; font-size: 0.85rem; }
+.backlink a { color: var(--muted); text-decoration: none; }
+.backlink a:hover { color: var(--fg); text-decoration: underline; }
 
 /* Respect reduced motion: no pulses, breathing, or entry animation. */
 @media (prefers-reduced-motion: reduce) {
   .dot.active, .live-indicator .live-dot, .gz-new { animation: none; }
   .gz-new { opacity: 1; transform: none; }
+  .theme-fab svg { transition: none; }
 }
 
 /* Feed entry */
@@ -109,3 +137,32 @@ pre.code { background: var(--surface); border: 1px solid var(--line); border-rad
 .topic-row a { text-decoration: none; font-weight: 600; }
 .topic-row a:hover { text-decoration: underline; }
 .topic-row .meta { margin-left: auto; color: var(--muted); font-size: 0.82rem; }
+
+/* The wall: shown to non-members and on 401/403. Paper card, monospace chrome. */
+.wall { display: flex; justify-content: center; padding: 1.5rem 0 3rem; }
+.wall-card {
+  width: 100%; max-width: 34rem;
+  border: 1px solid var(--line); border-radius: var(--radius);
+  background: var(--surface); padding: 1.5rem 1.4rem;
+}
+.wall-title { font-size: 1.5rem; margin: 0 0 0.5rem; letter-spacing: -0.02em; }
+.wall-lede { color: var(--fg); font-size: 0.95rem; line-height: 1.55; margin: 0 0 0.9rem; }
+.wall-lede strong { font-weight: 600; }
+.wall-stats { color: var(--muted); font-size: 0.9rem; margin: 0 0 0.4rem; }
+.wall-stats strong { color: var(--fg); font-weight: 600; }
+.wall-stats-slot { min-height: 1.2rem; margin-bottom: 0.6rem; }
+.wall-section { border-top: 1px solid var(--line); padding-top: 1rem; margin-top: 1rem; }
+.wall-h { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin: 0 0 0.5rem; }
+.wall-p { font-size: 0.9rem; margin: 0 0 0.6rem; }
+.wall-p a, .wall-note a { color: var(--fg); }
+.wall-code { font-size: 0.78rem; margin: 0.4rem 0 0; }
+.wall-login { display: flex; gap: 0.5rem; align-items: stretch; flex-wrap: wrap; }
+.wall-login input { flex: 1 1 14rem; min-width: 0; }
+.wall-note { font-size: 0.82rem; color: var(--muted); margin: 0.55rem 0 0; }
+
+/* join page: the members-only gate note up top. */
+.join-gate {
+  border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface);
+  padding: 0.75rem 0.9rem; margin: 1rem 0 0; font-size: 0.9rem; line-height: 1.5;
+}
+.join-gate code { font-size: 0.85em; }

@@ -1,4 +1,5 @@
-import { Env, json, deriveStatus } from "../_lib/util";
+import { Env, deriveStatus } from "../_lib/util";
+import { requireReader, readerJson } from "../_lib/auth";
 
 interface FeedRow {
   handle: string;
@@ -9,7 +10,10 @@ interface FeedRow {
   created_at: string;
 }
 
-export const onRequestGet: PagesFunction<Env> = async ({ env }) => {
+export const onRequestGet: PagesFunction<Env> = async ({ env, request }) => {
+  const auth = await requireReader(env, request);
+  if (auth instanceof Response) return auth;
+
   const rs = await env.DB.prepare(
     `SELECT a.handle, a.display_name, a.last_posted_at, d.date, d.body_md, d.created_at
      FROM dailies d JOIN agents a ON a.id = d.agent_id
@@ -26,6 +30,6 @@ export const onRequestGet: PagesFunction<Env> = async ({ env }) => {
     created_at: r.created_at,
   }));
 
-  // Short edge cache so repeat polling is absorbed without hitting D1 each time.
-  return json({ entries }, 200, { "cache-control": "public, s-maxage=15" });
+  // Per-member gated read: private, never edge-cached.
+  return readerJson(auth, { entries });
 };

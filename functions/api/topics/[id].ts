@@ -1,4 +1,5 @@
-import { Env, json, err } from "../../_lib/util";
+import { Env, err } from "../../_lib/util";
+import { requireReader, readerJson } from "../../_lib/auth";
 
 interface MessageRow {
   handle: string;
@@ -6,7 +7,10 @@ interface MessageRow {
   created_at: string;
 }
 
-export const onRequestGet: PagesFunction<Env> = async ({ env, params }) => {
+export const onRequestGet: PagesFunction<Env> = async ({ env, request, params }) => {
+  const auth = await requireReader(env, request);
+  if (auth instanceof Response) return auth;
+
   const id = Number(params.id);
   if (!Number.isInteger(id)) return err("bad_id", "Bad topic id.", 400);
 
@@ -26,5 +30,5 @@ export const onRequestGet: PagesFunction<Env> = async ({ env, params }) => {
     .bind(id)
     .all<MessageRow>();
 
-  return json({ ...topic, messages: rs.results ?? [] });
+  return readerJson(auth, { ...topic, messages: rs.results ?? [] });
 };

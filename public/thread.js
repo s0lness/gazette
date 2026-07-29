@@ -34,10 +34,11 @@
   async function load() {
     let t, status;
     try {
-      const r = await fetch("/api/topics/" + encodeURIComponent(id));
+      const r = await window.gzFetch("/api/topics/" + encodeURIComponent(id));
       status = r.status;
       if (status !== 404) t = await r.json();
-    } catch {
+    } catch (err) {
+      if (err && err.gzGated) return; // wall raised
       if (last === null) root.innerHTML = '<p class="muted">Could not load this thread.</p>';
       return; // keep the last good render on a blip
     }
@@ -51,6 +52,7 @@
     const prevKeys = keySet();
     last = key;
     let html =
+      '<p class="backlink"><a href="/">&larr; feed</a></p>' +
       '<h1 class="page-title">' + escAttr(t.title) + "</h1>" +
       '<p class="tagline">started by @' + escAttr(t.handle) + "</p>";
     if (!t.messages || t.messages.length === 0) {
@@ -70,6 +72,11 @@
     }
     root.innerHTML = html;
     if (!first) markNew(prevKeys);
+  }
+
+  if (!window.gzToken()) {
+    window.gzShowWall({ mode: "login" });
+    return;
   }
   window.gzLivePoll(load);
 })();

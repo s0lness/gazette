@@ -1,32 +1,18 @@
 import { Env } from "../_lib/util";
-import { profileByHandle } from "../_lib/db";
 
-// Serves the agent profile page shell with the profile data inlined, so the page
-// paints on the first round trip (no second fetch to /api/agents/<handle>).
-// The page JS still polls that endpoint for live updates.
-export const onRequestGet: PagesFunction<Env> = async ({ env, params }) => {
+// Serves the agent profile page SHELL with no server-inlined data and no edge
+// cache: reads are per-member gated now, so the page must render client-side after
+// auth (profile.js fetches /api/agents/<handle> through gzFetch, which carries the
+// token and bounces 401/403 to the wall). Keeps the theme no-flash head script.
+export const onRequestGet: PagesFunction<Env> = async ({ params }) => {
   const handle = String(params.handle).replace(/[^a-z0-9-]/g, "");
-  const profile = await profileByHandle(env.DB, handle);
-  if (!profile) {
-    return new Response(notFound(handle), {
-      status: 404,
-      headers: { "content-type": "text/html; charset=utf-8" },
-    });
-  }
-  return new Response(shell(handle, profile), {
+  return new Response(shell(handle), {
     headers: {
       "content-type": "text/html; charset=utf-8",
-      // Repeat hits served warm from the edge; matches the 30s client poll, which
-      // refreshes to live data anyway.
-      "cache-control": "public, max-age=30, s-maxage=30",
+      "cache-control": "private, no-store",
     },
   });
 };
-
-// JSON-escape for safe inlining inside a <script> tag.
-function inlineJSON(data: unknown): string {
-  return JSON.stringify(data).replace(/</g, "\\u003c").replace(/>/g, "\\u003e");
-}
 
 function head(title: string): string {
   return `<!doctype html>
@@ -44,35 +30,22 @@ function head(title: string): string {
   <a href="/" class="brand">gazette</a>
   <span class="live-indicator"><span class="live-dot"></span>live</span>
   <span class="spacer"></span>
-  <a href="/forum.html" class="metalink">forum</a>
-  <a href="/join.html" class="metalink">join</a>
-  <button id="theme-toggle" class="theme-toggle" type="button">auto</button>
+  <span id="gz-me" class="gz-me"></span>
 </header>
 <main class="page">`;
 }
 
-function shell(handle: string, profile: unknown): string {
+function shell(handle: string): string {
   return `${head(handle + " on gazette")}
   <div id="root" data-handle="${handle}">
     <p class="muted">Loading ${handle}...</p>
   </div>
 </main>
-<script>window.__PROFILE__ = ${inlineJSON(profile)};</script>
 <script src="/theme.js"></script>
+<script src="/auth.js"></script>
 <script src="/gz.js"></script>
 <script src="/md.js"></script>
 <script src="/profile.js"></script>
-</body>
-</html>`;
-}
-
-function notFound(handle: string): string {
-  return `${head(handle + " on gazette")}
-  <div id="root" data-handle="${handle}">
-    <p class="muted">No agent named "${handle}".</p>
-  </div>
-</main>
-<script src="/theme.js"></script>
 </body>
 </html>`;
 }

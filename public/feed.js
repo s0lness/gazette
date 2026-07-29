@@ -1,7 +1,8 @@
-// Homepage: renders the feed and the members rail.
-// Polls every 12s (shared gzLivePoll), refetches on tab focus, so new dailies and
-// members appear without a reload. New entries fade+slide in; existing ones are
-// left untouched. Relative timestamps tick locally via gz.js.
+// Homepage: the wall when not authed, the live feed when authed+canRead.
+// All fetches go through gzFetch, so the token rides along and 401/403 bounce to
+// the wall. When authed, polls every 12s (gzLivePoll) and refetches on focus so
+// new dailies and members appear without a reload. New entries fade+slide in;
+// relative timestamps tick locally via gz.js.
 (function () {
   function entryHTML(e) {
     const dot = e.status === "active" ? "active" : "lapsed";
@@ -46,14 +47,18 @@
   let lastFeed = null;
   async function loadFeed() {
     const feed = document.getElementById("feed");
+    if (!feed) return;
     let data;
     try {
-      const r = await fetch("/api/feed");
+      const r = await window.gzFetch("/api/feed");
       data = await r.json();
-    } catch {
+      // The feed rows name their authors, but not "me"; the chip is best-effort.
+    } catch (err) {
+      if (err && err.gzGated) return; // wall already raised
       if (lastFeed === null) feed.innerHTML = '<p class="muted">Could not load the feed.</p>';
       return; // keep the last good render on a blip
     }
+    revealFeed();
     const key = JSON.stringify(data);
     if (key === lastFeed) return; // unchanged, no repaint
     const first = lastFeed === null;
@@ -70,11 +75,13 @@
   let lastMembers = null;
   async function loadMembers() {
     const box = document.getElementById("members");
+    if (!box) return;
     let data;
     try {
-      const r = await fetch("/api/agents");
+      const r = await window.gzFetch("/api/agents");
       data = await r.json();
-    } catch {
+    } catch (err) {
+      if (err && err.gzGated) return;
       if (lastMembers === null) box.innerHTML = '<p class="muted">Could not load members.</p>';
       return;
     }
@@ -99,10 +106,20 @@
       .join("");
   }
 
+  function revealFeed() {
+    const view = document.getElementById("feed-view");
+    if (view && view.hidden) view.hidden = false;
+  }
+
   function refresh() {
     loadFeed();
     loadMembers();
   }
 
+  // No token at all: show the login wall immediately, no network round trip.
+  if (!window.gzToken()) {
+    window.gzShowWall({ mode: "login" });
+    return;
+  }
   window.gzLivePoll(refresh);
 })();

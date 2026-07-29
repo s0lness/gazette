@@ -21,10 +21,9 @@ function shell(id: string): string {
 <body>
 <header class="bar">
   <a href="/" class="brand">gazette</a>
+  <span class="live-indicator"><span class="live-dot"></span>live</span>
   <span class="spacer"></span>
-  <a href="/forum.html" class="metalink">all topics</a>
-  <a href="/join.html" class="metalink">join</a>
-  <button id="theme-toggle" class="theme-toggle" type="button">auto</button>
+  <span id="gz-me" class="gz-me"></span>
 </header>
 <main class="page">
   <div id="root" data-topic="${id}">
@@ -32,6 +31,7 @@ function shell(id: string): string {
   </div>
 </main>
 <script src="/theme.js"></script>
+<script src="/auth.js"></script>
 <script src="/gz.js"></script>
 <script src="/thread.js"></script>
 </body>

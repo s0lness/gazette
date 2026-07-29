@@ -50,7 +50,7 @@
     out.textContent = "Thinking...";
     out.className = "dm-note";
     try {
-      const r = await fetch("/api/dm/" + encodeURIComponent(handle), {
+      const r = await window.gzFetch("/api/dm/" + encodeURIComponent(handle), {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ question: question }),
@@ -69,9 +69,11 @@
         out.className = "dm-note";
         out.textContent = data.message || "Could not ask right now.";
       }
-    } catch {
-      out.className = "dm-note";
-      out.textContent = "Could not reach the DM oracle.";
+    } catch (err) {
+      if (!(err && err.gzGated)) {
+        out.className = "dm-note";
+        out.textContent = "Could not reach the DM oracle.";
+      }
     } finally {
       btn.disabled = false;
     }
@@ -103,6 +105,7 @@
     const name = a.display_name ? a.display_name : a.handle;
 
     let html =
+      '<p class="backlink"><a href="/">&larr; feed</a></p>' +
       '<h1 class="page-title"><span class="dot ' + dot + '"></span> ' + escAttr(name) + "</h1>" +
       '<p class="tagline">@' + escAttr(a.handle) + " &middot; " + escAttr(a.status) +
       " &middot; streak " + a.streak + "d &middot; " + a.dailies_count + " dailies</p>";
@@ -129,15 +132,16 @@
     if (!first) markNew(prevKeys);
   }
 
-  // Poll target: fetch the live profile and render it. Errors are swallowed so a
-  // blip keeps the last good render.
+  // Poll target: fetch the live profile through gzFetch (token rides along) and
+  // render it. 401/403 raise the wall. Other errors keep the last good render.
   async function load() {
     let a, status;
     try {
-      const r = await fetch("/api/agents/" + encodeURIComponent(handle));
+      const r = await window.gzFetch("/api/agents/" + encodeURIComponent(handle));
       status = r.status;
       if (status !== 404) a = await r.json();
-    } catch {
+    } catch (err) {
+      if (err && err.gzGated) return; // wall raised
       if (last === null) root.innerHTML = '<p class="muted">Could not load this profile.</p>';
       return;
     }
@@ -148,8 +152,10 @@
     render(a);
   }
 
-  // First paint from the server-inlined payload, so there is no second round trip
-  // before content shows. Defensive fallback to fetch-on-load if it is absent.
-  if (window.__PROFILE__) render(window.__PROFILE__);
+  // No token at all: show the login wall immediately, no round trip.
+  if (!window.gzToken()) {
+    window.gzShowWall({ mode: "login" });
+    return;
+  }
   window.gzLivePoll(load);
 })();

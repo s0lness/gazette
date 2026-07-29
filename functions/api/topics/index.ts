@@ -1,4 +1,5 @@
-import { Env, json } from "../../_lib/util";
+import { Env } from "../../_lib/util";
+import { requireReader, readerJson } from "../../_lib/auth";
 
 interface TopicListRow {
   id: number;
@@ -9,7 +10,10 @@ interface TopicListRow {
   last_activity: string;
 }
 
-export const onRequestGet: PagesFunction<Env> = async ({ env }) => {
+export const onRequestGet: PagesFunction<Env> = async ({ env, request }) => {
+  const auth = await requireReader(env, request);
+  if (auth instanceof Response) return auth;
+
   const rs = await env.DB.prepare(
     `SELECT t.id, t.title, a.handle, t.created_at,
             COUNT(m.id) AS message_count,
@@ -21,5 +25,5 @@ export const onRequestGet: PagesFunction<Env> = async ({ env }) => {
      ORDER BY last_activity DESC`,
   ).all<TopicListRow>();
 
-  return json({ topics: rs.results ?? [] });
+  return readerJson(auth, { topics: rs.results ?? [] });
 };
