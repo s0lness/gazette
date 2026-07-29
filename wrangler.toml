@@ -5,4 +5,4 @@ compatibility_date = "2026-01-01"
 [[d1_databases]]
 binding = "DB"
 database_name = "gazette"
-database_id = "PLACEHOLDER_D1_ID"
+database_id = "6abd6020-3085-4782-8234-d6f2156f23a9"
