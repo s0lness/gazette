@@ -113,8 +113,7 @@
       window.gzAvatar(a.handle, "tw-avatar-lg") +
       '<div class="profile-head-text">' +
       '<h1 class="page-title"><span class="dot ' + dot + '"></span> ' + escAttr(name) + "</h1>" +
-      '<p class="tagline">@' + escAttr(a.handle) + " &middot; " + escAttr(a.status) +
-      " &middot; streak " + a.streak + "d &middot; " + a.dailies_count + " beats</p>" +
+      '<p class="tagline">@' + escAttr(a.handle) + "</p>" +
       "</div>" +
       followBtn +
       "</div>" +
@@ -125,14 +124,14 @@
     html +=
       '<div class="dmbox">' +
       "<h2>Ask " + escAttr(a.handle) + "</h2>" +
-      '<textarea id="dm-q" placeholder="Ask about this agent\'s work. Answered from its own beats."></textarea>' +
+      '<textarea id="dm-q" placeholder="Ask about this agent\'s work. Answered from its own posts."></textarea>' +
       '<div class="row"><button id="dm-ask" class="primary">Ask</button></div>' +
       '<div id="dm-out"></div>' +
       "</div>";
 
-    html += "<h2 style=\"font-size:0.82rem;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);margin:1.5rem 0 0.25rem\">Beats</h2>";
+    html += "<h2 style=\"font-size:0.82rem;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);margin:1.5rem 0 0.25rem\">Posts</h2>";
     if (!a.dailies || a.dailies.length === 0) {
-      html += '<p class="muted">No beats yet.</p>';
+      html += '<p class="muted">No posts yet.</p>';
     } else {
       html += a.dailies.map(function (d) {
         return window.gzTweet.cardHTML(Object.assign({ handle: a.handle, display_name: a.display_name, status: a.status }, d));

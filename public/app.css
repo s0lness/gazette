@@ -181,6 +181,109 @@ pre.code { background: var(--surface); border: 1px solid var(--line); border-rad
 }
 .join-gate code { font-size: 0.85em; }
 
+/* ---- Left sidebar (logged-in chrome) ------------------------------------- */
+/* Twitter's STRUCTURE in sylve-studio's warm paper / ink / mono look. A sticky
+   left rail beside a comfortable center reading column. Injected by nav.js only
+   when authed; the wall (logged out) never gets it. Mobile has no rail: a small
+   avatar button in the top bar opens a popover instead. */
+
+/* Two-column shell: sidebar | center. Center is capped for readability so the
+   feed never stretches full-bleed. Centered as a whole under the top bar. */
+.gz-shell {
+  display: grid;
+  grid-template-columns: 15rem minmax(0, 34rem);
+  gap: 2rem;
+  justify-content: center;
+  align-items: start;
+  max-width: 62rem;
+  margin: 0 auto;
+}
+/* The former <main.page> is now the center column: drop its own centering/cap. */
+.gz-shell > .gz-center.page { margin: 0; max-width: none; width: 100%; }
+
+.gz-side-col { position: relative; }
+.gz-side {
+  position: sticky; top: 0;
+  display: flex; flex-direction: column;
+  min-height: calc(100vh - 0px);
+  padding: 1.25rem 0.5rem 1.25rem 0;
+  gap: 0.5rem;
+}
+.gz-side-brand {
+  font-weight: 700; text-decoration: none; font-size: 1.25rem; letter-spacing: -0.02em;
+  color: var(--fg); padding: 0.35rem 0.75rem; margin-bottom: 0.25rem;
+}
+.gz-side-brand:hover { color: var(--accent); }
+.gz-side-nav { display: flex; flex-direction: column; gap: 0.15rem; }
+.gz-side-link {
+  display: block; text-decoration: none; color: var(--fg);
+  padding: 0.6rem 0.75rem; border-radius: var(--radius-pill);
+  font-size: 0.95rem; line-height: 1;
+}
+.gz-side-link:hover { background: var(--hover); }
+.gz-side-link.on { color: var(--accent); font-weight: 700; }
+
+/* Account pinned at the bottom of the rail: monogram + @handle + log out. */
+.gz-side-foot { margin-top: auto; padding-top: 0.75rem; }
+.gz-account {
+  display: flex; align-items: center; gap: 0.55rem;
+  padding: 0.5rem 0.6rem; border-radius: var(--radius);
+}
+.gz-account:hover { background: var(--hover); }
+.gz-account-id {
+  display: flex; align-items: center; gap: 0.55rem;
+  text-decoration: none; color: var(--fg); min-width: 0; flex: 1 1 auto;
+}
+.gz-account-handle {
+  color: var(--muted); font-size: 0.82rem;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.gz-account-id:hover .gz-account-handle { color: var(--fg); }
+.gz-account-logout {
+  flex: 0 0 auto; color: var(--muted); text-decoration: none; font-size: 0.72rem;
+  border-bottom: 1px dotted var(--line);
+}
+.gz-account-logout:hover { color: var(--fg); border-color: var(--accent); }
+
+/* Mobile account button + popover. Hidden on desktop (the rail carries identity). */
+.gz-mob-acct { display: none; position: relative; }
+.gz-mob-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  padding: 0; border: 0; background: transparent; border-radius: 50%;
+}
+.gz-mob-menu {
+  position: absolute; top: calc(100% + 0.4rem); left: 0; z-index: 20;
+  min-width: 10rem; padding: 0.35rem;
+  border: 1px solid var(--line); border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: 0 4px 16px color-mix(in srgb, var(--fg) 14%, transparent);
+  display: flex; flex-direction: column; gap: 0.1rem;
+}
+.gz-mob-who {
+  color: var(--muted); font-size: 0.75rem; padding: 0.4rem 0.6rem 0.3rem;
+  border-bottom: 1px solid var(--line); margin-bottom: 0.2rem;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.gz-mob-item {
+  display: block; text-decoration: none; color: var(--fg);
+  padding: 0.55rem 0.6rem; border-radius: var(--radius); font-size: 0.9rem;
+}
+.gz-mob-item:hover { background: var(--hover); }
+
+/* Desktop: with the rail mounted, the top bar's only job was identity, now moved
+   to the rail. Drop the empty bar so the rail owns the top-left. */
+@media (min-width: 768px) {
+  body[data-gz-nav="1"] header.bar { display: none; }
+}
+
+/* Below the sidebar breakpoint: no rail, single column, mobile account button. */
+@media (max-width: 767px) {
+  .gz-shell { display: block; max-width: none; margin: 0; }
+  .gz-side-col { display: none; }
+  .gz-shell > .gz-center.page { max-width: 62rem; margin: 0 auto; }
+  body[data-gz-nav="1"] .gz-mob-acct { display: inline-flex; }
+}
+
 /* ---- Tweet card ---------------------------------------------------------- */
 /* Segmented feed scope tabs (All / Following). Two quiet pills, the active one
    filled with ink. sylve-studio: mono chrome, no Twitter blue. */
@@ -347,11 +450,13 @@ pre.copyable {
   .bar { padding: 0.6rem 1rem; }
 
   /* Subtract redundant top-bar chrome: the wall card and each page carry their
-     own title/live chip. Keep the member chip so log out stays reachable; if it
-     is empty (logged-out wall) collapse the whole bar. */
+     own title/live chip. The mobile account button (nav.js) carries identity +
+     log out; if the bar has no account button (logged-out wall) collapse it. */
   .bar .brand,
   .bar .live-indicator { display: none; }
-  .bar:has(#gz-me:empty) { display: none; }
+  .bar:not(:has(.gz-mob-acct)) { display: none; }
+  /* When the account button is present, left-align it in the bar. */
+  .bar .spacer { display: none; }
 
   /* Single column: the members rail duplicates handles already in the feed, so
      drop it on mobile rather than stack it (subtract). */

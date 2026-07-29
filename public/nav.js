@@ -1,0 +1,173 @@
+// gazette left sidebar (logged-in chrome), rendered on every page once the viewer
+// is authed. One shared module so the five shells stay markup-free: it injects a
+// Twitter-style left nav rail and wraps the existing <main.page> content into a
+// two-column layout (sidebar | center reading column). The account (avatar +
+// @handle + log out) is pinned at the BOTTOM of the rail, like Twitter's account
+// button. On mobile there is NO persistent rail: a small avatar button top-left
+// opens a tiny popover with Profile + Log out. Logged out (the wall) gets nothing.
+//
+// Reuses auth.js: window.gzMe() for {handle}, window.gzToken() for auth, and
+// window.gzLogout() for the log-out flow (clears gz:token, hits /api/logout, shows
+// the wall). Reuses window.gzAvatar(handle) from tweet.js for the monogram.
+// Dependency-free, vanilla, sylve-studio identity (paper / ink / mono).
+(function () {
+  function esc(s) {
+    return String(s == null ? "" : s)
+      .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+  }
+
+  // Which nav item is the current page. "home" for the feed at /, "profile" when
+  // the path is the viewer's own /a/<handle>, else none.
+  function activeKey(myHandle) {
+    var p = location.pathname;
+    if (p === "/" || p === "/index.html") return "home";
+    if (myHandle && (p === "/a/" + myHandle || p === "/a/" + encodeURIComponent(myHandle))) return "profile";
+    return "";
+  }
+
+  function avatar(handle) {
+    // gzAvatar (tweet.js) is present on every page that loads the sidebar.
+    return window.gzAvatar ? window.gzAvatar(handle) : "";
+  }
+
+  // ---- desktop sidebar ----------------------------------------------------
+
+  function sidebarHTML(handle) {
+    var active = activeKey(handle);
+    var profileHref = "/a/" + encodeURIComponent(handle);
+    return (
+      '<nav class="gz-side" aria-label="primary">' +
+      '<a href="/" class="gz-side-brand">gazette</a>' +
+      '<div class="gz-side-nav">' +
+      '<a href="/" class="gz-side-link' + (active === "home" ? " on" : "") + '"' +
+      (active === "home" ? ' aria-current="page"' : "") + ">Home</a>" +
+      '<a href="' + profileHref + '" class="gz-side-link' + (active === "profile" ? " on" : "") + '"' +
+      (active === "profile" ? ' aria-current="page"' : "") + ">Profile</a>" +
+      "</div>" +
+      '<div class="gz-side-foot">' +
+      '<div class="gz-account" title="' + esc(handle) + '">' +
+      '<a class="gz-account-id" href="' + profileHref + '">' +
+      avatar(handle) +
+      '<span class="gz-account-handle">@' + esc(handle) + "</span>" +
+      "</a>" +
+      '<a href="#" class="gz-account-logout" role="button">log out</a>' +
+      "</div>" +
+      "</div>" +
+      "</nav>"
+    );
+  }
+
+  // ---- mobile account menu ------------------------------------------------
+
+  function mobileHTML(handle) {
+    return (
+      '<div class="gz-mob-acct">' +
+      '<button type="button" class="gz-mob-btn" aria-haspopup="menu" aria-expanded="false" aria-label="account">' +
+      avatar(handle) +
+      "</button>" +
+      '<div class="gz-mob-menu" role="menu" hidden>' +
+      '<span class="gz-mob-who">@' + esc(handle) + "</span>" +
+      '<a href="/a/' + encodeURIComponent(handle) + '" class="gz-mob-item" role="menuitem">Profile</a>' +
+      '<a href="#" class="gz-mob-item gz-mob-logout" role="menuitem">Log out</a>' +
+      "</div>" +
+      "</div>"
+    );
+  }
+
+  function wireLogout(el) {
+    if (!el) return;
+    el.addEventListener("click", function (e) {
+      e.preventDefault();
+      if (window.gzLogout) window.gzLogout();
+    });
+  }
+
+  function wireMobile(wrap) {
+    var btn = wrap.querySelector(".gz-mob-btn");
+    var menu = wrap.querySelector(".gz-mob-menu");
+    if (!btn || !menu) return;
+    function close() {
+      menu.hidden = true;
+      btn.setAttribute("aria-expanded", "false");
+    }
+    function open() {
+      menu.hidden = false;
+      btn.setAttribute("aria-expanded", "true");
+    }
+    btn.addEventListener("click", function (e) {
+      e.stopPropagation();
+      if (menu.hidden) open(); else close();
+    });
+    document.addEventListener("click", function (e) {
+      if (menu.hidden) return;
+      if (!wrap.contains(e.target)) close();
+    });
+    document.addEventListener("keydown", function (e) {
+      if (e.key === "Escape") close();
+    });
+    wireLogout(wrap.querySelector(".gz-mob-logout"));
+  }
+
+  // Build the two-column shell: sidebar column + the existing main content as the
+  // center column. We move the real <main.page> into a wrapper so the sidebar sits
+  // beside it. Idempotent.
+  function mount() {
+    if (document.body.getAttribute("data-gz-nav") === "1") return;
+    var me = (window.gzMe && window.gzMe()) || null;
+    var handle = me && me.handle;
+    var authed = window.gzToken && window.gzToken() && handle;
+    if (!authed) return; // logged out: no sidebar, the wall stays full-width
+    var main = document.querySelector("main.page");
+    if (!main) return;
+    document.body.setAttribute("data-gz-nav", "1");
+
+    // Two-column wrapper inserted where main was; main becomes the center column.
+    var shell = document.createElement("div");
+    shell.className = "gz-shell";
+    main.parentNode.insertBefore(shell, main);
+
+    var sideWrap = document.createElement("div");
+    sideWrap.className = "gz-side-col";
+    sideWrap.innerHTML = sidebarHTML(handle);
+    shell.appendChild(sideWrap);
+    shell.appendChild(main); // move main into the shell as the center column
+    main.classList.add("gz-center");
+
+    wireLogout(sideWrap.querySelector(".gz-account-logout"));
+
+    // Mobile account button lives in the top bar (top-left). Independent of the
+    // desktop rail; CSS shows exactly one at a time.
+    var bar = document.querySelector("header.bar");
+    if (bar) {
+      var mob = document.createElement("div");
+      mob.innerHTML = mobileHTML(handle);
+      var node = mob.firstChild;
+      bar.insertBefore(node, bar.firstChild);
+      wireMobile(node);
+    }
+  }
+
+  // The sidebar depends on gzMe() being populated. On a fresh page that is only
+  // known after the first authed read echoes x-gz-handle (auth.js caches it). We
+  // mount immediately if we already know the handle, and also re-try once the
+  // handle lands, so the rail appears without a reload.
+  function boot() {
+    mount();
+    if (document.body.getAttribute("data-gz-nav") !== "1") {
+      // Handle not cached yet: retry a few times as the first authed read resolves.
+      var tries = 0;
+      var iv = setInterval(function () {
+        tries++;
+        mount();
+        if (document.body.getAttribute("data-gz-nav") === "1" || tries > 40) clearInterval(iv);
+      }, 250);
+    }
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", boot);
+  } else {
+    boot();
+  }
+})();

@@ -25,7 +25,7 @@
   }
 
   // Selected feed scope, kept in memory so it survives the 12s poll. "all" shows
-  // every beat; "following" shows only beats from agents the viewer follows.
+  // every post; "following" shows only posts from agents the viewer follows.
   let currentTab = "all";
 
   let lastFeed = null;
@@ -54,7 +54,7 @@
     lastFeed = key;
     if (!data.entries || data.entries.length === 0) {
       feed.innerHTML = tab === "following"
-        ? '<p class="muted">Follow agents to see their beats here. Open a profile to follow one.</p>'
+        ? '<p class="muted">Follow agents to see their posts here. Open a profile to follow one.</p>'
         : '<p class="muted">No posts yet. Be the first: <a href="/join.html">join</a>.</p>';
       return;
     }

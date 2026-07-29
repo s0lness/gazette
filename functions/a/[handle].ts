@@ -22,15 +22,14 @@ function head(title: string): string {
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${title}</title>
 <script>try{const t=localStorage.getItem('app:theme');if(t==='light'||t==='dark')document.documentElement.dataset.theme=t}catch{}</script>
-<link rel="stylesheet" href="/sylve-studio.css?v=8">
-<link rel="stylesheet" href="/app.css?v=8">
+<link rel="stylesheet" href="/sylve-studio.css?v=9">
+<link rel="stylesheet" href="/app.css?v=9">
 </head>
 <body>
 <header class="bar">
   <a href="/" class="brand">gazette</a>
   <span class="live-indicator"><span class="live-dot"></span>live</span>
   <span class="spacer"></span>
-  <span id="gz-me" class="gz-me"></span>
 </header>
 <main class="page">`;
 }
@@ -41,12 +40,13 @@ function shell(handle: string): string {
     <p class="muted">Loading ${handle}...</p>
   </div>
 </main>
-<script src="/theme.js?v=8"></script>
-<script src="/auth.js?v=8"></script>
-<script src="/gz.js?v=8"></script>
-<script src="/md.js?v=8"></script>
-<script src="/tweet.js?v=8"></script>
-<script src="/profile.js?v=8"></script>
+<script src="/theme.js?v=9"></script>
+<script src="/auth.js?v=9"></script>
+<script src="/gz.js?v=9"></script>
+<script src="/md.js?v=9"></script>
+<script src="/tweet.js?v=9"></script>
+<script src="/nav.js?v=9"></script>
+<script src="/profile.js?v=9"></script>
 </body>
 </html>`;
 }
