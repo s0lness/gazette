@@ -157,10 +157,12 @@
     return (
       '<div class="wall-ticker" id="gz-ticker">' +
       '<div class="wall-ticker-card">' +
+      '<div class="wall-ticker-inner" id="gz-ticker-inner">' +
       '<div class="wall-ticker-avatar" id="gz-ticker-avatar" style="background:' + tickerColor(p.handle) + '">' + tickerInitial(p.handle) + '</div>' +
       '<div class="wall-ticker-body" id="gz-ticker-body">' +
       '<p class="wall-ticker-handle" id="gz-ticker-handle">' + esc(p.handle) + '</p>' +
       '<p class="wall-ticker-text" id="gz-ticker-text">' + esc(p.text) + '</p>' +
+      '</div>' +
       '</div>' +
       '</div>' +
       '</div>'
@@ -168,30 +170,32 @@
   }
 
   // Start the ticker rotation after the wall is painted.
-  // Each transition plays as a tweet arriving: old content slides out up,
-  // new content slides in from below, so it reads as a fresh card dropping in.
+  // Each transition plays as a NEW tweet dropping in: the outgoing tweet clears
+  // out first (fade + lift away), then the incoming one drops from just above and
+  // settles, so it reads as a fresh card arriving, not text swapped in place.
   function startTicker() {
     var ticker = document.getElementById("gz-ticker");
     if (!ticker) return;
-    // Respect prefers-reduced-motion: static only.
+    // Respect prefers-reduced-motion: static only, no auto-advance.
     if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
 
     var cardEl = ticker.querySelector(".wall-ticker-card");
     var idx = 0;
     var timer = null;
     var avatar = document.getElementById("gz-ticker-avatar");
-    var body   = document.getElementById("gz-ticker-body");
     var handle = document.getElementById("gz-ticker-handle");
     var text   = document.getElementById("gz-ticker-text");
-    if (!cardEl || !avatar || !body || !handle || !text) return;
+    if (!cardEl || !avatar || !handle || !text) return;
+
+    var LEAVE_MS = 200; // matches gz-tweet-out duration
 
     function advance() {
-      // Phase 1: leave — slide current content out upward.
+      // Phase 1: clear out the current tweet (fade + lift away).
       cardEl.classList.remove("gz-ticker-entering");
       cardEl.classList.add("gz-ticker-leaving");
 
       setTimeout(function () {
-        // Swap content while invisible.
+        // Swap in the next tweet's content while the card is cleared.
         idx = (idx + 1) % TICKER_POSTS.length;
         var p = TICKER_POSTS[idx];
         avatar.style.background = tickerColor(p.handle);
@@ -199,19 +203,18 @@
         handle.textContent = p.handle;
         text.textContent = p.text;
 
-        // Phase 2: enter — slide new content in from below.
+        // Phase 2: drop the fresh tweet in from above and let it settle.
         cardEl.classList.remove("gz-ticker-leaving");
-        // Force reflow to restart animation.
-        void cardEl.offsetWidth;
+        void cardEl.offsetWidth; // force reflow so the drop animation restarts
         cardEl.classList.add("gz-ticker-entering");
-      }, 220); // matches gz-ticker-out duration
+      }, LEAVE_MS);
     }
 
-    function start() { timer = setInterval(advance, 4500); }
+    function start() { if (!timer) timer = setInterval(advance, 4500); }
     function stop()  { clearInterval(timer); timer = null; }
 
     ticker.addEventListener("mouseenter", stop);
-    ticker.addEventListener("mouseleave", function () { start(); });
+    ticker.addEventListener("mouseleave", start);
     start();
   }
 

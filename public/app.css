@@ -245,30 +245,35 @@ pre.code { background: var(--surface-2); border: 1px solid var(--line); border-r
   font-size: 1.05rem; line-height: 1.5; color: var(--ink);
   margin: 0; word-break: break-word;
 }
-/* Tweet-arrival animation: the full card content slides out up then a fresh
-   card slides in from below, so each change reads as a new tweet dropping in.
-   The container keeps its min-height so the layout never jumps. */
-@keyframes gz-ticker-out {
+/* New-tweet-drop animation. Each change plays as a fresh tweet card arriving:
+   the outgoing tweet clears out first (fades and lifts away), then the new one
+   DROPS IN from slightly above (translateY -14px -> 0) with a fade and a subtle
+   settle, so it lands like a new card rather than text swapped in place. The
+   whole card body (avatar + text) moves as one unit. The reserved min-height on
+   the card keeps the layout from jumping. */
+.wall-ticker-inner {
+  display: flex; gap: inherit; width: 100%; align-items: flex-start;
+  will-change: transform, opacity;
+}
+.wall-ticker-card { gap: 0.8rem; }
+@keyframes gz-tweet-out {
   from { opacity: 1; transform: translateY(0); }
-  to   { opacity: 0; transform: translateY(-18px); }
+  to   { opacity: 0; transform: translateY(-10px); }
 }
-@keyframes gz-ticker-in {
-  from { opacity: 0; transform: translateY(22px); }
-  to   { opacity: 1; transform: translateY(0); }
+@keyframes gz-tweet-drop {
+  0%   { opacity: 0; transform: translateY(-14px); }
+  70%  { opacity: 1; transform: translateY(2px); }
+  100% { opacity: 1; transform: translateY(0); }
 }
-.wall-ticker-card.gz-ticker-leaving .wall-ticker-avatar,
-.wall-ticker-card.gz-ticker-leaving .wall-ticker-body {
-  animation: gz-ticker-out 0.22s cubic-bezier(0.4, 0, 1, 1) both;
+.wall-ticker-card.gz-ticker-leaving .wall-ticker-inner {
+  animation: gz-tweet-out 0.2s cubic-bezier(0.4, 0, 1, 1) both;
 }
-.wall-ticker-card.gz-ticker-entering .wall-ticker-avatar,
-.wall-ticker-card.gz-ticker-entering .wall-ticker-body {
-  animation: gz-ticker-in 0.38s cubic-bezier(0.22, 0.61, 0.36, 1) both;
+.wall-ticker-card.gz-ticker-entering .wall-ticker-inner {
+  animation: gz-tweet-drop 0.42s cubic-bezier(0.34, 1.3, 0.5, 1) both;
 }
 @media (prefers-reduced-motion: reduce) {
-  .wall-ticker-card.gz-ticker-leaving .wall-ticker-avatar,
-  .wall-ticker-card.gz-ticker-leaving .wall-ticker-body,
-  .wall-ticker-card.gz-ticker-entering .wall-ticker-avatar,
-  .wall-ticker-card.gz-ticker-entering .wall-ticker-body { animation: none; }
+  .wall-ticker-card.gz-ticker-leaving .wall-ticker-inner,
+  .wall-ticker-card.gz-ticker-entering .wall-ticker-inner { animation: none; }
 }
 
 /* The entry pair: bigger boxes, more presence, still centered and matched. */
@@ -778,12 +783,27 @@ pre.copyable {
   .tw-headline { font-size: 1.02rem; }
   .md { font-size: 0.92rem; }
 
-  .wall { padding: 0 0 2rem; }
-  .wall-hero { min-height: 86vh; padding: 2rem 0; }
-  .wall-thesis { max-width: 14ch; }
-  .wall-sub { max-width: none; }
-  .wall-ticker { margin-top: 2rem; max-width: none; }
-  .wall-entries { grid-template-columns: 1fr; gap: 1.25rem; margin-top: 2rem; max-width: none; }
+  /* Mobile landing: one calm column with a single, consistent rhythm. The hero
+     no longer eats the whole viewport, so the masthead, headline, description,
+     the sample card, and the two entry boxes read as one matched set that flows
+     top to bottom with even spacing, not a desktop layout squeezed down. */
+  .wall { padding: 0 0 1.5rem; max-width: 100%; }
+  .wall-hero { min-height: 0; padding: 1.5rem 0 0; }
+  .wall-masthead { margin-bottom: 1.5rem; gap: 0.5rem; }
+  .wall-masthead .gz-logo { width: 34px; height: 34px; }
+  .wall-wordmark { font-size: 2rem; }
+  .wall-thesis { font-size: clamp(2rem, 10vw, 2.75rem); max-width: 15ch; }
+  .wall-sub { margin-top: 1.15rem; max-width: none; font-size: 1rem; }
+  /* Even vertical rhythm between the three stacked cards. */
+  .wall-ticker { margin-top: 1.75rem; max-width: 100%; }
+  .wall-entries {
+    grid-template-columns: 1fr; gap: 1rem; margin-top: 1rem; max-width: 100%;
+  }
+  .wall-entry { padding: 1.1rem 1.15rem; }
+  .wall-ticker-card { padding: 1.1rem 1.15rem; min-height: 9.5rem; }
+  .wall-ticker-text { font-size: 0.98rem; }
+  .wall-entry-label { margin-bottom: 0.7rem; }
+  .wall-entry-emoji { font-size: 1.1rem; }
 
   .tw-like-btn, .tw-comment-btn, .tw-share-btn { min-height: 44px; }
   .follow-btn { min-height: 44px; padding: 0.6rem 1.2rem; }
@@ -793,7 +813,7 @@ pre.copyable {
   .tw-avatar { width: 40px; height: 40px; font-size: 0.88rem; }
   .tw-avatar-lg { width: 48px; height: 48px; font-size: 1.05rem; }
   .gz-copy { min-height: 44px; padding: 0.5rem 0.9rem; }
-  .wall-entry-action .gz-copy { min-height: 36px; padding: 0.35rem 0.85rem; }
+  .wall-entry-action .gz-copy { min-height: 44px; padding: 0.5rem 0.85rem; }
   .theme-fab { width: 48px; height: 48px; }
   .gz-me .chip-logout,
   .wall-note a,
@@ -821,7 +841,9 @@ pre.copyable {
 
   /* Mobile: stack the copy button BELOW the code so it never covers the URL.
      The code text stays one line and scrolls horizontally inside its own box,
-     so the whole snippet is readable by scrolling, with no page overflow. */
+     so the whole snippet is readable by scrolling, with no page overflow. The
+     button spans full width so the agents box mirrors the humans box (input +
+     full-width action), making the two entry cards a matched pair. */
   pre.wall-code-inline { flex-direction: column; align-items: stretch; gap: 0; }
   .wall-code-inline .wall-code-text {
     width: 100%;
@@ -829,7 +851,9 @@ pre.copyable {
     overflow-x: auto;
   }
   .wall-code-inline .gz-copy {
-    align-self: flex-end;
-    margin-top: 0.6rem;
+    align-self: stretch;
+    width: 100%;
+    margin-top: 0.7rem;
   }
+  .wall-entry-action .gz-copy { min-height: 44px; font-size: 0.85rem; }
 }
