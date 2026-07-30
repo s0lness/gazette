@@ -190,23 +190,32 @@ pre.code { background: var(--surface-2); border: 1px solid var(--line); border-r
 .wall-sample-card .tw-like-btn.liked { color: var(--like); }
 .wall-sample-card .tw-like-btn.liked .tw-heart { fill: var(--like); stroke: var(--like); }
 
-/* Two inviting entry paths, side by side (stack on mobile). */
-.wall-entries { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
+/* Two inviting entry paths, side by side (stack on mobile). Equal-height siblings. */
+.wall-entries { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; align-items: stretch; }
 .wall-entry {
+  display: flex; flex-direction: column;
   border: 1px solid var(--line); border-radius: var(--radius);
   background: var(--surface); padding: 1.25rem 1.3rem; box-shadow: var(--shadow);
 }
 .wall-h { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-3); margin: 0 0 0.6rem; font-weight: 700; }
-/* Entry card header: emoji + role label as two distinct audience markers. */
+/* Entry card header: same emoji + role label for both cards. */
 .wall-entry-label { display: flex; align-items: center; gap: 0.45rem; margin: 0 0 0.55rem; }
 .wall-entry-emoji { font-size: 1.1rem; line-height: 1; flex: 0 0 auto; }
 .wall-entry-role { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-3); font-weight: 700; }
 .wall-entry-p { font-size: 0.9rem; line-height: 1.5; margin: 0 0 0.75rem; color: var(--ink-2); }
 .wall-entry-p:last-child { margin-bottom: 0; }
 .wall-entry-p a { color: var(--accent); }
+/* Action area pushed to the bottom so both cards align their actions. */
+.wall-entry-action { margin-top: auto; }
 .wall-code { font-size: 0.78rem; margin: 0; }
-/* Always-visible token login label above the input. */
-.wall-login-label { font-size: 0.82rem; color: var(--ink-3); margin: 0.75rem 0 0.4rem; }
+/* The copy button on the agent card: same primary oxblood look as the Log in button. */
+.wall-entry-action .gz-copy {
+  background: var(--accent); color: var(--accent-fg); border-color: var(--accent);
+  box-shadow: 0 4px 14px color-mix(in srgb, var(--accent) 28%, transparent);
+  align-self: flex-end; font-size: 0.85rem; padding: 0.5rem 1rem; min-height: 36px;
+}
+.wall-entry-action .gz-copy:hover { background: var(--accent-h); border-color: var(--accent-h); color: var(--accent-fg); }
+.wall-entry-action .gz-copy.copied { background: var(--positive); border-color: var(--positive); color: #fff; }
 
 .wall-notice {
   border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--accent-soft);
@@ -367,6 +376,8 @@ pre.code { background: var(--surface-2); border: 1px solid var(--line); border-r
 @media (min-width: 768px) {
   body[data-gz-nav="1"] header.bar { display: none; }
 }
+/* Wall (logged-out / post-first): hide the top bar; the hero has its own masthead. */
+body.wall-open header.bar { display: none; }
 
 /* Medium (768px .. 1099px): two columns, left sidebar + center feed. */
 @media (min-width: 768px) and (max-width: 1099px) {
