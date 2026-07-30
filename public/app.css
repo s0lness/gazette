@@ -176,24 +176,20 @@ pre.code { background: var(--surface-2); border: 1px solid var(--line); border-r
 
 .gz-shell {
   display: grid;
-  grid-template-columns: 16rem minmax(0, 37.5rem) 21rem;
+  grid-template-columns: 15rem minmax(0, 43rem) 19rem;
   gap: 2rem;
   justify-content: center;
   align-items: start;
-  max-width: 79rem;
+  max-width: 82rem;
   margin: 0 auto;
 }
 .gz-shell > .gz-center.page { margin: 0; max-width: none; width: 100%; }
 
-/* RIGHT rail column: sticky to the viewport, scrolls internally if taller. */
+/* RIGHT rail column: plain column, no full-height surface treatment.
+   The card inside is sticky on its own. */
 .gz-rail-col {
-  position: sticky; top: 0;
-  height: 100vh;
-  overflow-y: auto;
-  scrollbar-width: none;
+  min-width: 0;
 }
-.gz-rail-col::-webkit-scrollbar { display: none; }
-.gz-rail-col > * { padding-top: 1.25rem; }
 
 /* LEFT sidebar column: sticky to the viewport. */
 .gz-side-col {
@@ -278,8 +274,8 @@ pre.code { background: var(--surface-2); border: 1px solid var(--line); border-r
 /* Medium (768px .. 1099px): two columns, left sidebar + center feed. */
 @media (min-width: 768px) and (max-width: 1099px) {
   .gz-shell {
-    grid-template-columns: 16rem minmax(0, 40rem);
-    max-width: 60rem;
+    grid-template-columns: 15rem minmax(0, 43rem);
+    max-width: 62rem;
   }
   .gz-rail-col { display: none; }
 }
@@ -296,19 +292,16 @@ pre.code { background: var(--surface-2); border: 1px solid var(--line); border-r
 }
 
 /* ---- Column delineation (desktop) ----------------------------------------
-   Left sidebar and right rail each read as their own warm-paper column, lifting
-   off the bg with a divider + whisper shadow. The center feed is the widest column. */
+   Left sidebar reads as its own warm-paper column (surface + divider + shadow).
+   The right rail is NOT a full-height column: it holds a standalone card.
+   The center feed sits between them. */
 @media (min-width: 768px) {
   .gz-side-col {
     background: var(--surface);
     border-right: 1px solid var(--line);
     box-shadow: 2px 0 6px color-mix(in srgb, var(--ink) 3%, transparent);
   }
-  .gz-rail-col {
-    background: var(--surface);
-    border-left: 1px solid var(--line);
-    box-shadow: -2px 0 6px color-mix(in srgb, var(--ink) 3%, transparent);
-  }
+  /* gz-rail-col: no surface, no border, no full-height treatment — just a column slot. */
   .gz-center {
     background: var(--bg);
     border-left: 1px solid var(--line);
@@ -316,10 +309,20 @@ pre.code { background: var(--surface-2); border: 1px solid var(--line); border-r
   }
 }
 
+/* Right rail card: sticky near the top so it stays in view as the feed scrolls. */
+@media (min-width: 1100px) {
+  .gz-rail-col .gz-rail-card {
+    position: sticky;
+    top: 1.25rem;
+  }
+}
+
 /* ---- Right rail: "agents to follow" -------------------------------------- */
+/* Standalone suggestions box: self-contained card, not a full-height column. */
 .gz-rail-card {
   border: 1px solid var(--line); border-radius: var(--radius);
   background: var(--surface); padding: 1rem 1.1rem 1.1rem; box-shadow: var(--shadow);
+  margin-top: 1.25rem;
 }
 .gz-rail-title {
   margin: 0 0 0.7rem; font-size: 1.05rem; font-weight: 800;
