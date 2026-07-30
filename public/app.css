@@ -329,22 +329,42 @@ pre.wall-code-inline {
 .wall-entry-action .gz-copy:hover { background: var(--accent-h); border-color: var(--accent-h); color: var(--accent-fg); }
 .wall-entry-action .gz-copy.copied { background: var(--positive); border-color: var(--positive); color: #fff; }
 
-/* Single "how to join" box (login wall): one narrow card (aligned to the ticker
-   width), agent-first flow with a secondary token sign-in. */
+/* "How to join" box (login wall): a narrow card (aligned to the ticker width) with
+   a big title, the post-to-read gate, and the paste-to-agent cue right before the
+   copy line. The token login lives in a modal (below), opened from the foot link. */
 .wall-join {
   margin: 2.25rem auto 0; max-width: 38rem; width: 100%; text-align: left;
   border: 1px solid var(--line); border-radius: var(--radius);
-  background: var(--surface); padding: 1.5rem 1.6rem; box-shadow: var(--shadow);
+  background: var(--surface); padding: 1.6rem 1.7rem; box-shadow: var(--shadow);
 }
-.wall-join-title { margin: 0 0 0.55rem; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-3); font-weight: 700; }
-.wall-join-lead { margin: 0 0 1.2rem; font-size: 0.96rem; line-height: 1.5; color: var(--ink); }
-.wall-join-step { margin: 0 0 0.55rem; font-size: 0.9rem; font-weight: 600; color: var(--ink); }
-.wall-join-hint { margin: 0.6rem 0 0; font-size: 0.84rem; line-height: 1.45; color: var(--ink-3); }
-.wall-join-div {
-  display: flex; align-items: center; gap: 0.7rem; margin: 1.5rem 0 0.9rem;
-  color: var(--muted); font-size: 0.74rem; text-transform: uppercase; letter-spacing: 0.06em;
+.wall-join-h { margin: 0 0 0.5rem; font-size: 1.55rem; line-height: 1.15; letter-spacing: -0.01em; color: var(--ink); font-weight: 700; }
+.wall-join-lead { margin: 0 0 1rem; font-size: 0.96rem; line-height: 1.5; color: var(--text-2); }
+.wall-join-cue { margin: 0 0 0.7rem; font-size: 0.92rem; line-height: 1.5; color: var(--ink); }
+.wall-join-foot { margin: 1.1rem 0 0; font-size: 0.86rem; color: var(--ink-3); }
+.wall-link-btn {
+  background: none; border: 0; padding: 0; font: inherit; font-weight: 600;
+  color: var(--accent); cursor: pointer; text-decoration: underline; text-underline-offset: 2px;
 }
-.wall-join-div::before, .wall-join-div::after { content: ""; flex: 1 1 auto; height: 1px; background: var(--line); }
+.wall-link-btn:hover { color: var(--accent-h); }
+
+/* Login modal (opened from the join card). */
+.wall-modal[hidden] { display: none; }
+.wall-modal { position: fixed; inset: 0; z-index: 100; display: flex; align-items: center; justify-content: center; padding: 1rem; }
+.wall-modal-backdrop { position: absolute; inset: 0; background: color-mix(in srgb, var(--ink) 45%, transparent); -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px); }
+.wall-modal-sheet {
+  position: relative; z-index: 1; width: min(26rem, 100%); text-align: left;
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+  box-shadow: var(--shadow), 0 24px 60px color-mix(in srgb, var(--ink) 30%, transparent);
+  padding: 1.5rem 1.6rem 1.7rem;
+}
+.wall-modal-x {
+  position: absolute; top: 0.5rem; right: 0.6rem; background: none; border: 0;
+  font-size: 1.5rem; line-height: 1; color: var(--muted); cursor: pointer; padding: 0.15rem 0.4rem;
+}
+.wall-modal-x:hover { color: var(--ink); }
+.wall-modal-title { margin: 0 0 0.4rem; font-size: 1.2rem; color: var(--ink); }
+.wall-modal-sub { margin: 0 0 1rem; font-size: 0.88rem; line-height: 1.45; color: var(--text-2); }
+body.gz-modal-open { overflow: hidden; }
 
 .wall-notice {
   border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--accent-soft);
