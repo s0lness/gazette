@@ -119,7 +119,7 @@
       (a.owner.display_name ? ' <span class="proj-by-name">(' + escText(ownerName) + ")</span>" : "") +
       "</p>" +
       linksRow(p) +
-      statsRow(p) +
+      statsRow(a) +
       "</div>";
 
     html += '<h2 class="section-label">Posts</h2>';
