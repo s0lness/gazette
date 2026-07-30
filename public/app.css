@@ -192,19 +192,22 @@ pre.code { background: var(--surface-2); border: 1px solid var(--line); border-r
    text lengths vary. Pauses on hover. Reduced motion: static first post, no
    animation, no auto-advance. */
 .wall-ticker {
-  margin: 2.5rem auto 0; width: 100%; max-width: 38rem;
+  margin: 2.5rem auto 0; width: 100%; max-width: 48rem;
 }
-/* The fixed card. min-height reserves enough room for the longest post. */
+/* The fixed card. min-height reserves enough room for the longest post.
+   Oxblood-tinted surface + stronger border gives the ticker more presence
+   than the plain entry boxes: it is the focal hero of the lower section. */
 .wall-ticker-card {
   display: flex; gap: 0.8rem;
-  background: var(--surface);
-  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--accent) 5%, var(--surface));
+  border: 1.5px solid color-mix(in srgb, var(--accent) 22%, var(--line));
   border-radius: var(--radius);
-  padding: 1rem 1.1rem;
-  box-shadow: var(--shadow);
+  padding: 1.35rem 1.5rem;
+  box-shadow: var(--shadow), 0 4px 20px color-mix(in srgb, var(--accent) 10%, transparent);
   text-align: left;
-  min-height: 7rem;
+  min-height: 8rem;
   align-items: flex-start;
+  overflow: hidden;
 }
 .wall-ticker-avatar {
   flex: 0 0 auto;
@@ -220,45 +223,51 @@ pre.code { background: var(--surface-2); border: 1px solid var(--line); border-r
   margin: 0 0 0.3rem;
 }
 .wall-ticker-text {
-  font-size: 0.95rem; line-height: 1.5; color: var(--ink);
+  font-size: 1.05rem; line-height: 1.5; color: var(--ink);
   margin: 0; word-break: break-word;
 }
-/* Content transitions via a key class applied by JS */
+/* Tweet-arrival animation: the full card content slides out up then a fresh
+   card slides in from below, so each change reads as a new tweet dropping in.
+   The container keeps its min-height so the layout never jumps. */
+@keyframes gz-ticker-out {
+  from { opacity: 1; transform: translateY(0); }
+  to   { opacity: 0; transform: translateY(-18px); }
+}
 @keyframes gz-ticker-in {
-  from { opacity: 0; transform: translateY(8px); }
+  from { opacity: 0; transform: translateY(22px); }
   to   { opacity: 1; transform: translateY(0); }
 }
-.wall-ticker-body.gz-ticker-entering {
+.wall-ticker-card.gz-ticker-leaving .wall-ticker-avatar,
+.wall-ticker-card.gz-ticker-leaving .wall-ticker-body {
+  animation: gz-ticker-out 0.22s cubic-bezier(0.4, 0, 1, 1) both;
+}
+.wall-ticker-card.gz-ticker-entering .wall-ticker-avatar,
+.wall-ticker-card.gz-ticker-entering .wall-ticker-body {
   animation: gz-ticker-in 0.38s cubic-bezier(0.22, 0.61, 0.36, 1) both;
 }
 @media (prefers-reduced-motion: reduce) {
-  .wall-ticker-body.gz-ticker-entering { animation: none; }
+  .wall-ticker-card.gz-ticker-leaving .wall-ticker-avatar,
+  .wall-ticker-card.gz-ticker-leaving .wall-ticker-body,
+  .wall-ticker-card.gz-ticker-entering .wall-ticker-avatar,
+  .wall-ticker-card.gz-ticker-entering .wall-ticker-body { animation: none; }
 }
 
 /* The entry pair: bigger boxes, more presence, still centered and matched. */
 .wall-entries {
   display: grid; grid-template-columns: 1fr 1fr; gap: 1rem 1.75rem;
-  align-items: start; margin: 2.5rem auto 0; max-width: 48rem; width: 100%;
+  align-items: stretch; margin: 2.5rem auto 0; max-width: 48rem; width: 100%;
   text-align: left;
 }
 .wall-entries-single { grid-template-columns: 1fr; max-width: 28rem; }
-/* Each wrap holds the box + the big emoji beneath it. */
-.wall-entry-wrap {
-  display: flex; flex-direction: column; align-items: center;
-}
 .wall-entry {
   display: flex; flex-direction: column;
   border: 1px solid var(--line); border-radius: var(--radius);
   background: var(--surface); padding: 1.35rem 1.5rem; box-shadow: var(--shadow);
-  width: 100%;
+  width: 100%; height: 100%;
 }
-/* Large emoji sits below its box, centered. */
-.wall-entry-below-emoji {
-  font-size: 2.75rem; line-height: 1; margin-top: 0.85rem;
-  text-align: center; user-select: none;
-}
-/* Entry card header: role label only (emoji moved below). */
-.wall-entry-label { display: flex; align-items: center; margin: 0 0 0.85rem; }
+/* Entry card header: emoji + role label side by side. */
+.wall-entry-label { display: flex; align-items: center; gap: 0.5rem; margin: 0 0 0.85rem; }
+.wall-entry-emoji { font-size: 1.25rem; line-height: 1; user-select: none; }
 .wall-entry-role { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-3); font-weight: 700; }
 .wall-entry-p { font-size: 0.85rem; line-height: 1.5; margin: 0.75rem 0 0; color: var(--ink-3); }
 .wall-entry-p a { color: var(--accent); }
@@ -739,7 +748,6 @@ pre.copyable {
   .wall-sub { max-width: none; }
   .wall-ticker { margin-top: 2rem; max-width: none; }
   .wall-entries { grid-template-columns: 1fr; gap: 1.25rem; margin-top: 2rem; max-width: none; }
-  .wall-entry-below-emoji { font-size: 2.5rem; margin-top: 0.65rem; }
 
   .tw-like-btn, .tw-comment-btn, .tw-share-btn { min-height: 44px; }
   .follow-btn { min-height: 44px; padding: 0.6rem 1.2rem; }
