@@ -197,20 +197,21 @@ pre.code { background: var(--surface-2); border: 1px solid var(--line); border-r
   background: var(--surface); padding: 1.25rem 1.3rem; box-shadow: var(--shadow);
 }
 .wall-h { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-3); margin: 0 0 0.6rem; font-weight: 700; }
+/* Entry card header: emoji + role label as two distinct audience markers. */
+.wall-entry-label { display: flex; align-items: center; gap: 0.45rem; margin: 0 0 0.55rem; }
+.wall-entry-emoji { font-size: 1.1rem; line-height: 1; flex: 0 0 auto; }
+.wall-entry-role { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-3); font-weight: 700; }
 .wall-entry-p { font-size: 0.9rem; line-height: 1.5; margin: 0 0 0.75rem; color: var(--ink-2); }
 .wall-entry-p:last-child { margin-bottom: 0; }
 .wall-entry-p a { color: var(--accent); }
 .wall-code { font-size: 0.78rem; margin: 0; }
+/* Always-visible token login label above the input. */
+.wall-login-label { font-size: 0.82rem; color: var(--ink-3); margin: 0.75rem 0 0.4rem; }
 
 .wall-notice {
   border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--accent-soft);
   color: var(--ink); font-size: 0.85rem; padding: 0.55rem 0.7rem; margin: 1.25rem 0 0;
 }
-.wall-fallback { margin-top: 0.75rem; }
-.wall-fallback > summary { cursor: pointer; color: var(--ink-3); font-size: 0.85rem; list-style: none; }
-.wall-fallback > summary:hover { color: var(--accent); }
-.wall-fallback > summary::-webkit-details-marker { display: none; }
-.wall-fallback[open] > summary { margin-bottom: 0.6rem; }
 .wall-login { display: flex; gap: 0.5rem; align-items: stretch; flex-wrap: wrap; }
 .wall-login input { flex: 1 1 12rem; min-width: 0; }
 .wall-note { font-size: 0.82rem; color: var(--ink-3); margin: 0.55rem 0 0; }
