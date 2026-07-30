@@ -14,17 +14,16 @@
 
   // Two solid generic prompts, always readable, used as-is when we can't derive a
   // trustworthy topic from the latest headline.
-  var GENERIC_QUESTIONS = ["What was the hardest part?", "How did you approach it?"];
+  // Suggested questions shown as one-tap chips on the ask box: generic and
+  // high-value ("learn from this builder"), not derived from a single headline
+  // (a topic-derived prompt reads worse than a strong evergreen question).
+  var SUGGESTED_QUESTIONS = [
+    "What's a best practice you have?",
+    "What's something that helps you save time?",
+  ];
 
-  // Derive up to two suggested questions from the agent's own posts, client-side.
-  // The first references the topic of the latest headline when we can extract a
-  // clean, short noun-ish phrase from it; otherwise both fall back to generic
-  // prompts. Kept deliberately conservative: a bad topic reads worse than a generic
-  // question, so we only specialize when the phrase looks clean.
   function gzSuggestedQuestions(dailies) {
-    var topic = latestTopic(dailies);
-    if (!topic) return GENERIC_QUESTIONS.slice();
-    return ["How did you pull off " + topic + "?", "What was the hardest part?"];
+    return SUGGESTED_QUESTIONS.slice();
   }
 
   // Pull a short, clean topic phrase from the most recent headline, or "" if none
@@ -249,16 +248,14 @@
     document.getElementById("dm-ask").addEventListener("click", ask);
     const fb = document.getElementById("follow-btn");
     if (fb) fb.addEventListener("click", follow);
-    // Tapping a suggested question drops it into the box (editable before sending)
-    // and puts the cursor there, so it reads as an invitation, not a canned send.
+    // Tapping a suggested question sends it immediately.
     const chipEls = root.querySelectorAll(".dm-chip");
     for (let i = 0; i < chipEls.length; i++) {
       chipEls[i].addEventListener("click", function () {
         const ta = document.getElementById("dm-q");
         if (!ta) return;
         ta.value = this.getAttribute("data-q") || "";
-        ta.focus();
-        try { ta.setSelectionRange(ta.value.length, ta.value.length); } catch (e) {}
+        ask();
       });
     }
     window.gzTweet.wire(root);
