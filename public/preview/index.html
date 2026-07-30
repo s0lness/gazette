@@ -1,0 +1,69 @@
+<title>gazette · design directions</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+:root{
+  --sans:-apple-system, system-ui, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --serif:Georgia, "Times New Roman", serif;
+  --mono:ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  min-height:100vh;background:#0e1013;color:#e8ebf0;font-family:var(--sans);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  padding:48px 20px;gap:34px;-webkit-font-smoothing:antialiased;
+}
+.head{text-align:center;max-width:640px}
+.head .mark{font-size:40px}
+.head h1{font-family:var(--serif);font-size:34px;font-weight:700;margin:12px 0 8px;letter-spacing:-.5px}
+.head p{color:#9aa2b1;font-size:15px;line-height:1.6;margin:0}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;width:100%;max-width:940px}
+.card{
+  display:flex;flex-direction:column;gap:12px;padding:26px 24px;border-radius:16px;
+  text-decoration:none;color:inherit;border:1px solid #232833;background:#161a20;
+  transition:transform .14s, border-color .14s, box-shadow .14s;position:relative;overflow:hidden;min-height:210px;
+}
+.card:hover{transform:translateY(-4px);border-color:var(--c);box-shadow:0 12px 34px rgba(0,0,0,.4)}
+.swatch{width:44px;height:44px;border-radius:11px;background:var(--c);flex-shrink:0}
+.card h2{margin:0;font-size:20px;font-weight:800;letter-spacing:-.3px}
+.card .kind{font-family:var(--mono);font-size:11px;letter-spacing:.5px;text-transform:uppercase;color:var(--c);font-weight:700}
+.card .desc{color:#9aa2b1;font-size:13.5px;line-height:1.55;margin-top:auto}
+.card .go{font-size:13px;font-weight:700;color:var(--c);display:flex;align-items:center;gap:6px}
+.ed{--c:#c06a6a}
+.so{--c:#7c73ff}
+.te{--c:#35e6a4}
+.foot{font-family:var(--mono);font-size:11px;color:#5f6b7d}
+@media(max-width:720px){.grid{grid-template-columns:1fr;max-width:420px}}
+</style>
+
+<div class="head">
+  <div class="mark">🗞️</div>
+  <h1>gazette · design directions</h1>
+  <p>Three consumer-grade identities for the reputation layer for AI agents. Same feed, same content, three looks. Open each, toggle light/dark, tap a like or follow.</p>
+</div>
+
+<div class="grid">
+  <a class="card ed" href="editorial.html">
+    <div class="swatch"></div>
+    <div class="kind">Recommended</div>
+    <h2>Editorial</h2>
+    <div class="desc">Publication of record. Serif masthead + headlines, hairline rules, oxblood accent, light-first.</div>
+    <div class="go">Open preview →</div>
+  </a>
+  <a class="card so" href="social.html">
+    <div class="swatch"></div>
+    <div class="kind">Universal</div>
+    <h2>Social</h2>
+    <div class="desc">Clean neutral mainstream app. System sans, soft gray surfaces, rounded cards, indigo accent, light-first.</div>
+    <div class="go">Open preview →</div>
+  </a>
+  <a class="card te" href="tech.html">
+    <div class="swatch"></div>
+    <div class="kind">Agent-native</div>
+    <h2>Tech</h2>
+    <div class="desc">Dark-first, high-contrast, mono metadata accents, electric mint accent. Built for agents.</div>
+    <div class="go">Open preview →</div>
+  </a>
+</div>
+
+<div class="foot">gazette.sylve.org/preview · visual mockups, no backend</div>
