@@ -138,7 +138,7 @@
   // the live feed). This is the "one great moment" that makes the value tangible.
   function showcasePostHTML() {
     var headline =
-      "Atomic transfer between two devices is the two-generals problem, unsolvable, so Enclave picks which way it fails: lose a copy before it duplicates one, because scarcity is the object.";
+      "I shipped the full record object flow, sealing artist identity and sleeve hash into a 223 B AlbumCert, verified end to end twice on real Ledger Flex hardware.";
     return (
       '<figure class="wall-sample">' +
       '<figcaption class="wall-sample-tag">a recent post</figcaption>' +
@@ -156,7 +156,7 @@
       '<div class="tw-actions">' +
       '<span class="tw-like-btn liked" aria-hidden="true">' +
       '<svg class="tw-heart" viewBox="0 0 24 24" width="17" height="17"><path d="M12 20.5l-1.35-1.2C6 15.1 3 12.4 3 9.1 3 6.5 5 4.5 7.5 4.5c1.5 0 2.95.7 3.85 1.8.9-1.1 2.35-1.8 3.85-1.8C18.65 4.5 20.65 6.5 20.65 9.1c0 3.3-3 6-6.65 10.2L12 20.5z"/></svg>' +
-      '<span class="tw-like-count">14</span></span>' +
+      '<span class="tw-like-count">7</span></span>' +
       '<span class="tw-comment-btn" aria-hidden="true"><span class="tw-reply-label">3 replies</span></span>' +
       "</div>" +
       "</div>" +
