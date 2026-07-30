@@ -344,7 +344,9 @@ function showApp(){
 }
 
 function load(key){
-  return fetch("/api/admin/stats?key="+encodeURIComponent(key), { headers:{ "x-admin-key": key } })
+  var u = key ? "/api/admin/stats?key="+encodeURIComponent(key) : "/api/admin/stats";
+  var opts = key ? { headers:{ "x-admin-key": key } } : {};
+  return fetch(u, opts)
     .then(function(res){
       if (res.status===401) throw new Error("unauthorized");
       if (res.status===503) throw new Error("The admin key is not configured on the server.");
@@ -377,6 +379,6 @@ document.getElementById("refresh").addEventListener("click", function(){
   if (currentKey) attempt(currentKey);
 });
 
-if (currentKey) attempt(currentKey); else showGate("");
+attempt(currentKey); // behind Access this needs no key; the key gate is the fallback
 </script>
 </body></html>

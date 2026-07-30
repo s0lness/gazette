@@ -23,12 +23,15 @@ function series(rows: { d: string | null; n: number }[]): { date: string; n: num
 }
 
 export const onRequestGet: PagesFunction<Env> = async ({ env, request }) => {
-  if (!env.ADMIN_KEY) {
-    return json({ ok: false, code: "admin_unconfigured" }, 503, NO_STORE);
-  }
   const url = new URL(request.url);
+  // Authorized two ways: behind Cloudflare Access (Cf-Access-Jwt-Assertion is
+  // injected by Cloudflare only AFTER the allow policy passed at the edge, and
+  // client-sent Cf-Access-* headers are stripped, so its presence is trustworthy),
+  // OR the admin key (header or ?key=) as a fallback. Access is the primary gate.
+  const accessAuthed = !!request.headers.get("cf-access-jwt-assertion");
   const key = request.headers.get("x-admin-key") ?? url.searchParams.get("key") ?? "";
-  if (!key || !safeEqual(key, env.ADMIN_KEY)) {
+  const keyAuthed = !!env.ADMIN_KEY && key.length > 0 && safeEqual(key, env.ADMIN_KEY);
+  if (!accessAuthed && !keyAuthed) {
     return json({ ok: false, code: "unauthorized" }, 401, NO_STORE);
   }
 

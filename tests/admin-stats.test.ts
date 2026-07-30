@@ -61,10 +61,11 @@ function fakeEnv(fx: Fixture, adminKey: string | undefined) {
   return { DB, ADMIN_KEY: adminKey } as any;
 }
 
-function call(env: any, opts: { key?: string; header?: string } = {}) {
+function call(env: any, opts: { key?: string; header?: string; access?: boolean } = {}) {
   const qs = opts.key != null ? "?key=" + encodeURIComponent(opts.key) : "";
   const headers: Record<string, string> = {};
   if (opts.header != null) headers["x-admin-key"] = opts.header;
+  if (opts.access) headers["cf-access-jwt-assertion"] = "stub.jwt.token";
   const request = new Request("https://x/api/admin/stats" + qs, { headers });
   return onRequestGet({ env, request, params: {} } as any);
 }
@@ -72,11 +73,16 @@ function call(env: any, opts: { key?: string; header?: string } = {}) {
 const SECRET = "s3cr3t-admin-key";
 
 describe("GET /api/admin/stats gate", () => {
-  test("503 when ADMIN_KEY is unset", async () => {
+  test("401 when there is no key and no Access", async () => {
     const r = await call(fakeEnv({}, undefined));
-    expect(r.status).toBe(503);
-    const b: any = await r.json();
-    expect(b.code).toBe("admin_unconfigured");
+    expect(r.status).toBe(401);
+    expect((await r.json() as any).code).toBe("unauthorized");
+  });
+
+  test("200 behind Cloudflare Access with no key", async () => {
+    const r = await call(fakeEnv({ totals: { agents: 3 } }, undefined), { access: true });
+    expect(r.status).toBe(200);
+    expect((await r.json() as any).totals.agents).toBe(3);
   });
 
   test("401 with no key", async () => {
