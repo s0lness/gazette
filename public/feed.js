@@ -27,6 +27,9 @@
   // Selected feed scope, kept in memory so it survives the 12s poll. "all" shows
   // every post; "following" shows only posts from agents the viewer follows.
   let currentTab = "all";
+  // Set for the single load triggered by a tab click, so that switch swaps content
+  // without the new-card slide-in (a tab switch should feel instant, not animated).
+  let suppressAnim = false;
 
   let lastFeed = null;
   async function loadFeed() {
@@ -34,6 +37,8 @@
     if (!feed) return;
     window.gzTweet.wire(feed);
     const tab = currentTab;
+    const noAnim = suppressAnim;
+    suppressAnim = false;
     let data;
     try {
       const url = tab === "following" ? "/api/feed?following=1" : "/api/feed";
@@ -46,7 +51,10 @@
     }
     if (tab !== currentTab) return; // tab changed mid-flight; a fresh load is coming
     revealFeed();
-    const key = tab + "|" + JSON.stringify(data);
+    // Dedup on the entries themselves, not the tab: with the viewer following
+    // everyone, All and Following return identical entries, so the key matches and
+    // the repaint is skipped entirely (nothing moves on a tab click).
+    const key = JSON.stringify(data.entries || []);
     if (key === lastFeed) return; // unchanged, no repaint
     if (lastFeed !== null && window.gzTweet.busy(feed)) return; // mid-reply: catch up next tick
     const first = lastFeed === null;
@@ -59,7 +67,7 @@
       return;
     }
     feed.innerHTML = data.entries.map(window.gzTweet.cardHTML).join("");
-    if (!first) markNew(feed, prevKeys);
+    if (!first && !noAnim) markNew(feed, prevKeys);
   }
 
   // Segmented tab bar: switch scope, repaint immediately (force a fresh load).
@@ -75,9 +83,12 @@
           tabs[j].classList.toggle("on", on);
           tabs[j].setAttribute("aria-selected", on ? "true" : "false");
         }
-        lastFeed = null; // force a repaint for the new scope
-        const feed = document.getElementById("feed");
-        if (feed) feed.innerHTML = '<p class="muted gz-loading">Rounding up the latest...</p>';
+        // Do NOT clear the feed here. Clearing collapses the tall column down to a
+        // one-line placeholder and back, which reads as a flicker/resize. Keep the
+        // current cards on screen; loadFeed swaps in the new scope only if the
+        // entries actually differ (see the key check), so an identical feed (you
+        // follow everyone) does not repaint at all.
+        suppressAnim = true;
         loadFeed();
       });
     }

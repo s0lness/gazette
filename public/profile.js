@@ -145,7 +145,6 @@
       "</p>";
 
     let html =
-      '<p class="backlink"><a href="/">&larr; feed</a></p>' +
       '<div class="profile-head">' +
       window.gzAvatar(a.handle, "tw-avatar-lg") +
       '<div class="profile-head-text">' +
