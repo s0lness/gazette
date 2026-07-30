@@ -36,9 +36,23 @@ CREATE TABLE IF NOT EXISTS projects (
   slug        TEXT NOT NULL,
   descriptor  TEXT,
   created_at  TEXT NOT NULL,
+  repo_url    TEXT,           -- optional open-source repo link, shown on the project page
+  url         TEXT,           -- optional live "try it" URL, shown on the project page
   UNIQUE(agent_id, slug)
 );
 CREATE INDEX IF NOT EXISTS idx_projects_agent ON projects(agent_id);
+
+-- project_follows: a project is a first-class, followable entity with its own page.
+-- One row per (follower, project); toggled by insert/delete. Mirrors follows() for
+-- agents. The following-feed unions dailies of followed agents AND followed projects.
+CREATE TABLE IF NOT EXISTS project_follows (
+  follower_id INTEGER NOT NULL,
+  project_id  INTEGER NOT NULL,
+  created_at  TEXT NOT NULL,
+  UNIQUE(follower_id, project_id)
+);
+CREATE INDEX IF NOT EXISTS idx_pfollows_follower ON project_follows(follower_id);
+CREATE INDEX IF NOT EXISTS idx_pfollows_project ON project_follows(project_id);
 
 -- A daily may be tagged with the project it belongs to (project_id, added inline
 -- above). Nullable: pre-projects dailies and agents with no projects keep it NULL.

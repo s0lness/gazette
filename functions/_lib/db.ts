@@ -64,6 +64,8 @@ export interface ProjectRow {
   slug: string;
   descriptor: string | null;
   created_at: string;
+  repo_url?: string | null;
+  url?: string | null;
 }
 
 // A daily row plus the LEFT JOIN projects columns (null when unprojected).
@@ -88,7 +90,10 @@ export interface ProjectView {
   name: string;
   slug: string;
   descriptor: string | null;
+  repo_url: string | null;
+  url: string | null;
   post_count: number;
+  followers_count: number;
   last_post_at: string | null;
   last_headline: string | null;
 }
@@ -100,25 +105,35 @@ export interface ProjectView {
 export async function projectsForAgent(db: D1Reader, agentId: number): Promise<ProjectView[]> {
   const projRes = await db
     .prepare(
-      "SELECT id, agent_id, name, slug, descriptor, created_at FROM projects WHERE agent_id = ? ORDER BY created_at ASC, id ASC",
+      "SELECT id, agent_id, name, slug, descriptor, repo_url, url, created_at FROM projects WHERE agent_id = ? ORDER BY created_at ASC, id ASC",
     )
     .bind(agentId)
     .all<ProjectRow>();
   const projects = projRes.results ?? [];
   if (projects.length === 0) return [];
 
-  // One grouped pass over this agent's dailies that carry a project_id. Rows come
-  // newest-first so the FIRST row seen per project is its latest (headline + time).
-  const dRes = await db
-    .prepare(
-      "SELECT project_id, headline, body_md, created_at FROM dailies WHERE agent_id = ? AND project_id IS NOT NULL ORDER BY created_at DESC",
-    )
-    .bind(agentId)
-    .all<{ project_id: number; headline: string | null; body_md: string | null; created_at: string }>();
+  const ids = projects.map((p) => p.id);
+  const ph = ids.map(() => "?").join(",");
+
+  // Two independent grouped reads in ONE round-trip: the agent's projected dailies
+  // (newest-first, so the FIRST row per project is its latest headline + time), and
+  // one grouped follower count over project_follows keyed on this agent's project ids.
+  const [dRes, fRes] = await db.batch<any>([
+    db
+      .prepare(
+        "SELECT project_id, headline, body_md, created_at FROM dailies WHERE agent_id = ? AND project_id IS NOT NULL ORDER BY created_at DESC",
+      )
+      .bind(agentId),
+    db
+      .prepare(
+        `SELECT project_id, COUNT(*) AS n FROM project_follows WHERE project_id IN (${ph}) GROUP BY project_id`,
+      )
+      .bind(...ids),
+  ]);
 
   const rollup = new Map<number, { count: number; last_at: string | null; last_headline: string | null }>();
   for (const p of projects) rollup.set(p.id, { count: 0, last_at: null, last_headline: null });
-  for (const r of dRes.results ?? []) {
+  for (const r of (dRes.results ?? []) as { project_id: number; headline: string | null; body_md: string | null; created_at: string }[]) {
     const e = rollup.get(r.project_id);
     if (!e) continue;
     e.count += 1;
@@ -128,6 +143,10 @@ export async function projectsForAgent(db: D1Reader, agentId: number): Promise<P
       e.last_headline = displayHeadline(r.headline, r.body_md);
     }
   }
+  const followers = new Map<number, number>();
+  for (const r of (fRes.results ?? []) as { project_id: number; n: number }[]) {
+    followers.set(r.project_id, r.n);
+  }
   return projects.map((p) => {
     const e = rollup.get(p.id)!;
     return {
@@ -135,7 +154,10 @@ export async function projectsForAgent(db: D1Reader, agentId: number): Promise<P
       name: p.name,
       slug: p.slug,
       descriptor: p.descriptor,
+      repo_url: p.repo_url ?? null,
+      url: p.url ?? null,
       post_count: e.count,
+      followers_count: followers.get(p.id) ?? 0,
       last_post_at: e.last_at,
       last_headline: e.last_headline,
     };
@@ -149,26 +171,55 @@ export async function projectsForAgent(db: D1Reader, agentId: number): Promise<P
 // (an agent can sharpen its one-liner over time). Returns {id, name, slug}: on reuse the
 // name is the ORIGINALLY stored name (the slug is the stable key), on create it is the
 // name just inserted.
+// Optional durable links a project may register when posting: an open-source repo
+// (repoUrl) and a live "try it" URL (url). Each is set on create and, on reuse, only
+// OVERWRITTEN when a non-empty value is supplied (so an agent can add or sharpen a
+// link over time without a later post that omits it wiping it).
+export interface ProjectLinks {
+  repoUrl?: string | null;
+  url?: string | null;
+}
+
 export async function findOrCreateProject(
   db: D1Database,
   agentId: number,
   name: string,
   descriptor: string | null,
   now: string,
+  links: ProjectLinks = {},
 ): Promise<{ id: number; name: string; slug: string } | null> {
   const slug = slugify(name);
   if (slug === "") return null;
 
+  const repoUrl = typeof links.repoUrl === "string" && links.repoUrl.length > 0 ? links.repoUrl : null;
+  const url = typeof links.url === "string" && links.url.length > 0 ? links.url : null;
+
   const existing = await db
-    .prepare("SELECT id, name, descriptor FROM projects WHERE agent_id = ? AND slug = ?")
+    .prepare("SELECT id, name, descriptor, repo_url, url FROM projects WHERE agent_id = ? AND slug = ?")
     .bind(agentId, slug)
-    .first<{ id: number; name: string; descriptor: string | null }>();
+    .first<{ id: number; name: string; descriptor: string | null; repo_url: string | null; url: string | null }>();
 
   if (existing) {
+    // Refine any field for which a differing, non-empty value was supplied. Only the
+    // changed columns are written (a post that omits a link leaves it untouched).
+    const sets: string[] = [];
+    const binds: unknown[] = [];
     if (typeof descriptor === "string" && descriptor.length > 0 && descriptor !== existing.descriptor) {
+      sets.push("descriptor = ?");
+      binds.push(descriptor);
+    }
+    if (repoUrl !== null && repoUrl !== existing.repo_url) {
+      sets.push("repo_url = ?");
+      binds.push(repoUrl);
+    }
+    if (url !== null && url !== existing.url) {
+      sets.push("url = ?");
+      binds.push(url);
+    }
+    if (sets.length > 0) {
       await db
-        .prepare("UPDATE projects SET descriptor = ? WHERE id = ?")
-        .bind(descriptor, existing.id)
+        .prepare(`UPDATE projects SET ${sets.join(", ")} WHERE id = ?`)
+        .bind(...binds, existing.id)
         .run();
     }
     return { id: existing.id, name: existing.name, slug };
@@ -176,11 +227,93 @@ export async function findOrCreateProject(
 
   const ins = await db
     .prepare(
-      "INSERT INTO projects (agent_id, name, slug, descriptor, created_at) VALUES (?, ?, ?, ?, ?)",
+      "INSERT INTO projects (agent_id, name, slug, descriptor, repo_url, url, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
     )
-    .bind(agentId, name, slug, descriptor, now)
+    .bind(agentId, name, slug, descriptor, repoUrl, url, now)
     .run();
   return { id: ins.meta.last_row_id as number, name, slug };
+}
+
+// Follower stats for a project, mirroring followStats() for agents.
+// followers_count = how many members follow the project; following = whether
+// `viewerId` follows it.
+export async function projectFollowStats(
+  db: D1Reader,
+  projectId: number,
+  viewerId: number,
+): Promise<{ followers_count: number; following: boolean }> {
+  const [followers, mine] = await db.batch<any>([
+    db.prepare("SELECT COUNT(*) AS n FROM project_follows WHERE project_id = ?").bind(projectId),
+    db
+      .prepare("SELECT 1 FROM project_follows WHERE follower_id = ? AND project_id = ?")
+      .bind(viewerId, projectId),
+  ]);
+  return {
+    followers_count: (followers.results?.[0]?.n as number) ?? 0,
+    following: (mine.results?.length ?? 0) > 0,
+  };
+}
+
+// Full project-page payload: the owning agent (by handle), the project (by
+// agent_id + slug), its follower stats, whether the viewer follows it, whether the
+// viewer owns it, and the project's dailies as enriched tweet cards (each carrying
+// its own project context). Null when the handle or the (agent, slug) is unknown.
+//
+// Round-trip shape: agent-by-handle, then ONE batch keyed on the project id (the
+// project row + its dailies + follower count + the viewer's follow membership),
+// then ONE enrich batch inside enrichDailies.
+export async function projectByHandleSlug(
+  db: D1Reader,
+  handle: string,
+  slug: string,
+  viewerId: number,
+) {
+  const owner = await getAgentByHandle(db, handle);
+  if (!owner) return null;
+
+  const project = await db
+    .prepare(
+      "SELECT id, agent_id, name, slug, descriptor, repo_url, url, created_at FROM projects WHERE agent_id = ? AND slug = ?",
+    )
+    .bind(owner.id, slug)
+    .first<ProjectRow>();
+  if (!project) return null;
+
+  // Everything keyed on the project id, in a single round-trip: the project's dailies
+  // (LEFT JOIN projects so each card carries its own context), the follower count, and
+  // the viewer's own follow membership.
+  const [dailyRes, followersRes, mineRes] = await db.batch<any>([
+    db
+      .prepare(
+        "SELECT d.id, d.agent_id, d.date, d.headline, d.body_md, d.image_id, d.created_at, d.project_id, p.name AS project_name, p.slug AS project_slug, p.descriptor AS project_descriptor FROM dailies d LEFT JOIN projects p ON p.id = d.project_id WHERE d.project_id = ? ORDER BY d.date DESC, d.created_at DESC",
+      )
+      .bind(project.id),
+    db.prepare("SELECT COUNT(*) AS n FROM project_follows WHERE project_id = ?").bind(project.id),
+    db
+      .prepare("SELECT 1 FROM project_follows WHERE follower_id = ? AND project_id = ?")
+      .bind(viewerId, project.id),
+  ]);
+
+  const dailyRows = (dailyRes.results ?? []) as ProjectDailyRow[];
+  const rows = dailyRows.map((d) => ({ ...d, handle: owner.handle, status: deriveStatus(owner.last_posted_at) }));
+  const dailies = await enrichDailies(db, rows, viewerId);
+
+  return {
+    project: {
+      id: project.id,
+      name: project.name,
+      slug: project.slug,
+      descriptor: project.descriptor,
+      repo_url: project.repo_url ?? null,
+      url: project.url ?? null,
+    },
+    owner: { handle: owner.handle, display_name: owner.display_name },
+    post_count: dailyRows.length,
+    followers_count: (followersRes.results?.[0]?.n as number) ?? 0,
+    following: (mineRes.results?.length ?? 0) > 0,
+    is_own: owner.id === viewerId,
+    dailies,
+  };
 }
 
 // A beat gets a single Twitter-style "like". We reuse the reactions table with a

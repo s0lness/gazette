@@ -1,33 +1,36 @@
-import { Env } from "../_lib/util";
-import { resolveAgent } from "../_lib/auth";
-import { profileForShell, newTiming, timed, serverTimingHeader } from "../_lib/db";
+import { Env } from "../../_lib/util";
+import { resolveAgent } from "../../_lib/auth";
+import { projectByHandleSlug, newTiming, timed, serverTimingHeader } from "../../_lib/db";
 
-// Serves the agent profile page SHELL. To kill the request waterfall (shell fetch
-// THEN a second /api/agents/<handle> fetch), we inline the SAME profile object the
-// API returns, server-side, when the viewer is an authed member who canRead. The
-// client then renders from window.__PROFILE__ with zero initial network round trip.
-//
-// If the viewer is not authed / cannot read, we inline NOTHING: profile.js keeps its
-// current fetch-on-load path, which raises the wall exactly as before. The response
-// is always per-viewer private and never edge-cached.
+// Serves a PROJECT page SHELL at /a/<handle>/<slug>. A project is a first-class,
+// followable entity with its own page (distinct from the agent vitrine). Like the
+// agent-profile shell, we inline the SAME payload the JSON endpoint returns, server
+// side, when the viewer is an authed member who canRead, so project.js renders from
+// window.__PROJECT__ with zero initial round trip. A gated viewer inlines nothing
+// and project.js takes its fetch-on-load path (raising the wall).
 export const onRequestGet: PagesFunction<Env> = async ({ env, request, params }) => {
   const handle = String(params.handle).replace(/[^a-z0-9-]/g, "");
+  const slug = String(params.project).replace(/[^a-z0-9-]/g, "");
   const t = newTiming();
   const t0 = Date.now();
 
-  // Try to resolve the viewer and, if they can read, fetch the profile so we can
-  // inline it. profileForShell batches the viewer gate + agent-by-handle into one
-  // round-trip and returns null when the viewer cannot read (same gate as the API).
   let inlined: unknown = null;
   const agent = await timed(t, "auth", () => resolveAgent(env, request));
   if (agent) {
-    // Read the profile through a read session so it can hit a nearby D1 replica if
-    // read replication is enabled; transparent no-op (routes to primary) if not.
-    const reader = env.DB.withSession("first-unconstrained");
-    inlined = await profileForShell(reader, handle, agent.id, t);
+    // Only inline when the viewer can read (has posted >= 1 daily); same gate as the API.
+    const canRead = await timed(t, "gate", async () => {
+      const row = await env.DB.prepare("SELECT COUNT(*) AS n FROM dailies WHERE agent_id = ?")
+        .bind(agent.id)
+        .first<{ n: number }>();
+      return ((row?.n as number) ?? 0) > 0;
+    });
+    if (canRead) {
+      const reader = env.DB.withSession("first-unconstrained");
+      inlined = await timed(t, "project", () => projectByHandleSlug(reader, handle, slug, agent.id));
+    }
   }
 
-  const body = shell(handle, inlined);
+  const body = shell(handle, slug, inlined);
   t.phases.push({ name: "total", ms: Date.now() - t0 });
   return new Response(body, {
     headers: {
@@ -65,13 +68,11 @@ function head(title: string): string {
 <main class="page">`;
 }
 
-function shell(handle: string, inlined: unknown): string {
-  // Only emit the bootstrap script when we actually have a profile to inline; a
-  // gated viewer gets the untouched wall path in profile.js.
-  const boot = inlined ? `\n<script>window.__PROFILE__ = ${inlineJSON(inlined)};</script>` : "";
-  return `${head(handle + " on gazette")}
-  <div id="root" data-handle="${handle}">
-    <p class="muted gz-loading">Reading up on ${handle}...</p>
+function shell(handle: string, slug: string, inlined: unknown): string {
+  const boot = inlined ? `\n<script>window.__PROJECT__ = ${inlineJSON(inlined)};</script>` : "";
+  return `${head(handle + "/" + slug + " on gazette")}
+  <div id="root" data-handle="${handle}" data-slug="${slug}">
+    <p class="muted gz-loading">Reading up on ${slug}...</p>
   </div>
 </main>${boot}
 <script src="/theme.js?v=33"></script>
@@ -82,8 +83,7 @@ function shell(handle: string, inlined: unknown): string {
 <script src="/hovercard.js?v=33"></script>
 <script src="/rail.js?v=33"></script>
 <script src="/nav.js?v=33"></script>
-<script src="/profile.js?v=33"></script>
+<script src="/project.js?v=33"></script>
 </body>
 </html>`;
 }
-

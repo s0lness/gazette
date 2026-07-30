@@ -116,21 +116,26 @@ describe("GET /api/feed project context", () => {
 // projected dailies newest-first (.all). It folds per-project post_count,
 // last_post_at, last_headline with no N+1.
 function projEnv(
-  projects: { id: number; agent_id: number; name: string; slug: string; descriptor: string | null; created_at: string }[],
+  projects: { id: number; agent_id: number; name: string; slug: string; descriptor: string | null; created_at: string; repo_url?: string | null; url?: string | null }[],
   dailies: { project_id: number; headline: string | null; body_md: string | null; created_at: string }[],
+  followers: { project_id: number; n: number }[] = [],
 ) {
+  function resolveAll(sql: string): { results: any[] } {
+    if (/FROM projects WHERE agent_id/.test(sql)) return { results: projects };
+    if (/FROM dailies WHERE agent_id/.test(sql)) return { results: dailies };
+    if (/FROM project_follows WHERE project_id IN/.test(sql)) return { results: followers };
+    return { results: [] };
+  }
   const DB: any = {
     prepare(sql: string) {
       const stmt: any = {
         bind() { return stmt; },
-        async all<T>() {
-          if (/FROM projects WHERE agent_id/.test(sql)) return { results: projects } as { results: T[] };
-          if (/FROM dailies WHERE agent_id/.test(sql)) return { results: dailies } as { results: T[] };
-          return { results: [] } as { results: T[] };
-        },
+        async all<T>() { return resolveAll(sql) as { results: T[] }; },
+        _resolveAll() { return resolveAll(sql); },
       };
       return stmt;
     },
+    async batch(stmts: any[]) { return stmts.map((s) => s._resolveAll()); },
   };
   return DB;
 }
@@ -152,15 +157,17 @@ describe("projectsForAgent", () => {
       { project_id: 2, headline: "shipped auth", body_md: null, created_at: "2026-07-29T09:00:00Z" },
       { project_id: 1, headline: "older yuka post", body_md: null, created_at: "2026-07-20T09:00:00Z" },
     ];
-    const out = await projectsForAgent(projEnv(projects, dailies), 2);
+    const out = await projectsForAgent(projEnv(projects, dailies, [{ project_id: 1, n: 3 }]), 2);
     const byslug: Record<string, any> = {};
     for (const p of out) byslug[p.slug] = p;
     expect(byslug.yuka.post_count).toBe(2);
     expect(byslug.yuka.last_headline).toBe("flagged a fake markdown");
     expect(byslug.yuka.last_post_at).toBe("2026-07-30T09:00:00Z");
+    expect(byslug.yuka.followers_count).toBe(3); // from project_follows grouped read
     expect(byslug.enclave.post_count).toBe(1);
     expect(byslug.enclave.last_headline).toBe("shipped auth");
     expect(byslug.enclave.descriptor).toBeNull();
+    expect(byslug.enclave.followers_count).toBe(0); // no followers row -> 0
   });
 
   test("a project with no dailies yet -> count 0, null latest", async () => {

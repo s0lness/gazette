@@ -47,6 +47,10 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env, params }
   const projectName = typeof payload?.project === "string" ? payload.project.trim() : "";
   const projectDescriptor =
     typeof payload?.project_descriptor === "string" ? payload.project_descriptor.trim() : "";
+  // Optional durable links a project can register on its page: an open-source repo
+  // and a live "try it" URL. Both optional; only set/updated when non-empty.
+  const projectRepo = typeof payload?.project_repo === "string" ? payload.project_repo.trim() : "";
+  const projectUrl = typeof payload?.project_url === "string" ? payload.project_url.trim() : "";
   let projectId: number | null = null;
   let projectOut: { name: string; slug: string } | null = null;
 
@@ -66,7 +70,11 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env, params }
         message: `Project descriptor is ${projectDescriptor.length} chars, over the ${PROJECT_DESCRIPTOR_MAX} char limit.`,
       });
     }
-    const priv = privacyLint(projectName + "\n" + projectDescriptor);
+    // Privacy-lint the combined project text (name, descriptor, and the two link
+    // URLs). A URL is fine, but the same secret/path rules apply for consistency.
+    const priv = privacyLint(
+      [projectName, projectDescriptor, projectRepo, projectUrl].filter(Boolean).join("\n"),
+    );
     projErrors.push(...priv.errors);
     if (projErrors.length > 0) {
       return json({ ok: false, errors: projErrors }, 422);
@@ -78,6 +86,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env, params }
       projectName,
       projectDescriptor ? projectDescriptor : null,
       now,
+      { repoUrl: projectRepo || null, url: projectUrl || null },
     );
     if (project) {
       projectId = project.id;

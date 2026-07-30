@@ -34,8 +34,8 @@ describe("slugify", () => {
 
 // ---- findOrCreateProject -------------------------------------------------
 // Fake D1 backing a projects table. Records inserts/updates so tests can assert.
-function projDb(seed: Array<{ id: number; agent_id: number; name: string; slug: string; descriptor: string | null }> = []) {
-  const rows = [...seed];
+function projDb(seed: Array<{ id: number; agent_id: number; name: string; slug: string; descriptor: string | null; repo_url?: string | null; url?: string | null }> = []) {
+  const rows = seed.map((r) => ({ repo_url: null, url: null, ...r }));
   let nextId = (rows.reduce((m, r) => Math.max(m, r.id), 0) || 0) + 1;
   const log: { inserts: any[]; updates: any[] } = { inserts: [], updates: [] };
   const DB: any = {
@@ -44,7 +44,7 @@ function projDb(seed: Array<{ id: number; agent_id: number; name: string; slug: 
       const stmt: any = {
         bind(...args: unknown[]) { bound = args; return stmt; },
         async first<T>(): Promise<T | null> {
-          if (/SELECT id, name, descriptor FROM projects/.test(sql)) {
+          if (/SELECT id, name, descriptor.*FROM projects/.test(sql)) {
             const [agentId, slug] = bound as [number, string];
             return (rows.find((r) => r.agent_id === agentId && r.slug === slug) ?? null) as T | null;
           }
@@ -52,17 +52,25 @@ function projDb(seed: Array<{ id: number; agent_id: number; name: string; slug: 
         },
         async run() {
           if (/INSERT INTO projects/.test(sql)) {
-            const [agent_id, name, slug, descriptor] = bound as [number, string, string, string | null];
+            const [agent_id, name, slug, descriptor, repo_url, url] = bound as [number, string, string, string | null, string | null, string | null];
             const id = nextId++;
-            rows.push({ id, agent_id, name, slug, descriptor });
-            log.inserts.push({ id, agent_id, name, slug, descriptor });
+            rows.push({ id, agent_id, name, slug, descriptor, repo_url, url });
+            log.inserts.push({ id, agent_id, name, slug, descriptor, repo_url, url });
             return { meta: { last_row_id: id } };
           }
-          if (/UPDATE projects SET descriptor/.test(sql)) {
-            const [descriptor, id] = bound as [string, number];
-            const r = rows.find((x) => x.id === id);
-            if (r) r.descriptor = descriptor;
-            log.updates.push({ id, descriptor });
+          // UPDATE projects SET <a = ?, b = ?> WHERE id = ? : id is the last bind.
+          const m = /^UPDATE projects SET (.+) WHERE id = \?$/.exec(sql);
+          if (m) {
+            const cols = m[1].split(",").map((c) => c.trim().split(" ")[0]);
+            const id = bound[bound.length - 1] as number;
+            const r = rows.find((x) => x.id === id) as any;
+            const patch: any = { id };
+            cols.forEach((col, i) => {
+              const v = bound[i];
+              if (r) r[col] = v as any;
+              patch[col === "descriptor" ? "descriptor" : col] = v;
+            });
+            log.updates.push(patch);
             return { meta: { changes: 1 } };
           }
           return { meta: {} };
@@ -112,6 +120,40 @@ describe("findOrCreateProject", () => {
   test("same descriptor -> no update", async () => {
     const db = projDb([{ id: 7, agent_id: 2, name: "Yuka", slug: "yuka", descriptor: "same" }]);
     await findOrCreateProject(db, 2, "Yuka", "same", "2026-07-30T00:00:00Z");
+    expect(db._log.updates).toHaveLength(0);
+  });
+
+  test("create sets repo_url + url from links", async () => {
+    const db = projDb();
+    const out = await findOrCreateProject(db, 2, "Yuka", "price tracker", "2026-07-30T00:00:00Z", {
+      repoUrl: "https://github.com/x/yuka",
+      url: "https://yuka.app",
+    });
+    expect(out).toEqual({ id: 1, name: "Yuka", slug: "yuka" });
+    expect(db._log.inserts[0]).toMatchObject({
+      repo_url: "https://github.com/x/yuka",
+      url: "https://yuka.app",
+    });
+  });
+
+  test("reuse updates repo_url + url only when a differing non-empty value is supplied", async () => {
+    const db = projDb([{ id: 7, agent_id: 2, name: "Yuka", slug: "yuka", descriptor: "d", repo_url: null, url: null }]);
+    await findOrCreateProject(db, 2, "Yuka", "", "2026-07-30T00:00:00Z", {
+      repoUrl: "https://github.com/x/yuka",
+    });
+    // repo_url written, url untouched (empty -> not overwritten).
+    const r = db._rows.find((x: any) => x.id === 7);
+    expect(r.repo_url).toBe("https://github.com/x/yuka");
+    expect(r.url).toBeNull();
+    expect(db._log.updates).toHaveLength(1);
+  });
+
+  test("reuse with same repo_url -> no update, with empty links -> no update", async () => {
+    const db = projDb([{ id: 7, agent_id: 2, name: "Yuka", slug: "yuka", descriptor: "d", repo_url: "https://g/x", url: "https://x" }]);
+    await findOrCreateProject(db, 2, "Yuka", "", "2026-07-30T00:00:00Z", {
+      repoUrl: "https://g/x",
+      url: "",
+    });
     expect(db._log.updates).toHaveLength(0);
   });
 });

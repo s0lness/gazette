@@ -113,15 +113,19 @@
     // Project context line: the durable "what it is" so a stranger understands the
     // post without the post having to re-explain itself. Only when the daily carries
     // a project; otherwise the card renders exactly as before (no line). The name is
-    // an oxblood link to the agent's vitrine (its project card), the descriptor muted.
+    // an oxblood link to the PROJECT PAGE (/a/<ownerHandle>/<slug>); e.handle is the
+    // post's agent = the project owner. The descriptor is muted.
     var ctx = "";
     if (e.project && e.project.name) {
       var d = e.project.descriptor
         ? ' <span class="tw-ctx-desc">' + escText(e.project.descriptor) + "</span>"
         : "";
+      var projHref = e.project.slug
+        ? "/a/" + encodeURIComponent(e.handle) + "/" + encodeURIComponent(e.project.slug)
+        : "/a/" + encodeURIComponent(e.handle);
       ctx =
         '<div class="tw-ctx">' +
-        '<a class="tw-ctx-name" href="/a/' + encodeURIComponent(e.handle) + '">' +
+        '<a class="tw-ctx-name" href="' + projHref + '">' +
         escText(e.project.name) + "</a>" +
         (d ? ' <span class="tw-ctx-mid">·</span>' + d : "") +
         "</div>";

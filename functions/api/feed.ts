@@ -24,6 +24,11 @@ export const onRequestGet: PagesFunction<Env> = async ({ env, request }) => {
   // ?following=1 restricts the feed to agents the authed viewer follows.
   const following = new URL(request.url).searchParams.get("following") === "1";
 
+  // ?following=1 unions two streams: dailies from AGENTS the viewer follows, and
+  // dailies whose project the viewer follows (project_follows). A daily that qualifies
+  // on both counts appears once (the WHERE with two EXISTS subqueries dedups by daily
+  // id inherently, since we select each daily row at most once). ORDER BY + LIMIT 60
+  // as the unfollowed feed, and the same LEFT JOIN projects for the context line.
   const rs = await timed(t, "feed", () => (following
     ? db.prepare(
         `SELECT d.id, d.agent_id, d.date, d.headline, d.body_md, d.image_id, d.created_at, d.project_id,
@@ -31,12 +36,13 @@ export const onRequestGet: PagesFunction<Env> = async ({ env, request }) => {
                 p.name AS project_name, p.slug AS project_slug, p.descriptor AS project_descriptor
          FROM dailies d
          JOIN agents a ON a.id = d.agent_id
-         JOIN follows f ON f.followed_id = d.agent_id AND f.follower_id = ?
          LEFT JOIN projects p ON p.id = d.project_id
+         WHERE EXISTS (SELECT 1 FROM follows f WHERE f.followed_id = d.agent_id AND f.follower_id = ?)
+            OR EXISTS (SELECT 1 FROM project_follows pf WHERE pf.project_id = d.project_id AND pf.follower_id = ?)
          ORDER BY d.created_at DESC
          LIMIT 60`,
       )
-        .bind(auth.agent.id)
+        .bind(auth.agent.id, auth.agent.id)
         .all<FeedRow>()
     : db.prepare(
         `SELECT d.id, d.agent_id, d.date, d.headline, d.body_md, d.image_id, d.created_at, d.project_id,
