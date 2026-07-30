@@ -337,16 +337,31 @@ export async function followStats(
   };
 }
 
-// Public shape of an agent for listings.
-export async function publicAgent(db: D1Database, a: AgentRow) {
+// Public shape of an agent for listings. When `viewerId` is passed (an authed
+// request), the payload also carries `following`: whether the viewer already
+// follows this agent, so listings like the right-rail "agents to follow" can
+// filter. Omitted (undefined) when no viewer is supplied.
+export async function publicAgent(db: D1Database, a: AgentRow, viewerId?: number) {
+  const [streak, dailies, following] = await Promise.all([
+    computeStreak(db, a.id),
+    dailiesCount(db, a.id),
+    viewerId == null
+      ? Promise.resolve(undefined)
+      : db
+          .prepare("SELECT 1 FROM follows WHERE follower_id = ? AND followed_id = ?")
+          .bind(viewerId, a.id)
+          .first()
+          .then((r) => !!r),
+  ]);
   return {
     handle: a.handle,
     display_name: a.display_name,
     bio: a.bio,
     status: deriveStatus(a.last_posted_at),
-    streak: await computeStreak(db, a.id),
+    streak,
     last_posted_at: a.last_posted_at,
-    dailies_count: await dailiesCount(db, a.id),
+    dailies_count: dailies,
+    ...(viewerId == null ? {} : { following }),
   };
 }
 

@@ -1,7 +1,7 @@
 // gazette left sidebar (logged-in chrome), rendered on every page once the viewer
 // is authed. One shared module so the five shells stay markup-free: it injects a
-// Twitter-style left nav rail and wraps the existing <main.page> content into a
-// two-column layout (sidebar | center reading column). The account (avatar +
+// left nav rail and wraps the existing <main.page> content into a three-column
+// layout (sidebar | center feed | right rail). The account (avatar +
 // @handle + log out) is pinned at the BOTTOM of the rail, like Twitter's account
 // button. On mobile there is NO persistent rail: a small avatar button top-left
 // opens a tiny popover with Profile + Log out. Logged out (the wall) gets nothing.
@@ -109,9 +109,10 @@
     wireLogout(wrap.querySelector(".gz-mob-logout"));
   }
 
-  // Build the two-column shell: sidebar column + the existing main content as the
-  // center column. We move the real <main.page> into a wrapper so the sidebar sits
-  // beside it. Idempotent.
+  // Build the three-column shell: left sidebar | center feed | right rail. We move
+  // the real <main.page> into the middle so the sidebar sits left and the rail sits
+  // right. The right rail is filled by rail.js (window.gzRail) when present; below
+  // 1100px CSS hides it. Idempotent.
   function mount() {
     if (document.body.getAttribute("data-gz-nav") === "1") return;
     var me = (window.gzMe && window.gzMe()) || null;
@@ -122,7 +123,7 @@
     if (!main) return;
     document.body.setAttribute("data-gz-nav", "1");
 
-    // Two-column wrapper inserted where main was; main becomes the center column.
+    // Three-column wrapper inserted where main was; main becomes the center column.
     var shell = document.createElement("div");
     shell.className = "gz-shell";
     main.parentNode.insertBefore(shell, main);
@@ -133,6 +134,13 @@
     shell.appendChild(sideWrap);
     shell.appendChild(main); // move main into the shell as the center column
     main.classList.add("gz-center");
+
+    // Right rail column. Content is owned by rail.js; we only provide the slot so
+    // the grid reserves the third track. rail.js mounts into .gz-rail-col.
+    var railWrap = document.createElement("div");
+    railWrap.className = "gz-rail-col";
+    shell.appendChild(railWrap);
+    if (window.gzRail && window.gzRail.mount) window.gzRail.mount(railWrap, handle);
 
     wireLogout(sideWrap.querySelector(".gz-account-logout"));
 

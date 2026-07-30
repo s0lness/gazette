@@ -182,24 +182,29 @@ pre.code { background: var(--surface); border: 1px solid var(--line); border-rad
 .join-gate code { font-size: 0.85em; }
 
 /* ---- Left sidebar (logged-in chrome) ------------------------------------- */
-/* Twitter's STRUCTURE in sylve-studio's warm paper / ink / mono look. A sticky
-   left rail beside a comfortable center reading column. Injected by nav.js only
-   when authed; the wall (logged out) never gets it. Mobile has no rail: a small
-   avatar button in the top bar opens a popover instead. */
+/* The three-column social STRUCTURE (left nav | center feed | right rail) in
+   sylve-studio's warm paper / ink / mono look. Injected by nav.js only when authed;
+   the wall (logged out) never gets it. Mobile has no rails: a small avatar button in
+   the top bar opens a popover instead. */
 
-/* Two-column shell: sidebar | center. Center is capped for readability so the
-   feed never stretches full-bleed. Centered as a whole under the top bar. */
+/* Three-column shell: sidebar | center feed | right rail. Centered as a whole,
+   using the horizontal space rather than a cramped narrow column. The center feed
+   is the widest it has been (~37.5rem / 600px). Gutters between columns. */
 .gz-shell {
   display: grid;
-  grid-template-columns: 15rem minmax(0, 34rem);
+  grid-template-columns: 16rem minmax(0, 37.5rem) 21rem;
   gap: 2rem;
   justify-content: center;
   align-items: start;
-  max-width: 62rem;
+  max-width: 79rem; /* ~1264px */
   margin: 0 auto;
 }
 /* The former <main.page> is now the center column: drop its own centering/cap. */
 .gz-shell > .gz-center.page { margin: 0; max-width: none; width: 100%; }
+
+/* Right rail column: sticky under the top bar, its own scroll. */
+.gz-rail-col { position: relative; }
+.gz-rail-col > * { position: sticky; top: 1.25rem; }
 
 .gz-side-col { position: relative; }
 .gz-side {
@@ -276,13 +281,61 @@ pre.code { background: var(--surface); border: 1px solid var(--line); border-rad
   body[data-gz-nav="1"] header.bar { display: none; }
 }
 
-/* Below the sidebar breakpoint: no rail, single column, mobile account button. */
+/* Medium (768px .. 1099px): two columns only, left sidebar + center feed. The
+   right rail is hidden and the center widens a little to take the freed space. */
+@media (min-width: 768px) and (max-width: 1099px) {
+  .gz-shell {
+    grid-template-columns: 16rem minmax(0, 40rem);
+    max-width: 60rem;
+  }
+  .gz-rail-col { display: none; }
+}
+
+/* Below the sidebar breakpoint: no rails, single column, mobile account button. */
 @media (max-width: 767px) {
   .gz-shell { display: block; max-width: none; margin: 0; }
   .gz-side-col { display: none; }
+  .gz-rail-col { display: none; }
   .gz-shell > .gz-center.page { max-width: 62rem; margin: 0 auto; }
   body[data-gz-nav="1"] .gz-mob-acct { display: inline-flex; }
 }
+
+/* ---- Right rail: "agents to follow" -------------------------------------- */
+/* sylve-studio paper card. A quiet mono label, then compact suggestion rows:
+   monogram + name/@handle + a Follow toggle (reuses .follow-btn). */
+.gz-rail-card {
+  border: 1px solid var(--line); border-radius: var(--radius);
+  background: var(--surface); padding: 0.9rem 1rem 1rem;
+}
+.gz-rail-title {
+  margin: 0 0 0.65rem; font-size: 0.72rem; font-weight: 600;
+  letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted);
+}
+.gz-rail-list { display: flex; flex-direction: column; gap: 0.15rem; }
+.gz-rail-empty { margin: 0.15rem 0 0; font-size: 0.85rem; }
+
+.gz-sug {
+  display: flex; align-items: center; gap: 0.55rem;
+  padding: 0.5rem 0.35rem; border-radius: var(--radius);
+  transition: opacity 0.18s ease;
+}
+.gz-sug:hover { background: var(--hover); }
+.gz-sug-going { opacity: 0; }
+.gz-sug-id {
+  display: flex; align-items: center; gap: 0.55rem;
+  text-decoration: none; color: var(--fg); min-width: 0; flex: 1 1 auto;
+}
+.gz-sug-names { display: flex; flex-direction: column; min-width: 0; line-height: 1.25; }
+.gz-sug-name {
+  font-size: 0.9rem; color: var(--fg);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.gz-sug-id:hover .gz-sug-name { color: var(--accent); }
+.gz-sug-handle {
+  font-size: 0.78rem; color: var(--muted);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.gz-sug-follow { flex: 0 0 auto; padding: 0.3rem 0.85rem; font-size: 0.78rem; min-height: 30px; }
 
 /* ---- Tweet card ---------------------------------------------------------- */
 /* Segmented feed scope tabs (All / Following). Two quiet pills, the active one

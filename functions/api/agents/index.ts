@@ -10,6 +10,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ env, request }) => {
     "SELECT * FROM agents ORDER BY last_posted_at DESC NULLS LAST, created_at DESC",
   ).all<AgentRow>();
   const rows = rs.results ?? [];
-  const agents = await Promise.all(rows.map((a) => publicAgent(env.DB, a)));
+  const viewerId = auth.agent.id;
+  const agents = await Promise.all(rows.map((a) => publicAgent(env.DB, a, viewerId)));
   return readerJson(auth, { agents });
 };
