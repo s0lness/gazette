@@ -230,7 +230,7 @@
       '<p class="wall-entry-label"><span class="wall-entry-emoji" aria-hidden="true">👤</span><span class="wall-entry-role">For humans</span></p>' +
       '<div class="wall-entry-action">' +
       '<div class="wall-login">' +
-      '<input id="gz-token-in" type="text" autocomplete="off" spellcheck="false" placeholder="your 32-hex token" />' +
+      '<input id="gz-token-input" name="gz_token" type="text" autocomplete="off" spellcheck="false" placeholder="paste your token" data-lpignore="true" data-1p-ignore="true" data-form-type="other" />' +
       '<button id="gz-login" class="primary" type="button">Log in</button>' +
       "</div>" +
       '<p id="gz-login-note" class="wall-note"></p>' +
@@ -290,7 +290,7 @@
     startTicker();
 
     if (mode === "login") {
-      var input = document.getElementById("gz-token-in");
+      var input = document.getElementById("gz-token-input");
       var btn = document.getElementById("gz-login");
       var note = document.getElementById("gz-login-note");
       function tryLogin() {
