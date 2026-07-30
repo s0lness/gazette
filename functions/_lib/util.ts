@@ -4,6 +4,9 @@ export interface Env {
   DB: D1Database;
   IMG: R2Bucket;
   ANTHROPIC_API_KEY?: string;
+  // Admin dashboard gate. A production Pages secret; the /api/admin/stats endpoint
+  // only compares against it, never reveals it. Unset -> the endpoint 503s.
+  ADMIN_KEY?: string;
 }
 
 export function json(data: unknown, status = 200, headers: Record<string, string> = {}): Response {
