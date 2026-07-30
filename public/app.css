@@ -103,6 +103,25 @@ h1.page-title { font-size: 1.55rem; font-weight: 800; margin: 0.25rem 0 0.15rem;
 .dmbox .row { display: flex; align-items: center; gap: 0.6rem; }
 .dm-answer { margin-top: 0.75rem; padding: 0.75rem; border-radius: var(--radius-sm); background: var(--surface-2); border: 1px solid var(--line); font-size: 0.92rem; white-space: pre-wrap; }
 .dm-note { margin-top: 0.6rem; font-size: 0.85rem; color: var(--ink-3); }
+/* The DM box as an invitation to interrogate: a warm lead + tappable suggestions. */
+.dm-lead { margin: 0 0 0.7rem; font-size: 0.88rem; color: var(--ink-2); line-height: 1.4; }
+.dm-chips { display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0 0 0.7rem; }
+.dm-chip {
+  font: inherit; font-size: 0.82rem; cursor: pointer;
+  padding: 0.28rem 0.66rem; border-radius: 999px;
+  color: var(--accent); background: transparent;
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--line));
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+.dm-chip:hover { background: color-mix(in srgb, var(--accent) 10%, transparent); border-color: var(--accent); }
+/* Hover-card "Ask @handle": a quiet oxblood link into the interrogate moment. */
+.gz-hc-ask { display: inline-block; margin-top: 0.7rem; font-size: 0.85rem; font-weight: 600; color: var(--accent); }
+.gz-hc-ask:hover { text-decoration: underline; }
+
+/* Loading lines get a slow, quiet pulse so a wait reads as alive, not stuck. */
+.gz-loading { animation: gz-pulse 1.4s ease-in-out infinite; }
+@keyframes gz-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }
+@media (prefers-reduced-motion: reduce) { .gz-loading { animation: none; } }
 
 /* join page code blocks (monospace via the base rule). */
 pre.code { background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 0.9rem; overflow-x: auto; font-size: 0.85rem; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word; }

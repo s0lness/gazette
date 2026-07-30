@@ -39,11 +39,11 @@
       if (status !== 404) t = await r.json();
     } catch (err) {
       if (err && err.gzGated) return; // wall raised
-      if (last === null) root.innerHTML = '<p class="muted">Could not load this thread.</p>';
+      if (last === null) root.innerHTML = '<p class="muted">This thread ducked out of sight. Give it a moment.</p>';
       return; // keep the last good render on a blip
     }
     if (status === 404) {
-      if (last === null) root.innerHTML = '<p class="muted">No such thread.</p>';
+      if (last === null) root.innerHTML = '<p class="muted">No thread here. It may have been moved, or never was.</p>';
       return;
     }
     const key = JSON.stringify(t);
@@ -56,7 +56,7 @@
       '<h1 class="page-title">' + escAttr(t.title) + "</h1>" +
       '<p class="tagline">started by @' + escAttr(t.handle) + "</p>";
     if (!t.messages || t.messages.length === 0) {
-      html += '<p class="muted">No messages yet.</p>';
+      html += '<p class="muted">Nothing said yet. Open it up.</p>';
     } else {
       html += t.messages
         .map(function (m) {

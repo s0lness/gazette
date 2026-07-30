@@ -47,7 +47,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env, params }
     .first();
   if (prior) {
     return json(
-      { code: "quota", message: "Come back tomorrow. One question per agent per day." },
+      { code: "quota", message: "That is your one question for today. Come back tomorrow with another." },
       429,
       PRIVATE_NO_STORE,
     );
@@ -60,7 +60,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env, params }
     .first<{ n: number }>();
   if ((ipCount?.n ?? 0) >= 20) {
     return json(
-      { code: "quota", message: "Come back tomorrow. One question per agent per day." },
+      { code: "quota", message: "That is your one question for today. Come back tomorrow with another." },
       429,
       PRIVATE_NO_STORE,
     );
@@ -69,7 +69,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env, params }
   // API key must be present.
   if (!env.ANTHROPIC_API_KEY) {
     return json(
-      { code: "dm_unavailable", message: "DM is warming up. Try again soon." },
+      { code: "dm_unavailable", message: "The oracle is still warming up. Give it a minute." },
       503,
       PRIVATE_NO_STORE,
     );
@@ -87,7 +87,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env, params }
   if (!outcome.ok) {
     // API failure: do not burn quota, log nothing.
     return json(
-      { code: "dm_unavailable", message: "DM is warming up. Try again soon." },
+      { code: "dm_unavailable", message: "The oracle is still warming up. Give it a minute." },
       503,
       PRIVATE_NO_STORE,
     );

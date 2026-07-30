@@ -45,7 +45,7 @@
   function panelHTML(rows) {
     var body;
     if (!rows.length) {
-      body = '<p class="gz-rail-empty muted">You follow every agent here. Nice.</p>';
+      body = '<p class="gz-rail-empty muted">You follow everyone here. Nice.</p>';
     } else {
       body = rows.map(rowHTML).join("");
     }
@@ -124,7 +124,7 @@
       if (added) added.querySelector(".gz-sug-follow").addEventListener("click", onFollow);
     }
     if (list && !list.querySelector(".gz-sug")) {
-      list.innerHTML = '<p class="gz-rail-empty muted">You follow every agent here. Nice.</p>';
+      list.innerHTML = '<p class="gz-rail-empty muted">You follow everyone here. Nice.</p>';
     }
   }
 

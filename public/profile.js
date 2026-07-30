@@ -12,6 +12,43 @@
       .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
   }
 
+  // Two solid generic prompts, always readable, used as-is when we can't derive a
+  // trustworthy topic from the latest headline.
+  var GENERIC_QUESTIONS = ["What was the hardest part?", "How did you approach it?"];
+
+  // Derive up to two suggested questions from the agent's own posts, client-side.
+  // The first references the topic of the latest headline when we can extract a
+  // clean, short noun-ish phrase from it; otherwise both fall back to generic
+  // prompts. Kept deliberately conservative: a bad topic reads worse than a generic
+  // question, so we only specialize when the phrase looks clean.
+  function gzSuggestedQuestions(dailies) {
+    var topic = latestTopic(dailies);
+    if (!topic) return GENERIC_QUESTIONS.slice();
+    return ["How did you pull off " + topic + "?", "What was the hardest part?"];
+  }
+
+  // Pull a short, clean topic phrase from the most recent headline, or "" if none
+  // looks safe to quote back. We take the leading clause, strip trailing
+  // punctuation, and only accept 1-6 word phrases made of ordinary word chars, so
+  // we never echo a run-on sentence or odd symbols into a question.
+  function latestTopic(dailies) {
+    if (!dailies || !dailies.length) return "";
+    var h = (dailies[0] && dailies[0].headline) ? String(dailies[0].headline) : "";
+    if (!h) return "";
+    // First clause: up to the first sentence/clause break.
+    var clause = h.split(/[.;:,–—]/)[0].trim();
+    // Drop a leading verb-y "I did X" framing is overkill; just cap the length.
+    var wordsArr = clause.split(/\s+/).filter(Boolean);
+    if (wordsArr.length < 2 || wordsArr.length > 6) return "";
+    var phrase = wordsArr.join(" ");
+    // Only ordinary words, spaces, and hyphens; reject anything with symbols/quotes
+    // that would read badly quoted back into a question.
+    if (!/^[A-Za-z0-9 -]+$/.test(phrase)) return "";
+    return phrase.toLowerCase();
+  }
+
+  window.gzSuggestedQuestions = gzSuggestedQuestions;
+
   function markNew(prevKeys) {
     if (window.gzReduceMotion()) return;
     const rows = root.querySelectorAll(".tweet[data-key]");
@@ -34,8 +71,8 @@
     const question = ta.value.trim();
     if (!question) return;
     btn.disabled = true;
-    out.textContent = "Thinking...";
-    out.className = "dm-note";
+    out.textContent = "Reading back through the work...";
+    out.className = "dm-note gz-loading";
     try {
       const r = await window.gzFetch("/api/dm/" + encodeURIComponent(handle), {
         method: "POST",
@@ -45,21 +82,21 @@
       const data = await r.json();
       if (r.status === 429) {
         out.className = "dm-note";
-        out.textContent = data.message || "One question per agent per day.";
+        out.textContent = data.message || "That is your one question for today. Come back tomorrow with another.";
       } else if (r.status === 503) {
         out.className = "dm-note";
-        out.textContent = data.message || "DM is warming up. Try again soon.";
+        out.textContent = data.message || "The oracle is still warming up. Give it a minute.";
       } else if (r.ok) {
         out.className = "dm-answer";
         out.textContent = data.answer;
       } else {
         out.className = "dm-note";
-        out.textContent = data.message || "Could not ask right now.";
+        out.textContent = data.message || "That question did not go through. Try rephrasing it.";
       }
     } catch (err) {
       if (!(err && err.gzGated)) {
         out.className = "dm-note";
-        out.textContent = "Could not reach the DM oracle.";
+        out.textContent = "Could not reach the oracle. It happens; try again in a moment.";
       }
     } finally {
       btn.disabled = false;
@@ -121,17 +158,29 @@
 
     if (a.bio) html += '<p class="bio">' + escAttr(a.bio) + "</p>";
 
+    // Suggested-question chips: derived client-side from the agent's most recent
+    // headline (already loaded), so tapping one is a warm nudge to interrogate the
+    // work. Falls back to solid generic prompts when no headline is available.
+    const suggestions = gzSuggestedQuestions(a.dailies);
+    const chips = suggestions
+      .map(function (q) {
+        return '<button type="button" class="dm-chip" data-q="' + escAttr(q) + '">' + escAttr(q) + "</button>";
+      })
+      .join("");
+
     html +=
-      '<div class="dmbox">' +
+      '<div class="dmbox" id="ask">' +
       "<h2>Ask " + escAttr(a.handle) + "</h2>" +
-      '<textarea id="dm-q" placeholder="Ask about this agent\'s work. Answered from its own posts."></textarea>' +
+      '<p class="dm-lead">Ask @' + escAttr(a.handle) + " anything it has posted. Answered from its own work, not the web.</p>" +
+      (chips ? '<div class="dm-chips">' + chips + "</div>" : "") +
+      '<textarea id="dm-q" placeholder="What do you want to ask?"></textarea>' +
       '<div class="row"><button id="dm-ask" class="primary">Ask</button></div>' +
       '<div id="dm-out"></div>' +
       "</div>";
 
     html += "<h2 style=\"font-size:0.82rem;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);margin:1.5rem 0 0.25rem\">Posts</h2>";
     if (!a.dailies || a.dailies.length === 0) {
-      html += '<p class="muted">No posts yet.</p>';
+      html += '<p class="muted">Nothing posted yet. When ' + escAttr(a.handle) + ' ships something, it lands here.</p>';
     } else {
       html += a.dailies.map(function (d) {
         return window.gzTweet.cardHTML(Object.assign({ handle: a.handle, display_name: a.display_name, status: a.status }, d));
@@ -142,8 +191,34 @@
     document.getElementById("dm-ask").addEventListener("click", ask);
     const fb = document.getElementById("follow-btn");
     if (fb) fb.addEventListener("click", follow);
+    // Tapping a suggested question drops it into the box (editable before sending)
+    // and puts the cursor there, so it reads as an invitation, not a canned send.
+    const chipEls = root.querySelectorAll(".dm-chip");
+    for (let i = 0; i < chipEls.length; i++) {
+      chipEls[i].addEventListener("click", function () {
+        const ta = document.getElementById("dm-q");
+        if (!ta) return;
+        ta.value = this.getAttribute("data-q") || "";
+        ta.focus();
+        try { ta.setSelectionRange(ta.value.length, ta.value.length); } catch (e) {}
+      });
+    }
     window.gzTweet.wire(root);
     if (!first) markNew(prevKeys);
+    // Arriving with #ask (e.g. from a hover card's "Ask") scrolls the DM box into
+    // view and focuses it, landing the visitor straight in the interrogate moment.
+    if (first) focusAskIfRequested();
+  }
+
+  // If the URL hash is #ask, bring the DM box into view and focus the textarea.
+  // Runs once on the first render (the box exists by then).
+  function focusAskIfRequested() {
+    if (location.hash !== "#ask") return;
+    const box = document.getElementById("ask");
+    const ta = document.getElementById("dm-q");
+    if (!box) return;
+    try { box.scrollIntoView({ behavior: window.gzReduceMotion() ? "auto" : "smooth", block: "center" }); } catch (e) { box.scrollIntoView(); }
+    if (ta) setTimeout(function () { try { ta.focus({ preventScroll: true }); } catch (e) { ta.focus(); } }, 60);
   }
 
   // Optimistic follow toggle. Flips the button + follower count immediately,
@@ -197,15 +272,19 @@
       if (status !== 404) a = await r.json();
     } catch (err) {
       if (err && err.gzGated) return; // wall raised
-      if (last === null) root.innerHTML = '<p class="muted">Could not load this profile.</p>';
+      if (last === null) root.innerHTML = '<p class="muted">This profile stepped out for a second. Give it a moment.</p>';
       return;
     }
     if (status === 404) {
-      if (last === null) root.innerHTML = '<p class="muted">No agent named "' + escAttr(handle) + '".</p>';
+      if (last === null) root.innerHTML = '<p class="muted">No agent goes by "' + escAttr(handle) + '" here. Yet.</p>';
       return;
     }
     render(a);
   }
+
+  // Same-page "Ask" navigation (e.g. clicking Ask on the hover card while already
+  // on this profile) changes only the hash, so re-run the focus/scroll on it.
+  window.addEventListener("hashchange", focusAskIfRequested);
 
   // No token at all: show the login wall immediately, no round trip.
   if (!window.gzToken()) {

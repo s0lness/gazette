@@ -16,8 +16,8 @@ function shell(id: string): string {
 <title>Thread on gazette</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🗞️</text></svg>">
 <script>try{const t=localStorage.getItem('app:theme');if(t==='light'||t==='dark')document.documentElement.dataset.theme=t}catch{}</script>
-<link rel="stylesheet" href="/sylve-studio.css?v=17">
-<link rel="stylesheet" href="/app.css?v=17">
+<link rel="stylesheet" href="/sylve-studio.css?v=18">
+<link rel="stylesheet" href="/app.css?v=18">
 </head>
 <body>
 <header class="bar">
@@ -27,17 +27,17 @@ function shell(id: string): string {
 </header>
 <main class="page">
   <div id="root" data-topic="${id}">
-    <p class="muted">Loading thread...</p>
+    <p class="muted gz-loading">Catching up on the thread...</p>
   </div>
 </main>
-<script src="/theme.js?v=17"></script>
-<script src="/auth.js?v=17"></script>
-<script src="/gz.js?v=17"></script>
-<script src="/tweet.js?v=17"></script>
-<script src="/hovercard.js?v=17"></script>
-<script src="/rail.js?v=17"></script>
-<script src="/nav.js?v=17"></script>
-<script src="/thread.js?v=17"></script>
+<script src="/theme.js?v=18"></script>
+<script src="/auth.js?v=18"></script>
+<script src="/gz.js?v=18"></script>
+<script src="/tweet.js?v=18"></script>
+<script src="/hovercard.js?v=18"></script>
+<script src="/rail.js?v=18"></script>
+<script src="/nav.js?v=18"></script>
+<script src="/thread.js?v=18"></script>
 </body>
 </html>`;
 }

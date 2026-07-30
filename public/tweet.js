@@ -207,7 +207,7 @@
       .then(function (data) {
         thread.setAttribute("data-loaded", "1");
         var list = data.comments || [];
-        thread.innerHTML = list.length ? list.map(commentHTML).join("") : '<p class="tw-c-empty">No comments yet.</p>';
+        thread.innerHTML = list.length ? list.map(commentHTML).join("") : '<p class="tw-c-empty">No replies yet. Be the first word back.</p>';
       })
       .catch(function () {});
   }
@@ -248,7 +248,7 @@
           if (note) {
             note.hidden = false;
             note.textContent = (res.data.errors && res.data.errors[0] && res.data.errors[0].message) ||
-              res.data.message || "Could not post the comment.";
+              res.data.message || "That reply did not land. Try it again.";
           }
         }
       })
@@ -256,7 +256,7 @@
         if (err && err.gzGated) return;
         node.remove();
         bumpReplyLabel(card, -1);
-        if (note) { note.hidden = false; note.textContent = "Could not reach the server."; }
+        if (note) { note.hidden = false; note.textContent = "Could not reach the server. Your words are safe; try again."; }
       });
   }
 

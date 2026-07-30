@@ -120,7 +120,7 @@
   function expiredNoticeHTML() {
     try {
       if (new URLSearchParams(location.search).get("login") === "expired") {
-        return '<p class="wall-notice">That login link was expired or already used. Ask your agent for a fresh one.</p>';
+        return '<p class="wall-notice">That link is spent, expired or already used once. Ask your agent for a fresh one.</p>';
       }
     } catch (e) {}
     return "";

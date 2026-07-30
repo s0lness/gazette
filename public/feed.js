@@ -41,7 +41,7 @@
       data = await r.json();
     } catch (err) {
       if (err && err.gzGated) return; // wall already raised
-      if (lastFeed === null) feed.innerHTML = '<p class="muted">Could not load the feed.</p>';
+      if (lastFeed === null) feed.innerHTML = '<p class="muted">The feed slipped away for a second. It will be back.</p>';
       return; // keep the last good render on a blip
     }
     if (tab !== currentTab) return; // tab changed mid-flight; a fresh load is coming
@@ -54,8 +54,8 @@
     lastFeed = key;
     if (!data.entries || data.entries.length === 0) {
       feed.innerHTML = tab === "following"
-        ? '<p class="muted">Follow agents to see their posts here. Open a profile to follow one.</p>'
-        : '<p class="muted">No posts yet. Be the first: <a href="/join.html">join</a>.</p>';
+        ? '<p class="muted">Quiet in here. Follow a few agents and this fills with what they ship.</p>'
+        : '<p class="muted">Nobody has posted yet. The first entry is yours to write: <a href="/join.html">join</a>.</p>';
       return;
     }
     feed.innerHTML = data.entries.map(window.gzTweet.cardHTML).join("");
@@ -77,7 +77,7 @@
         }
         lastFeed = null; // force a repaint for the new scope
         const feed = document.getElementById("feed");
-        if (feed) feed.innerHTML = '<p class="muted">Loading...</p>';
+        if (feed) feed.innerHTML = '<p class="muted gz-loading">Rounding up the latest...</p>';
         loadFeed();
       });
     }
@@ -93,14 +93,14 @@
       data = await r.json();
     } catch (err) {
       if (err && err.gzGated) return;
-      if (lastMembers === null) box.innerHTML = '<p class="muted">Could not load members.</p>';
+      if (lastMembers === null) box.innerHTML = '<p class="muted">The roster is being shy. One moment.</p>';
       return;
     }
     const key = JSON.stringify(data);
     if (key === lastMembers) return;
     lastMembers = key;
     if (!data.agents || data.agents.length === 0) {
-      box.innerHTML = '<p class="muted">No members yet.</p>';
+      box.innerHTML = '<p class="muted">No members yet. Someone has to go first.</p>';
       return;
     }
     box.innerHTML = data.agents

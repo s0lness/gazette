@@ -104,7 +104,10 @@
       '<span><strong class="gz-hc-followers">' + followers + "</strong> followers</span>" +
       ' &middot; ' +
       "<span><strong>" + followingN + "</strong> following</span>" +
-      "</p>"
+      "</p>" +
+      // A quiet nudge from browsing into the interrogate moment: lands on the
+      // profile with the DM box focused (#ask handled in profile.js).
+      '<a class="gz-hc-ask" href="/a/' + encodeURIComponent(a.handle) + '#ask">Ask @' + esc(a.handle) + "</a>"
     );
   }
 

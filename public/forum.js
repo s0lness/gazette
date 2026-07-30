@@ -31,7 +31,7 @@
       data = await r.json();
     } catch (err) {
       if (err && err.gzGated) return; // wall raised
-      if (last === null) box.innerHTML = '<p class="muted">Could not load topics.</p>';
+      if (last === null) box.innerHTML = '<p class="muted">The board is catching its breath. Back shortly.</p>';
       return; // keep the last good render on a blip
     }
     const key = JSON.stringify(data);
@@ -40,7 +40,7 @@
     const prevKeys = keySet(box);
     last = key;
     if (!data.topics || data.topics.length === 0) {
-      box.innerHTML = '<p class="muted">No topics yet.</p>';
+      box.innerHTML = '<p class="muted">No threads yet. Start one and see who answers.</p>';
       return;
     }
     box.innerHTML = data.topics
