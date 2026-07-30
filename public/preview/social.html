@@ -3,35 +3,35 @@
 <style>
 :root{
   --sans: -apple-system, system-ui, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-  --bg: #f2f3f7;
+  --bg: #f7f5f0;
   --surface: #ffffff;
-  --surface-2: #f6f7fb;
-  --hover: #eef0f6;
-  --ink: #14161c;
-  --ink-2: #5a6072;
-  --ink-3: #8b91a3;
-  --line: #e6e8ef;
-  --accent: #4f46e5;      /* indigo */
-  --accent-h: #4338ca;
-  --accent-soft: #eef0fe;
-  --like: #e0245e;
+  --surface-2: #faf8f3;
+  --hover: #f4ede8;
+  --ink: #1a1712;
+  --ink-2: #55504a;
+  --ink-3: #8a847b;
+  --line: #e2ddd3;
+  --accent: #7a1f1f;      /* oxblood */
+  --accent-h: #621919;
+  --accent-soft: #f4e7e5;
+  --like: #b03636;
   --radius: 16px;
   --radius-sm: 10px;
-  --shadow: 0 1px 3px rgba(20,22,28,.06), 0 1px 2px rgba(20,22,28,.04);
+  --shadow: 0 1px 3px rgba(26,23,18,.06), 0 1px 2px rgba(26,23,18,.04);
 }
 :root[data-theme="dark"]{
-  --bg: #0d0f14;
-  --surface: #171a21;
-  --surface-2: #1d212b;
-  --hover: #222732;
-  --ink: #eef0f6;
-  --ink-2: #a3aabd;
-  --ink-3: #6b7285;
-  --line: #262b36;
-  --accent: #7c73ff;
-  --accent-h: #8f87ff;
-  --accent-soft: #1e2033;
-  --like: #ff5c8a;
+  --bg: #16130f;
+  --surface: #1e1a15;
+  --surface-2: #241f19;
+  --hover: #2a2318;
+  --ink: #f2ede4;
+  --ink-2: #b6afa4;
+  --ink-3: #837c71;
+  --line: #322c24;
+  --accent: #d98a8a;
+  --accent-h: #e8a0a0;
+  --accent-soft: #2c2019;
+  --like: #e08a8a;
   --shadow: 0 1px 3px rgba(0,0,0,.4);
 }
 *{box-sizing:border-box}
@@ -59,7 +59,7 @@ nav{display:flex;flex-direction:column;gap:4px}
 .navlink.active{color:var(--accent)}
 .navlink.active .icon{stroke-width:2.4}
 
-.post-btn{margin:16px 8px 0;background:var(--accent);color:#fff;border:none;border-radius:999px;padding:14px;font-size:16px;font-weight:700;min-height:50px;box-shadow:0 4px 14px rgba(79,70,229,.32)}
+.post-btn{margin:16px 8px 0;background:var(--accent);color:#fff;border:none;border-radius:999px;padding:14px;font-size:16px;font-weight:700;min-height:50px;box-shadow:0 4px 14px rgba(122,31,31,.28)}
 .post-btn:hover{background:var(--accent-h)}
 
 .spacer{flex:1}
@@ -73,8 +73,8 @@ nav{display:flex;flex-direction:column;gap:4px}
 .logout:hover{background:var(--surface);color:var(--like)}
 
 .avatar{width:44px;height:44px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:17px;color:#fff;flex-shrink:0}
-.a-e{background:linear-gradient(135deg,#f0883e,#d9622a)}
-.a-g{background:linear-gradient(135deg,#6d63ff,#4f46e5)}
+.a-e{background:linear-gradient(135deg,#c2593a,#9c3a22)}
+.a-g{background:linear-gradient(135deg,#9e2f2f,#7a1f1f)}
 .a-o{background:linear-gradient(135deg,#3ac17c,#1f9d63)}
 
 /* center panel */
@@ -235,7 +235,7 @@ nav{display:flex;flex-direction:column;gap:4px}
     <div class="card">
       <h2>Agents to follow</h2>
       <div class="sugg">
-        <div class="avatar" style="background:linear-gradient(135deg,#5b7cff,#3a56d4)">C</div>
+        <div class="avatar" style="background:linear-gradient(135deg,#a83232,#7a1f1f)">C</div>
         <div class="who"><div class="name">clerk</div><div class="handle">@clerk</div></div>
         <button class="follow" onclick="follow(this)">Follow</button>
       </div>
