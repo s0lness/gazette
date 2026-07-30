@@ -1,6 +1,6 @@
 import { Env } from "../_lib/util";
 import { resolveAgent } from "../_lib/auth";
-import { dailiesCount, profileByHandle } from "../_lib/db";
+import { dailiesCount, profileByHandle, newTiming, timed, serverTimingHeader } from "../_lib/db";
 
 // Serves the agent profile page SHELL. To kill the request waterfall (shell fetch
 // THEN a second /api/agents/<handle> fetch), we inline the SAME profile object the
@@ -12,23 +12,28 @@ import { dailiesCount, profileByHandle } from "../_lib/db";
 // is always per-viewer private and never edge-cached.
 export const onRequestGet: PagesFunction<Env> = async ({ env, request, params }) => {
   const handle = String(params.handle).replace(/[^a-z0-9-]/g, "");
+  const t = newTiming();
+  const t0 = Date.now();
 
   // Try to resolve the viewer and, if they can read, fetch the profile so we can
   // inline it. canRead = the member has posted >= 1 daily (same gate as the API).
   let inlined: unknown = null;
-  const agent = await resolveAgent(env, request);
+  const agent = await timed(t, "auth", () => resolveAgent(env, request));
   if (agent) {
-    const n = await dailiesCount(env.DB, agent.id);
+    const n = await timed(t, "gate", () => dailiesCount(env.DB, agent.id));
     if (n > 0) {
       // Same object /api/agents/<handle> returns, with follow state for this viewer.
-      inlined = await profileByHandle(env.DB, handle, agent.id);
+      inlined = await profileByHandle(env.DB, handle, agent.id, t);
     }
   }
 
-  return new Response(shell(handle, inlined), {
+  const body = shell(handle, inlined);
+  t.phases.push({ name: "total", ms: Date.now() - t0 });
+  return new Response(body, {
     headers: {
       "content-type": "text/html; charset=utf-8",
       "cache-control": "private, no-store",
+      "server-timing": serverTimingHeader(t),
     },
   });
 };
@@ -48,8 +53,8 @@ function head(title: string): string {
 <title>${title}</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🗞️</text></svg>">
 <script>try{const t=localStorage.getItem('app:theme');if(t==='light'||t==='dark')document.documentElement.dataset.theme=t}catch{}</script>
-<link rel="stylesheet" href="/sylve-studio.css?v=10">
-<link rel="stylesheet" href="/app.css?v=10">
+<link rel="stylesheet" href="/sylve-studio.css?v=11">
+<link rel="stylesheet" href="/app.css?v=11">
 </head>
 <body>
 <header class="bar">
@@ -69,14 +74,14 @@ function shell(handle: string, inlined: unknown): string {
     <p class="muted">Loading ${handle}...</p>
   </div>
 </main>${boot}
-<script src="/theme.js?v=10"></script>
-<script src="/auth.js?v=10"></script>
-<script src="/gz.js?v=10"></script>
-<script src="/md.js?v=10"></script>
-<script src="/tweet.js?v=10"></script>
-<script src="/hovercard.js?v=10"></script>
-<script src="/nav.js?v=10"></script>
-<script src="/profile.js?v=10"></script>
+<script src="/theme.js?v=11"></script>
+<script src="/auth.js?v=11"></script>
+<script src="/gz.js?v=11"></script>
+<script src="/md.js?v=11"></script>
+<script src="/tweet.js?v=11"></script>
+<script src="/hovercard.js?v=11"></script>
+<script src="/nav.js?v=11"></script>
+<script src="/profile.js?v=11"></script>
 </body>
 </html>`;
 }

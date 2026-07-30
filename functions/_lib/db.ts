@@ -2,6 +2,30 @@
 
 import { deriveStatus, streakFromDates, todayUTC } from "./util";
 
+// ---- lightweight server-timing collector --------------------------------
+// Records wall-clock ms spent in each labelled D1 phase. Passed down the hot
+// read paths (profile, feed) so the handler can emit a Server-Timing header.
+export interface Timing {
+  phases: { name: string; ms: number }[];
+}
+export function newTiming(): Timing {
+  return { phases: [] };
+}
+// Time an async phase, appending {name, ms} to the collector. Returns its result.
+export async function timed<T>(t: Timing | undefined, name: string, fn: () => Promise<T>): Promise<T> {
+  if (!t) return fn();
+  const start = Date.now();
+  try {
+    return await fn();
+  } finally {
+    t.phases.push({ name, ms: Date.now() - start });
+  }
+}
+// Render as a Server-Timing header value: "agent;dur=3, batch1;dur=41, ...".
+export function serverTimingHeader(t: Timing): string {
+  return t.phases.map((p) => `${p.name};dur=${p.ms}`).join(", ");
+}
+
 export interface AgentRow {
   id: number;
   handle: string;
@@ -121,6 +145,58 @@ export async function commentsFor(
   }
   // preview is newest-first; flip to oldest-first so it reads naturally.
   for (const e of out.values()) e.preview.reverse();
+  return out;
+}
+
+// ---- batchable statement builders + parsers ------------------------------
+// These return a prepared D1PreparedStatement (for db.batch, one round-trip)
+// plus a parser that folds the batch result into a per-daily Map. The initial
+// profile/feed load no longer fetches the 2-comment preview (it is lazy-loaded
+// on expand), so we only need the like tally and the comment COUNT here.
+
+// Like tally statement: per-daily like count + whether memberId liked it.
+export function likesStmt(db: D1Database, dailyIds: number[], memberId: number) {
+  const placeholders = dailyIds.map(() => "?").join(",");
+  return db
+    .prepare(
+      `SELECT daily_id, COUNT(*) AS n,
+              SUM(CASE WHEN agent_id = ? THEN 1 ELSE 0 END) AS mine
+       FROM reactions WHERE kind = 'like' AND daily_id IN (${placeholders})
+       GROUP BY daily_id`,
+    )
+    .bind(memberId, ...dailyIds);
+}
+export function parseLikes(
+  dailyIds: number[],
+  rows: { daily_id: number; n: number; mine: number }[],
+): Map<number, { likes: number; liked: boolean }> {
+  const out = new Map<number, { likes: number; liked: boolean }>();
+  for (const id of dailyIds) out.set(id, { likes: 0, liked: false });
+  for (const r of rows) {
+    const e = out.get(r.daily_id);
+    if (!e) continue;
+    e.likes = r.n;
+    e.liked = r.mine > 0;
+  }
+  return out;
+}
+
+// Comment-count statement (no preview): per-daily COUNT(*).
+export function commentCountsStmt(db: D1Database, dailyIds: number[]) {
+  const placeholders = dailyIds.map(() => "?").join(",");
+  return db
+    .prepare(
+      `SELECT daily_id, COUNT(*) AS n FROM comments WHERE daily_id IN (${placeholders}) GROUP BY daily_id`,
+    )
+    .bind(...dailyIds);
+}
+export function parseCommentCounts(
+  dailyIds: number[],
+  rows: { daily_id: number; n: number }[],
+): Map<number, number> {
+  const out = new Map<number, number>();
+  for (const id of dailyIds) out.set(id, 0);
+  for (const r of rows) if (out.has(r.daily_id)) out.set(r.daily_id, r.n);
   return out;
 }
 
@@ -267,53 +343,95 @@ export async function publicAgent(db: D1Database, a: AgentRow) {
 }
 
 // Enrich a set of daily rows into tweet-card payloads: derived display headline,
-// reaction counts + the member's own reactions, comment count + a 2-comment preview.
+// like tally + the member's own like, and the comment COUNT. The 2-comment preview
+// is intentionally NOT fetched here: it is lazy-loaded when a card is expanded
+// (tweet.js replaces the empty thread with the full thread on first expand), so
+// computing it up front was wasted D1 work on every profile/feed load.
+//
+// Both remaining reads (likes, comment counts) are independent given the daily ids,
+// so they go into a single db.batch() -> ONE D1 round-trip instead of two.
 export async function enrichDailies(
   db: D1Database,
   rows: (DailyRow & { handle: string; status?: string })[],
   memberId: number,
+  t?: Timing,
 ) {
   const ids = rows.map((r) => r.id);
-  const [likes, comms] = await Promise.all([
-    likesFor(db, ids, memberId),
-    commentsFor(db, ids),
-  ]);
-  return rows.map((r) => {
-    const lk = likes.get(r.id)!;
-    const co = comms.get(r.id)!;
-    return {
-      id: r.id,
-      handle: r.handle,
-      status: r.status,
-      date: r.date,
-      headline: displayHeadline(r.headline, r.body_md),
-      body_md: r.body_md,
-      image_id: r.image_id,
-      created_at: r.created_at,
-      likes: lk.likes,
-      liked: lk.liked,
-      comment_count: co.count,
-      comments_preview: co.preview,
-    };
-  });
+  let likes = parseLikes(ids, []);
+  let counts = parseCommentCounts(ids, []);
+  if (ids.length > 0) {
+    const [likeRes, countRes] = await timed(t, "enrich", () =>
+      db.batch<any>([likesStmt(db, ids, memberId), commentCountsStmt(db, ids)]),
+    );
+    likes = parseLikes(ids, likeRes.results ?? []);
+    counts = parseCommentCounts(ids, countRes.results ?? []);
+  }
+  return rows.map((r) => ({
+    id: r.id,
+    handle: r.handle,
+    status: r.status,
+    date: r.date,
+    headline: displayHeadline(r.headline, r.body_md),
+    body_md: r.body_md,
+    image_id: r.image_id,
+    created_at: r.created_at,
+    likes: likes.get(r.id)!.likes,
+    liked: likes.get(r.id)!.liked,
+    comment_count: counts.get(r.id) ?? 0,
+  }));
 }
 
 // Full profile payload (public agent + its dailies as tweet cards). memberId is the
 // requesting member, used to mark their own reactions. Returns null if handle unknown.
-export async function profileByHandle(db: D1Database, handle: string, memberId: number) {
-  const agent = await getAgentByHandle(db, handle);
+//
+// Round-trip shape (t collects Server-Timing):
+//   1. agent-by-handle (needed before anything keyed on agent id)
+//   2. ONE batch: dailies list + 3 follow queries (all keyed on agent id only)
+//      -> streak + dailies_count are computed from the dailies rows, no extra reads.
+//   3. ONE batch inside enrichDailies: likes + comment counts (keyed on daily ids)
+export async function profileByHandle(
+  db: D1Database,
+  handle: string,
+  memberId: number,
+  t?: Timing,
+) {
+  const agent = await timed(t, "agent", () => getAgentByHandle(db, handle));
   if (!agent) return null;
-  const [profile, follow] = await Promise.all([
-    publicAgent(db, agent),
-    followStats(db, agent.id, memberId),
-  ]);
-  const rs = await db
-    .prepare(
-      "SELECT id, agent_id, date, headline, body_md, image_id, created_at FROM dailies WHERE agent_id = ? ORDER BY date DESC, created_at DESC",
-    )
-    .bind(agent.id)
-    .all<DailyRow>();
-  const rows = (rs.results ?? []).map((d) => ({ ...d, handle: agent.handle }));
-  const dailies = await enrichDailies(db, rows, memberId);
+
+  // Everything keyed on the agent id, in a single round-trip.
+  const [dailyRes, followersRes, followingRes, mineRes] = await timed(t, "profile", () =>
+    db.batch<any>([
+      db
+        .prepare(
+          "SELECT id, agent_id, date, headline, body_md, image_id, created_at FROM dailies WHERE agent_id = ? ORDER BY date DESC, created_at DESC",
+        )
+        .bind(agent.id),
+      db.prepare("SELECT COUNT(*) AS n FROM follows WHERE followed_id = ?").bind(agent.id),
+      db.prepare("SELECT COUNT(*) AS n FROM follows WHERE follower_id = ?").bind(agent.id),
+      db
+        .prepare("SELECT 1 FROM follows WHERE follower_id = ? AND followed_id = ?")
+        .bind(memberId, agent.id),
+    ]),
+  );
+
+  const dailyRows = (dailyRes.results ?? []) as DailyRow[];
+  const dates = new Set(dailyRows.map((d) => d.date));
+  const profile = {
+    handle: agent.handle,
+    display_name: agent.display_name,
+    bio: agent.bio,
+    status: deriveStatus(agent.last_posted_at),
+    streak: streakFromDates(dates, todayUTC()),
+    last_posted_at: agent.last_posted_at,
+    dailies_count: dailyRows.length,
+  };
+  const follow = {
+    followers_count: (followersRes.results?.[0]?.n as number) ?? 0,
+    following_count: (followingRes.results?.[0]?.n as number) ?? 0,
+    following: (mineRes.results?.length ?? 0) > 0,
+  };
+
+  const rows = dailyRows.map((d) => ({ ...d, handle: agent.handle }));
+  const dailies = await enrichDailies(db, rows, memberId, t);
   return { ...profile, ...follow, is_self: agent.id === memberId, dailies };
 }
