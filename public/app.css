@@ -144,66 +144,66 @@ pre.code { background: var(--surface-2); border: 1px solid var(--line); border-r
 .topic-row .meta { margin-left: auto; color: var(--ink-3); font-size: 0.82rem; }
 
 /* ---- The wall: the logged-out landing (also 401/403) ------------------------
-   A real first impression in gazette's identity: a confident HERO, ONE showcase
-   post as a tangible taste of the product, and two inviting entry paths. The gate
+   ONE giant centered statement filling the first viewport, spare and confident.
+   The giant headline is the taste: no showcase, no stats. Directly under it, a
+   spare matched pair of entry paths, understated so they never compete. The gate
    stays intact: this never exposes the live feed or the real corpus. */
 .wall {
-  width: 100%; max-width: min(40rem, 100%); margin: 0 auto;
-  padding: 2.5rem 0 3.5rem;
+  width: 100%; max-width: min(56rem, 100%); margin: 0 auto;
+  padding: 0 0 3rem;
 }
 .wall-sub, .wall-entry-p, .wall-thesis { overflow-wrap: anywhere; }
 
-/* Soft entrance: hero, sample, and entries rise + fade in sequence on load. */
-.wall-hero, .wall-sample, .wall-entries { animation: gz-rise 0.6s cubic-bezier(0.22, 0.61, 0.36, 1) both; }
-.wall-sample { animation-delay: 0.08s; }
-.wall-entries { animation-delay: 0.16s; }
+/* The giant centered hero: fills the first viewport, everything centered on both
+   axes, generous air around the one big statement. */
+.wall-hero {
+  min-height: 88vh;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  text-align: center;
+  padding: 3rem 0;
+}
+.wall-eyebrow {
+  color: var(--accent); font-size: 0.72rem; text-transform: uppercase;
+  letter-spacing: 0.09em; margin: 0 0 1.25rem; font-weight: 700;
+}
+.wall-thesis {
+  font-size: clamp(2.4rem, 6.5vw, 4.25rem);
+  line-height: 1.05; font-weight: 800; letter-spacing: -0.04em;
+  color: var(--ink); margin: 0; max-width: 16ch; text-wrap: balance;
+}
+/* Oxblood accents in the hero headline: the words that make gazette unique. */
+.wall-thesis .hot { color: var(--accent); }
+.wall-sub {
+  color: var(--ink-2); font-size: clamp(1rem, 1.6vw, 1.2rem); line-height: 1.55;
+  margin: 1.75rem 0 0; max-width: 52ch; text-wrap: pretty;
+}
+
+/* Soft entrance: the giant headline and description rise + fade on load. */
+.wall-thesis, .wall-sub { animation: gz-rise 0.7s cubic-bezier(0.22, 0.61, 0.36, 1) both; }
+.wall-sub { animation-delay: 0.09s; }
 @keyframes gz-rise {
-  from { opacity: 0; transform: translateY(14px); }
+  from { opacity: 0; transform: translateY(16px); }
   to { opacity: 1; transform: translateY(0); }
 }
 
-.wall-head { display: flex; align-items: center; gap: 0.6rem; margin: 0 0 1.5rem; }
-.wall-mark { font-size: 1.35rem; font-weight: 800; letter-spacing: -0.03em; }
-.wall-live { display: inline-flex; align-items: center; gap: 0.35rem; color: var(--ink-3); font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.08em; }
-.wall-live .live-dot { width: 0.42rem; height: 0.42rem; border-radius: 999px; background: var(--positive); animation: gz-live-pulse 2s ease-in-out infinite; }
-
-.wall-hero { margin-bottom: 2rem; }
-.wall-eyebrow { color: var(--accent); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; margin: 0 0 0.6rem; font-weight: 700; }
-.wall-thesis {
-  font-size: 2.35rem; line-height: 1.08; font-weight: 800; letter-spacing: -0.035em;
-  color: var(--ink); margin: 0 0 1rem; max-width: 22ch; text-wrap: balance;
+/* The entry pair: a clean matched pair, centered under the description. Kept
+   understated so it does not compete with the giant headline. */
+.wall-entries {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 1rem 1.5rem;
+  align-items: stretch; margin: 3rem auto 0; max-width: 40rem; width: 100%;
+  text-align: left;
 }
-/* One oxblood accent in the hero headline: the verb that makes gazette unique. */
-.wall-thesis .hot { color: var(--accent); }
-.wall-sub { color: var(--ink-2); font-size: 1.05rem; line-height: 1.55; margin: 0; max-width: 42ch; }
-
-/* The showcase post: framed as an example, not the live feed. */
-.wall-sample { margin: 0 0 2rem; }
-.wall-sample-tag {
-  display: block; color: var(--ink-3); font-size: 0.7rem; text-transform: uppercase;
-  letter-spacing: 0.09em; margin: 0 0 0.5rem; font-weight: 700;
-}
-.wall-sample-card { margin-bottom: 0; cursor: default; }
-/* The sample's action row is inert: show it, but don't invite clicks. */
-.wall-sample-card .tw-like-btn,
-.wall-sample-card .tw-comment-btn { cursor: default; }
-.wall-sample-card .tw-like-btn.liked { color: var(--like); }
-.wall-sample-card .tw-like-btn.liked .tw-heart { fill: var(--like); stroke: var(--like); }
-
-/* Two inviting entry paths, side by side (stack on mobile). Equal-height siblings. */
-.wall-entries { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; align-items: stretch; }
+.wall-entries-single { grid-template-columns: 1fr; max-width: 30rem; }
 .wall-entry {
   display: flex; flex-direction: column;
   border: 1px solid var(--line); border-radius: var(--radius);
-  background: var(--surface); padding: 1.25rem 1.3rem; box-shadow: var(--shadow);
+  background: var(--surface); padding: 1.1rem 1.2rem; box-shadow: var(--shadow);
 }
-.wall-h { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-3); margin: 0 0 0.6rem; font-weight: 700; }
 /* Entry card header: same emoji + role label for both cards. */
-.wall-entry-label { display: flex; align-items: center; gap: 0.45rem; margin: 0 0 0.55rem; }
+.wall-entry-label { display: flex; align-items: center; gap: 0.45rem; margin: 0 0 0.75rem; }
 .wall-entry-emoji { font-size: 1.1rem; line-height: 1; flex: 0 0 auto; }
 .wall-entry-role { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-3); font-weight: 700; }
-.wall-entry-p { font-size: 0.9rem; line-height: 1.5; margin: 0 0 0.75rem; color: var(--ink-2); }
-.wall-entry-p:last-child { margin-bottom: 0; }
+.wall-entry-p { font-size: 0.85rem; line-height: 1.5; margin: 0.75rem 0 0; color: var(--ink-3); }
 .wall-entry-p a { color: var(--accent); }
 /* Action area pushed to the bottom so both cards align their actions. */
 .wall-entry-action { margin-top: auto; }
@@ -219,15 +219,16 @@ pre.code { background: var(--surface-2); border: 1px solid var(--line); border-r
 
 .wall-notice {
   border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--accent-soft);
-  color: var(--ink); font-size: 0.85rem; padding: 0.55rem 0.7rem; margin: 1.25rem 0 0;
+  color: var(--ink); font-size: 0.85rem; padding: 0.55rem 0.7rem; margin: 1.25rem auto 0;
+  max-width: 40rem; text-align: center;
 }
 .wall-login { display: flex; gap: 0.5rem; align-items: stretch; flex-wrap: wrap; }
-.wall-login input { flex: 1 1 12rem; min-width: 0; }
+.wall-login input { flex: 1 1 10rem; min-width: 0; }
 .wall-note { font-size: 0.82rem; color: var(--ink-3); margin: 0.55rem 0 0; }
 .wall-note a { color: var(--accent); }
 
 @media (prefers-reduced-motion: reduce) {
-  .wall-hero, .wall-sample, .wall-entries { animation: none; opacity: 1; transform: none; }
+  .wall-thesis, .wall-sub { animation: none; opacity: 1; transform: none; }
 }
 
 /* join page: the members-only gate note up top. */
@@ -659,12 +660,11 @@ pre.copyable {
   .tw-headline { font-size: 1.02rem; }
   .md { font-size: 0.92rem; }
 
-  .wall { padding: 1rem 0 2rem; }
-  .wall-hero { margin-bottom: 1.5rem; }
-  .wall-thesis { font-size: 1.85rem; max-width: none; }
-  .wall-sub { font-size: 0.95rem; max-width: none; }
-  .wall-sample { margin-bottom: 1.5rem; }
-  .wall-entries { grid-template-columns: 1fr; gap: 1rem; }
+  .wall { padding: 0 0 2rem; }
+  .wall-hero { min-height: 86vh; padding: 2rem 0; }
+  .wall-thesis { max-width: 14ch; }
+  .wall-sub { max-width: none; }
+  .wall-entries { grid-template-columns: 1fr; gap: 1rem; margin-top: 2.5rem; }
 
   .tw-like-btn, .tw-comment-btn, .tw-share-btn { min-height: 44px; }
   .follow-btn { min-height: 44px; padding: 0.6rem 1.2rem; }
