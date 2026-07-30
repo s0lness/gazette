@@ -102,6 +102,11 @@ h1.page-title { font-size: 1.55rem; font-weight: 800; margin: 0.25rem 0 0.15rem;
 .dmbox textarea { width: 100%; min-height: 4.5rem; margin-bottom: 0.5rem; }
 .dmbox .row { display: flex; align-items: center; gap: 0.6rem; }
 .dm-answer { margin-top: 0.75rem; padding: 0.75rem; border-radius: var(--radius-sm); background: var(--surface-2); border: 1px solid var(--line); font-size: 0.92rem; white-space: pre-wrap; }
+/* When the answer is rendered as markdown (real block elements), drop pre-wrap so the
+   newlines between tags don't add blank lines; the .md block styles handle spacing. */
+.dm-answer.md { white-space: normal; }
+.dm-answer.md > :first-child { margin-top: 0; }
+.dm-answer.md > :last-child { margin-bottom: 0; }
 .dm-note { margin-top: 0.6rem; font-size: 0.85rem; color: var(--ink-3); }
 /* The DM box as an invitation to interrogate: a warm lead + tappable suggestions. */
 .dm-lead { margin: 0 0 0.7rem; font-size: 0.88rem; color: var(--ink-2); line-height: 1.4; }

@@ -9,6 +9,19 @@
   const handle = root.getAttribute("data-handle");
   const slug = root.getAttribute("data-slug");
 
+  // The project shell does not load profile.js, so define the same curated
+  // suggested-question provider here when it is not already on window (reuse when
+  // present, else fall back to the identical two evergreen prompts).
+  if (!window.gzSuggestedQuestions) {
+    var SUGGESTED_QUESTIONS = [
+      "What's a best practice you have?",
+      "What's something that helps you save time?",
+    ];
+    window.gzSuggestedQuestions = function () {
+      return SUGGESTED_QUESTIONS.slice();
+    };
+  }
+
   function escAttr(s) {
     return String(s == null ? "" : s)
       .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -89,10 +102,64 @@
     }).join("");
   }
 
+  // Skip a re-render if the visitor is mid-conversation in the project ask box, so
+  // polling never wipes an in-progress question or a returned answer.
+  function dmBusy() {
+    const ta = document.getElementById("dm-q");
+    const out = document.getElementById("dm-out");
+    if (ta && (ta.value.trim() || document.activeElement === ta)) return true;
+    if (out && out.textContent.trim()) return true;
+    return false;
+  }
+
+  // Ask a question scoped to THIS project. POSTs to /api/dm/<handle>/<slug>; the answer
+  // is answered only from this project's dailies. Renders the answer as markdown.
+  async function ask() {
+    const ta = document.getElementById("dm-q");
+    const btn = document.getElementById("dm-ask");
+    const out = document.getElementById("dm-out");
+    const question = ta.value.trim();
+    if (!question) return;
+    btn.disabled = true;
+    out.textContent = "Reading back through the work...";
+    out.className = "dm-note gz-loading";
+    try {
+      const r = await window.gzFetch(
+        "/api/dm/" + encodeURIComponent(handle) + "/" + encodeURIComponent(slug),
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ question: question }),
+        },
+      );
+      const data = await r.json();
+      if (r.status === 429) {
+        out.className = "dm-note";
+        out.textContent = data.message || "That is your one question for today. Come back tomorrow with another.";
+      } else if (r.status === 503) {
+        out.className = "dm-note";
+        out.textContent = data.message || "The oracle is still warming up. Give it a minute.";
+      } else if (r.ok) {
+        out.className = "dm-answer md";
+        out.innerHTML = window.gzMarkdown(data.answer || "");
+      } else {
+        out.className = "dm-note";
+        out.textContent = data.message || "That question did not go through. Try rephrasing it.";
+      }
+    } catch (err) {
+      if (!(err && err.gzGated)) {
+        out.className = "dm-note";
+        out.textContent = "Could not reach the oracle. It happens; try again in a moment.";
+      }
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
   function render(a) {
     const key = JSON.stringify(a);
     if (key === last) return;
-    if (last !== null && (followInFlight || window.gzTweet.busy(root))) return;
+    if (last !== null && (dmBusy() || followInFlight || window.gzTweet.busy(root))) return;
     const first = last === null;
     const prevKeys = keySet();
     last = key;
@@ -122,12 +189,46 @@
       statsRow(a) +
       "</div>";
 
+    // Ask box, scoped to this project: two curated suggested-question chips that fire
+    // on click, a textarea, an Ask button, and an output area. Same behavior as the
+    // profile ask box, but every answer comes from this project's dailies only.
+    const suggestions = window.gzSuggestedQuestions
+      ? window.gzSuggestedQuestions(a.dailies)
+      : [];
+    const chips = suggestions
+      .map(function (q) {
+        return '<button type="button" class="dm-chip" data-q="' + escAttr(q) + '">' + escAttr(q) + "</button>";
+      })
+      .join("");
+    html +=
+      '<div class="dmbox" id="ask">' +
+      "<h2>Ask about " + escText(p.name) + "</h2>" +
+      '<p class="dm-lead">Ask about ' + escText(p.name) +
+      " specifically. Answered from this project's own updates, not the web.</p>" +
+      (chips ? '<div class="dm-chips">' + chips + "</div>" : "") +
+      '<textarea id="dm-q" placeholder="What do you want to ask?"></textarea>' +
+      '<div class="row"><button id="dm-ask" class="primary">Ask</button></div>' +
+      '<div id="dm-out"></div>' +
+      "</div>";
+
     html += '<h2 class="section-label">Posts</h2>';
     html += '<div id="posts-list">' + postsListHTML(a) + "</div>";
 
     root.innerHTML = html;
     const fb = document.getElementById("proj-follow-btn");
     if (fb) fb.addEventListener("click", follow);
+    const askBtn = document.getElementById("dm-ask");
+    if (askBtn) askBtn.addEventListener("click", ask);
+    // Tapping a suggested question sends it immediately.
+    const chipEls = root.querySelectorAll(".dm-chip");
+    for (let i = 0; i < chipEls.length; i++) {
+      chipEls[i].addEventListener("click", function () {
+        const ta = document.getElementById("dm-q");
+        if (!ta) return;
+        ta.value = this.getAttribute("data-q") || "";
+        ask();
+      });
+    }
     window.gzTweet.wire(root);
     if (!first) markNew(prevKeys);
   }

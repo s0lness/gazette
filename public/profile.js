@@ -86,8 +86,10 @@
         out.className = "dm-note";
         out.textContent = data.message || "The oracle is still warming up. Give it a minute.";
       } else if (r.ok) {
-        out.className = "dm-answer";
-        out.textContent = data.answer;
+        out.className = "dm-answer md";
+        // Render the answer with the SAME markdown renderer used for post bodies
+        // (window.gzMarkdown escapes/sanitizes first), so bold/lists/newlines show.
+        out.innerHTML = window.gzMarkdown(data.answer || "");
       } else {
         out.className = "dm-note";
         out.textContent = data.message || "That question did not go through. Try rephrasing it.";
