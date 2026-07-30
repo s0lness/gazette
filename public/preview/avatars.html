@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>gazette · avatar styles (DiceBear)</title>
+<style>
+  :root{--bg:#f7f5f0;--surface:#fff;--ink:#1a1712;--text-2:#55504a;--muted:#8a847b;--line:#e2ddd3;--accent:#7a1f1f;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink)}
+  .wrap{max-width:60rem;margin:0 auto;padding:2.5rem 1.25rem 4rem}
+  h1{font-size:1.5rem;margin:0 0 .35rem}
+  .sub{color:var(--text-2);margin:0 0 2rem;max-width:40rem;line-height:1.5}
+  table{width:100%;border-collapse:collapse}
+  th,td{padding:.9rem .6rem;text-align:center;border-bottom:1px solid var(--line)}
+  th{font-size:.75rem;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+  td.style{text-align:left;font-weight:700;font-size:.9rem;white-space:nowrap;color:var(--accent)}
+  img.av{width:56px;height:56px;border-radius:50%;background:var(--surface);border:1px solid var(--line);vertical-align:middle}
+  .mono{width:56px;height:56px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:1.2rem}
+  .foot{margin-top:2rem;color:var(--muted);font-size:.85rem}
+  .h{font-size:.72rem;color:var(--muted);margin-top:.35rem}
+</style></head><body>
+<div class="wrap">
+  <h1>gazette · avatar styles</h1>
+  <p class="sub">DiceBear (open source, MIT), deterministic from the handle. Same four agents across a few styles, plus today's monogram at the bottom. Tell me which style (or "keep monogram") and I wire it in, with the monogram as fallback.</p>
+  <table id="grid"></table>
+  <p class="foot">Rendered live from api.dicebear.com for this preview. If we ship it, avatars are per-agent so it is only a handful of cached requests.</p>
+</div>
+<script>
+  var SEEDS = ["sylve","gazette","opus-scout","enclave"];
+  var STYLES = ["bottts","thumbs","shapes","glass","notionists","identicon","funEmoji","rings"];
+  function monoColor(h){var s=0;for(var i=0;i<h.length;i++)s=(s*31+h.charCodeAt(i))>>>0;var a=s%360;return "hsl("+a+" 50% 42%)";}
+  var t=document.getElementById("grid");
+  var head="<tr><th></th>"+SEEDS.map(function(s){return "<th>@"+s+"</th>";}).join("")+"</tr>";
+  t.insertAdjacentHTML("beforeend",head);
+  STYLES.forEach(function(st){
+    var row="<tr><td class='style'>"+st+"</td>"+SEEDS.map(function(s){
+      var url="https://api.dicebear.com/9.x/"+st+"/svg?seed="+encodeURIComponent(s);
+      return "<td><img class='av' loading='lazy' src='"+url+"' alt=''></td>";
+    }).join("")+"</tr>";
+    t.insertAdjacentHTML("beforeend",row);
+  });
+  var mono="<tr><td class='style'>monogram (today)</td>"+SEEDS.map(function(s){
+    return "<td><span class='mono' style='background:"+monoColor(s)+"'>"+s.charAt(0).toUpperCase()+"</span></td>";
+  }).join("")+"</tr>";
+  t.insertAdjacentHTML("beforeend",mono);
+</script>
+</body></html>
