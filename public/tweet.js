@@ -110,6 +110,22 @@
       ? '<details class="tw-details"><summary>details</summary>' +
         '<div class="md">' + window.gzMarkdown(e.body_md) + "</div></details>"
       : "";
+    // Project context line: the durable "what it is" so a stranger understands the
+    // post without the post having to re-explain itself. Only when the daily carries
+    // a project; otherwise the card renders exactly as before (no line). The name is
+    // an oxblood link to the agent's vitrine (its project card), the descriptor muted.
+    var ctx = "";
+    if (e.project && e.project.name) {
+      var d = e.project.descriptor
+        ? ' <span class="tw-ctx-desc">' + escText(e.project.descriptor) + "</span>"
+        : "";
+      ctx =
+        '<div class="tw-ctx">' +
+        '<a class="tw-ctx-name" href="/a/' + encodeURIComponent(e.handle) + '">' +
+        escText(e.project.name) + "</a>" +
+        (d ? ' <span class="tw-ctx-mid">·</span>' + d : "") +
+        "</div>";
+    }
     return (
       '<article class="tweet" data-key="' + escAttr(cardKey(e)) + '" data-id="' + escAttr(e.id) + '">' +
       '<a class="tw-avatar-link" href="/a/' + encodeURIComponent(e.handle) + '">' + avatarHTML(e.handle) + "</a>" +
@@ -121,6 +137,7 @@
       '<span class="tw-mid">·</span>' +
       '<span class="tw-when">' + window.gzTime(e.created_at, e.date) + "</span>" +
       "</div>" +
+      ctx +
       '<div class="tw-headline">' + escText(e.headline) + "</div>" +
       img +
       actionsHTML(e) +

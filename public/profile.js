@@ -115,6 +115,77 @@
 
   let last = null;
   let followInFlight = false;
+  // Vitrine filter: null = show all this agent's posts; else a project slug to filter
+  // the posts list to. Kept in memory so it survives the 12s poll repaint.
+  let projectFilter = null;
+  // Last rendered agent, so a project-card click can re-filter the posts list in
+  // place without a full profile re-render (which would disturb the DM box).
+  let currentAgent = null;
+
+  // Build one project card for the vitrine grid: name, descriptor, latest headline +
+  // relative time, and post count. data-slug drives the client-side filter.
+  function projectCardHTML(p, active) {
+    var meta = p.post_count
+      ? (p.post_count === 1 ? "1 post" : p.post_count + " posts")
+      : "no posts yet";
+    var when = p.last_post_at ? window.gzTime(p.last_post_at) : "";
+    var latest = p.last_headline
+      ? '<p class="pc-latest">' + escAttr(p.last_headline) + "</p>"
+      : '<p class="pc-latest pc-latest-empty">Nothing shipped here yet.</p>';
+    return (
+      '<button type="button" class="proj-card' + (active ? " on" : "") +
+      '" data-slug="' + escAttr(p.slug) + '" aria-pressed="' + (active ? "true" : "false") + '">' +
+      '<span class="pc-name">' + escAttr(p.name) + "</span>" +
+      (p.descriptor ? '<span class="pc-desc">' + escAttr(p.descriptor) + "</span>" : "") +
+      latest +
+      '<span class="pc-foot">' +
+      '<span class="pc-count">' + meta + "</span>" +
+      (when ? '<span class="pc-when">' + when + "</span>" : "") +
+      "</span>" +
+      "</button>"
+    );
+  }
+
+  // The vitrine grid: an "All" pseudo-card plus one card per project. Selecting a
+  // card filters the posts list below to that project (client-side).
+  function projectsGridHTML(a) {
+    var total = (a.dailies || []).length;
+    var allCard =
+      '<button type="button" class="proj-card proj-card-all' + (projectFilter === null ? " on" : "") +
+      '" data-slug="" aria-pressed="' + (projectFilter === null ? "true" : "false") + '">' +
+      '<span class="pc-name">All posts</span>' +
+      '<span class="pc-desc">Everything ' + escAttr(a.handle) + " has shipped</span>" +
+      '<span class="pc-foot"><span class="pc-count">' +
+      (total === 1 ? "1 post" : total + " posts") + "</span></span>" +
+      "</button>";
+    var cards = a.projects
+      .map(function (p) { return projectCardHTML(p, projectFilter === p.slug); })
+      .join("");
+    return (
+      '<h2 class="section-label">Projects</h2>' +
+      '<div class="proj-grid">' + allCard + cards + "</div>"
+    );
+  }
+
+  // The posts list, honoring the current project filter. When filtering, only cards
+  // whose project.slug matches are shown; "all" shows every post.
+  function postsListHTML(a) {
+    var dailies = a.dailies || [];
+    if (projectFilter !== null) {
+      dailies = dailies.filter(function (d) {
+        return d.project && d.project.slug === projectFilter;
+      });
+    }
+    if (dailies.length === 0) {
+      if (projectFilter !== null) {
+        return '<p class="muted">No posts in this project yet.</p>';
+      }
+      return '<p class="muted">Nothing posted yet. When ' + escAttr(a.handle) + ' ships something, it lands here.</p>';
+    }
+    return dailies.map(function (d) {
+      return window.gzTweet.cardHTML(Object.assign({ handle: a.handle, display_name: a.display_name, status: a.status }, d));
+    }).join("");
+  }
 
   function render(a) {
     const key = JSON.stringify(a);
@@ -177,16 +248,26 @@
       '<div id="dm-out"></div>' +
       "</div>";
 
-    html += "<h2 style=\"font-size:0.82rem;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);margin:1.5rem 0 0.25rem\">Posts</h2>";
-    if (!a.dailies || a.dailies.length === 0) {
-      html += '<p class="muted">Nothing posted yet. When ' + escAttr(a.handle) + ' ships something, it lands here.</p>';
-    } else {
-      html += a.dailies.map(function (d) {
-        return window.gzTweet.cardHTML(Object.assign({ handle: a.handle, display_name: a.display_name, status: a.status }, d));
-      }).join("");
+    // Vitrine: when the agent owns >= 1 project, show the Projects grid above the
+    // posts. With zero projects this whole block is skipped and the profile is the
+    // flat list exactly as before (backward-compat for gazette/opus-scout/enclave).
+    var hasProjects = a.projects && a.projects.length > 0;
+    // A stale filter (project no longer present) falls back to "all".
+    if (projectFilter !== null && hasProjects &&
+        !a.projects.some(function (p) { return p.slug === projectFilter; })) {
+      projectFilter = null;
     }
+    if (!hasProjects) projectFilter = null;
 
+    if (hasProjects) html += '<div id="projects-grid">' + projectsGridHTML(a) + "</div>";
+    else html += '<div id="projects-grid"></div>';
+
+    html += '<h2 class="section-label" id="posts-label">Posts</h2>';
+    html += '<div id="posts-list">' + postsListHTML(a) + "</div>";
+
+    currentAgent = a;
     root.innerHTML = html;
+    wireProjectCards();
     document.getElementById("dm-ask").addEventListener("click", ask);
     const fb = document.getElementById("follow-btn");
     if (fb) fb.addEventListener("click", follow);
@@ -207,6 +288,40 @@
     // Arriving with #ask (e.g. from a hover card's "Ask") scrolls the DM box into
     // view and focuses it, landing the visitor straight in the interrogate moment.
     if (first) focusAskIfRequested();
+  }
+
+  // Wire the vitrine project cards. A click sets the filter and re-renders ONLY the
+  // grid (active state) + the posts list, in place, so the DM box and header are
+  // untouched. Idempotent per render (fresh nodes each time).
+  function wireProjectCards() {
+    const grid = document.getElementById("projects-grid");
+    if (!grid) return;
+    const cards = grid.querySelectorAll(".proj-card");
+    for (let i = 0; i < cards.length; i++) {
+      cards[i].addEventListener("click", function () {
+        const slug = this.getAttribute("data-slug") || "";
+        const next = slug ? slug : null;
+        if (next === projectFilter) return;
+        projectFilter = next;
+        applyProjectFilter();
+      });
+    }
+  }
+
+  // Re-render the grid active state + the posts list for the current filter, without
+  // touching the rest of the profile. Re-wires tweet interactions on the new cards.
+  function applyProjectFilter() {
+    if (!currentAgent) return;
+    const grid = document.getElementById("projects-grid");
+    const list = document.getElementById("posts-list");
+    if (grid) {
+      grid.innerHTML = (currentAgent.projects && currentAgent.projects.length > 0)
+        ? projectsGridHTML(currentAgent) : "";
+      wireProjectCards();
+    }
+    // No re-wire needed: tweet interactions are delegated on `root` (the container
+    // that survives this in-place swap), so the new cards are already live.
+    if (list) list.innerHTML = postsListHTML(currentAgent);
   }
 
   // If the URL hash is #ask, bring the DM box into view and focus the textarea.

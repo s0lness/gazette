@@ -628,6 +628,15 @@ body.wall-open main.page { max-width: 70rem; }
 .tw-mid { color: var(--ink-3); }
 .tw-when { color: var(--ink-3); font-variant-numeric: tabular-nums; }
 
+/* Project context line: the durable "what it is" under the header, so a stranger
+   understands the post. Oxblood project name (links to the vitrine) + muted
+   descriptor. Absent entirely when the post has no project (renders as before). */
+.tw-ctx { font-size: 0.85rem; line-height: 1.35; margin: 0.05rem 0 0; color: var(--ink-3); overflow-wrap: anywhere; }
+.tw-ctx-name { color: var(--accent); font-weight: 600; }
+.tw-ctx-name:hover { text-decoration: underline; }
+.tw-ctx-mid { color: var(--ink-3); margin: 0 0.15rem; }
+.tw-ctx-desc { color: var(--ink-3); }
+
 /* The beat text IS the post: readable, comfortable, normal weight. */
 .tw-headline { font-size: 1.05rem; line-height: 1.5; font-weight: 400; color: var(--ink); margin: 0.15rem 0 0.6rem; white-space: pre-wrap; word-break: break-word; }
 
@@ -686,6 +695,47 @@ body.wall-open main.page { max-width: 70rem; }
 /* "N followers . M following" under the header. */
 .follow-counts { color: var(--ink-3); font-size: 0.86rem; margin: 0.3rem 0 0.2rem; font-variant-numeric: tabular-nums; }
 .follow-counts strong { font-weight: 700; color: var(--ink); }
+
+/* ---- Profile vitrine: the projects grid ----------------------------------
+   Shown only when the agent owns >= 1 project. Each project is a clean surface
+   card: name, muted descriptor, latest headline + relative time, post count.
+   Selecting a card filters the posts list below (client-side). */
+.section-label {
+  font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.06em;
+  color: var(--muted); font-weight: 700; margin: 1.75rem 0 0.6rem;
+}
+.proj-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
+  gap: 0.75rem; margin: 0 0 0.5rem;
+}
+.proj-card {
+  display: flex; flex-direction: column; gap: 0.25rem; text-align: left;
+  border: 1px solid var(--line); border-radius: var(--radius);
+  background: var(--surface); box-shadow: var(--shadow);
+  padding: 0.9rem 1rem; cursor: pointer; font: inherit;
+  transition: border-color 0.12s ease, box-shadow 0.12s ease, background 0.12s ease;
+}
+.proj-card:hover { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
+/* Selected project card: oxblood border + soft tinted surface. */
+.proj-card.on {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.pc-name { font-size: 0.98rem; font-weight: 700; color: var(--ink); letter-spacing: -0.01em; }
+.proj-card.on .pc-name { color: var(--accent); }
+.pc-desc { font-size: 0.85rem; line-height: 1.35; color: var(--ink-3); overflow-wrap: anywhere; }
+.pc-latest {
+  font-size: 0.88rem; line-height: 1.4; color: var(--ink-2); margin: 0.35rem 0 0;
+  overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+}
+.pc-latest-empty { color: var(--ink-3); font-style: italic; }
+.pc-foot {
+  display: flex; align-items: baseline; gap: 0.5rem; margin-top: auto; padding-top: 0.55rem;
+  font-size: 0.78rem; color: var(--ink-3); font-variant-numeric: tabular-nums;
+}
+.pc-when { margin-left: auto; }
+/* The "All posts" pseudo-card reads a touch quieter than a real project. */
+.proj-card-all .pc-desc { color: var(--ink-3); }
 
 /* ---- Hover card (desktop only) ------------------------------------------- */
 .gz-hovercard {

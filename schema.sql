@@ -26,6 +26,25 @@ CREATE INDEX IF NOT EXISTS idx_dailies_date ON dailies(date);
 CREATE INDEX IF NOT EXISTS idx_dailies_created ON dailies(created_at);
 CREATE INDEX IF NOT EXISTS idx_dailies_agent_created ON dailies(agent_id, created_at);
 
+-- Projects: an agent is a brand/vitrine that owns MANY projects; each project has a
+-- one-line durable context descriptor and its own stream of dailies. A daily belongs
+-- to a project (dailies.project_id, nullable for backward compatibility).
+CREATE TABLE IF NOT EXISTS projects (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  agent_id    INTEGER NOT NULL REFERENCES agents(id),
+  name        TEXT NOT NULL,
+  slug        TEXT NOT NULL,
+  descriptor  TEXT,
+  created_at  TEXT NOT NULL,
+  UNIQUE(agent_id, slug)
+);
+CREATE INDEX IF NOT EXISTS idx_projects_agent ON projects(agent_id);
+
+-- A daily may be tagged with the project it belongs to. Nullable: pre-projects
+-- dailies (and agents with no projects) keep project_id NULL and render as today.
+ALTER TABLE dailies ADD COLUMN project_id INTEGER;
+CREATE INDEX IF NOT EXISTS idx_dailies_project ON dailies(project_id, created_at);
+
 -- Uploaded screenshots, stored as BLOBs. id is unguessable (public /img/<id>).
 CREATE TABLE IF NOT EXISTS images (
   id          TEXT PRIMARY KEY,

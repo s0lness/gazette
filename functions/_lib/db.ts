@@ -52,6 +52,94 @@ export interface DailyRow {
   body_md: string | null;
   image_id: string | null;
   created_at: string;
+  project_id?: number | null;
+}
+
+// A project is a durable "what it is" that an agent (brand/vitrine) owns. Dailies
+// hang off a project via dailies.project_id (nullable, backward-compatible).
+export interface ProjectRow {
+  id: number;
+  agent_id: number;
+  name: string;
+  slug: string;
+  descriptor: string | null;
+  created_at: string;
+}
+
+// A daily row plus the LEFT JOIN projects columns (null when unprojected).
+export type ProjectDailyRow = DailyRow & {
+  project_name?: string | null;
+  project_slug?: string | null;
+  project_descriptor?: string | null;
+};
+
+// The short, durable project context stamped onto a daily/feed card so a stranger
+// understands it. Null when the daily has no project (backward-compatible).
+export interface ProjectContext {
+  name: string;
+  slug: string;
+  descriptor: string | null;
+}
+
+// The vitrine shape of a project: the durable descriptor plus a cheap rollup of its
+// stream (post_count, last_post_at, last_headline) for the profile grid.
+export interface ProjectView {
+  id: number;
+  name: string;
+  slug: string;
+  descriptor: string | null;
+  post_count: number;
+  last_post_at: string | null;
+  last_headline: string | null;
+}
+
+// Every project an agent owns, each with a computed rollup of its dailies. ONE
+// grouped read of the agent's dailies (keyed by project_id) folds into per-project
+// {post_count, last_post_at, last_headline}; no N+1. Agents with zero projects
+// return [] (the flat, pre-projects profile). Mirrors the batched publicAgents style.
+export async function projectsForAgent(db: D1Reader, agentId: number): Promise<ProjectView[]> {
+  const projRes = await db
+    .prepare(
+      "SELECT id, agent_id, name, slug, descriptor, created_at FROM projects WHERE agent_id = ? ORDER BY created_at ASC, id ASC",
+    )
+    .bind(agentId)
+    .all<ProjectRow>();
+  const projects = projRes.results ?? [];
+  if (projects.length === 0) return [];
+
+  // One grouped pass over this agent's dailies that carry a project_id. Rows come
+  // newest-first so the FIRST row seen per project is its latest (headline + time).
+  const dRes = await db
+    .prepare(
+      "SELECT project_id, headline, body_md, created_at FROM dailies WHERE agent_id = ? AND project_id IS NOT NULL ORDER BY created_at DESC",
+    )
+    .bind(agentId)
+    .all<{ project_id: number; headline: string | null; body_md: string | null; created_at: string }>();
+
+  const rollup = new Map<number, { count: number; last_at: string | null; last_headline: string | null }>();
+  for (const p of projects) rollup.set(p.id, { count: 0, last_at: null, last_headline: null });
+  for (const r of dRes.results ?? []) {
+    const e = rollup.get(r.project_id);
+    if (!e) continue;
+    e.count += 1;
+    if (e.last_at === null) {
+      // First row per project (newest-first order) is the latest daily.
+      e.last_at = r.created_at;
+      e.last_headline = displayHeadline(r.headline, r.body_md);
+    }
+  }
+  return projects.map((p) => {
+    const e = rollup.get(p.id)!;
+    return {
+      id: p.id,
+      name: p.name,
+      slug: p.slug,
+      descriptor: p.descriptor,
+      post_count: e.count,
+      last_post_at: e.last_at,
+      last_headline: e.last_headline,
+    };
+  });
 }
 
 // A beat gets a single Twitter-style "like". We reuse the reactions table with a
@@ -420,9 +508,26 @@ export async function publicAgents(db: D1Reader, rows: AgentRow[], viewerId?: nu
 //
 // Both remaining reads (likes, comment counts) are independent given the daily ids,
 // so they go into a single db.batch() -> ONE D1 round-trip instead of two.
+// Rows fed to enrichDailies may carry a joined project context (project_name /
+// project_slug / project_descriptor from a LEFT JOIN projects). When project_id is
+// null those are null and the card gets `project: null` (renders as today).
+type EnrichRow = DailyRow & {
+  handle: string;
+  status?: string;
+  project_name?: string | null;
+  project_slug?: string | null;
+  project_descriptor?: string | null;
+};
+
+// Fold the joined project columns on a row into a ProjectContext or null.
+function projectContext(r: EnrichRow): ProjectContext | null {
+  if (r.project_id == null || r.project_name == null || r.project_slug == null) return null;
+  return { name: r.project_name, slug: r.project_slug, descriptor: r.project_descriptor ?? null };
+}
+
 export async function enrichDailies(
   db: D1Reader,
-  rows: (DailyRow & { handle: string; status?: string })[],
+  rows: EnrichRow[],
   memberId: number,
   t?: Timing,
 ) {
@@ -448,6 +553,7 @@ export async function enrichDailies(
     likes: likes.get(r.id)!.likes,
     liked: likes.get(r.id)!.liked,
     comment_count: counts.get(r.id) ?? 0,
+    project: projectContext(r),
   }));
 }
 
@@ -468,12 +574,13 @@ export async function profileByHandle(
   const agent = await timed(t, "agent", () => getAgentByHandle(db, handle));
   if (!agent) return null;
 
-  // Everything keyed on the agent id, in a single round-trip.
+  // Everything keyed on the agent id, in a single round-trip. The dailies list LEFT
+  // JOINs projects so each card can carry its project context (null when unprojected).
   const [dailyRes, followersRes, followingRes, mineRes] = await timed(t, "profile", () =>
     db.batch<any>([
       db
         .prepare(
-          "SELECT id, agent_id, date, headline, body_md, image_id, created_at FROM dailies WHERE agent_id = ? ORDER BY date DESC, created_at DESC",
+          "SELECT d.id, d.agent_id, d.date, d.headline, d.body_md, d.image_id, d.created_at, d.project_id, p.name AS project_name, p.slug AS project_slug, p.descriptor AS project_descriptor FROM dailies d LEFT JOIN projects p ON p.id = d.project_id WHERE d.agent_id = ? ORDER BY d.date DESC, d.created_at DESC",
         )
         .bind(agent.id),
       db.prepare("SELECT COUNT(*) AS n FROM follows WHERE followed_id = ?").bind(agent.id),
@@ -484,7 +591,7 @@ export async function profileByHandle(
     ]),
   );
 
-  const dailyRows = (dailyRes.results ?? []) as DailyRow[];
+  const dailyRows = (dailyRes.results ?? []) as ProjectDailyRow[];
   const dates = new Set(dailyRows.map((d) => d.date));
   const profile = {
     handle: agent.handle,
@@ -502,8 +609,11 @@ export async function profileByHandle(
   };
 
   const rows = dailyRows.map((d) => ({ ...d, handle: agent.handle }));
-  const dailies = await enrichDailies(db, rows, memberId, t);
-  return { ...profile, ...follow, is_self: agent.id === memberId, dailies };
+  const [dailies, projects] = await Promise.all([
+    enrichDailies(db, rows, memberId, t),
+    projectsForAgent(db, agent.id),
+  ]);
+  return { ...profile, ...follow, is_self: agent.id === memberId, projects, dailies };
 }
 
 // Shell fast-path: the profile page inlines the profile ONLY when the viewer can
@@ -536,7 +646,7 @@ export async function profileForShell(
     db.batch<any>([
       db
         .prepare(
-          "SELECT id, agent_id, date, headline, body_md, image_id, created_at FROM dailies WHERE agent_id = ? ORDER BY date DESC, created_at DESC",
+          "SELECT d.id, d.agent_id, d.date, d.headline, d.body_md, d.image_id, d.created_at, d.project_id, p.name AS project_name, p.slug AS project_slug, p.descriptor AS project_descriptor FROM dailies d LEFT JOIN projects p ON p.id = d.project_id WHERE d.agent_id = ? ORDER BY d.date DESC, d.created_at DESC",
         )
         .bind(agent.id),
       db.prepare("SELECT COUNT(*) AS n FROM follows WHERE followed_id = ?").bind(agent.id),
@@ -546,7 +656,7 @@ export async function profileForShell(
         .bind(viewerId, agent.id),
     ]),
   );
-  const dailyRows = (dailyRes.results ?? []) as DailyRow[];
+  const dailyRows = (dailyRes.results ?? []) as ProjectDailyRow[];
   const dates = new Set(dailyRows.map((d) => d.date));
   const profile = {
     handle: agent.handle,
@@ -563,6 +673,9 @@ export async function profileForShell(
     following: (mineRes.results?.length ?? 0) > 0,
   };
   const rows = dailyRows.map((d) => ({ ...d, handle: agent.handle }));
-  const dailies = await enrichDailies(db, rows, viewerId, t);
-  return { ...profile, ...follow, is_self: agent.id === viewerId, dailies };
+  const [dailies, projects] = await Promise.all([
+    enrichDailies(db, rows, viewerId, t),
+    projectsForAgent(db, agent.id),
+  ]);
+  return { ...profile, ...follow, is_self: agent.id === viewerId, projects, dailies };
 }
