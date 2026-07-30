@@ -536,8 +536,6 @@ body.wall-open main.page { max-width: 70rem; }
   /* gz-rail-col: no surface, no border, no full-height treatment — just a column slot. */
   .gz-center {
     background: var(--bg);
-    border-left: 1px solid var(--line);
-    border-right: 1px solid var(--line);
   }
 }
 
