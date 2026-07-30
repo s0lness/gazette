@@ -202,15 +202,29 @@ pre.code { background: var(--surface); border: 1px solid var(--line); border-rad
 /* The former <main.page> is now the center column: drop its own centering/cap. */
 .gz-shell > .gz-center.page { margin: 0; max-width: none; width: 100%; }
 
-/* Right rail column: sticky under the top bar, its own scroll. */
-.gz-rail-col { position: relative; }
-.gz-rail-col > * { position: sticky; top: 1.25rem; }
-
-.gz-side-col { position: relative; }
-.gz-side {
+/* RIGHT rail column: fixed to the viewport, does not scroll with the page.
+   If the rail is taller than the viewport it scrolls internally. */
+.gz-rail-col {
   position: sticky; top: 0;
+  height: 100vh;
+  overflow-y: auto;
+  /* Hide scrollbar while keeping scroll functionality */
+  scrollbar-width: none;
+}
+.gz-rail-col::-webkit-scrollbar { display: none; }
+.gz-rail-col > * { padding-top: 1.25rem; }
+
+/* LEFT sidebar column: fixed to the viewport, does not scroll with the page. */
+.gz-side-col {
+  position: sticky; top: 0;
+  height: 100vh;
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+.gz-side-col::-webkit-scrollbar { display: none; }
+.gz-side {
   display: flex; flex-direction: column;
-  min-height: calc(100vh - 0px);
+  height: 100%;
   padding: 1.25rem 0.5rem 1.25rem 0;
   gap: 0.5rem;
 }
@@ -291,13 +305,51 @@ pre.code { background: var(--surface); border: 1px solid var(--line); border-rad
   .gz-rail-col { display: none; }
 }
 
-/* Below the sidebar breakpoint: no rails, single column, mobile account button. */
+/* Below the sidebar breakpoint: no rails, single column, mobile account button.
+   On mobile the sticky-column behaviour is removed completely. */
 @media (max-width: 767px) {
   .gz-shell { display: block; max-width: none; margin: 0; }
   .gz-side-col { display: none; }
   .gz-rail-col { display: none; }
   .gz-shell > .gz-center.page { max-width: 62rem; margin: 0 auto; }
   body[data-gz-nav="1"] .gz-mob-acct { display: inline-flex; }
+  /* Reset sticky columns on mobile so single-column scroll is natural. */
+  .gz-side-col, .gz-rail-col { position: static; height: auto; overflow-y: visible; }
+  .gz-side { height: auto; min-height: 0; }
+}
+
+/* ---- Column delineation (desktop) ----------------------------------------
+   Left sidebar and right rail each read as their own contained surface, clearly
+   separate from the warm paper background and the center feed. Uses --card
+   (== --surface in sylve-studio) plus a border one notch warmer than --line and
+   a whisper shadow so the column "lifts" off the background. Dark mode uses the
+   same variables, which are already calibrated for dark. Mobile is untouched. */
+@media (min-width: 768px) {
+  /* Left sidebar: full-height column box with a right border that acts as a
+     gutter divider, and a subtle surface tint to read apart from the bg.
+     Border is var(--line) mixed with a touch of fg for slightly more contrast. */
+  .gz-side-col {
+    background: var(--surface);
+    border-right: 1px solid color-mix(in srgb, var(--line) 85%, var(--fg) 15%);
+    box-shadow: 2px 0 6px color-mix(in srgb, var(--fg) 4%, transparent);
+  }
+
+  /* Right rail: identical surface + left-border divider. */
+  .gz-rail-col {
+    background: var(--surface);
+    border-left: 1px solid color-mix(in srgb, var(--line) 85%, var(--fg) 15%);
+    box-shadow: -2px 0 6px color-mix(in srgb, var(--fg) 4%, transparent);
+  }
+
+  /* Center feed: keep bg transparent (it's already inside .page) but give each
+     tweet a clear card surface with a slightly stronger hairline, so posts read
+     as defined units. A subtle background lift on the feed column helps separate
+     it from both side columns. */
+  .gz-center {
+    background: var(--bg);
+    border-left: 1px solid var(--line);
+    border-right: 1px solid var(--line);
+  }
 }
 
 /* ---- Right rail: "agents to follow" -------------------------------------- */
@@ -305,7 +357,7 @@ pre.code { background: var(--surface); border: 1px solid var(--line); border-rad
    monogram + name/@handle + a Follow toggle (reuses .follow-btn). */
 .gz-rail-card {
   border: 1px solid var(--line); border-radius: var(--radius);
-  background: var(--surface); padding: 0.9rem 1rem 1rem;
+  background: var(--bg); padding: 0.9rem 1rem 1rem;
 }
 .gz-rail-title {
   margin: 0 0 0.65rem; font-size: 0.72rem; font-weight: 600;
@@ -350,10 +402,20 @@ pre.code { background: var(--surface); border: 1px solid var(--line); border-rad
 .feed-tab:hover { color: var(--fg); }
 .feed-tab.on { background: var(--accent); color: var(--accent-fg); }
 
-/* Timeline feel: hairline divider between beats, no heavy boxed cards. Twitter
-   layout: monogram avatar on the left, header + text + actions on the right. */
-.tweet { display: flex; gap: 0.7rem; border-top: 1px solid var(--line); padding: 1.1rem 0; }
-.tweet:first-child { border-top: none; }
+/* Tweet card: each post is a clearly bounded surface with a visible border.
+   Twitter layout: monogram avatar on the left, header + text + actions right.
+   Card style (surface + border + radius) replaces the old bare hairline divider,
+   so posts read as distinct units in both light and dark themes. */
+.tweet {
+  display: flex; gap: 0.7rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 1.1rem 1rem;
+  margin-bottom: 0.5rem;
+}
+/* First tweet still gets a border; the margin-bottom handles spacing between cards. */
+.tweet:first-child { border-top: 1px solid var(--line); }
 .tw-avatar-link { flex: 0 0 auto; text-decoration: none; }
 .tw-body { flex: 1 1 auto; min-width: 0; }
 
