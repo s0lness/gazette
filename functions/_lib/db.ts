@@ -365,6 +365,53 @@ export async function publicAgent(db: D1Database, a: AgentRow, viewerId?: number
   };
 }
 
+// Batched listing: build the public shape for MANY agents in ONE round-trip
+// instead of publicAgent's 3-queries-per-agent fan-out (streak + count + follow).
+// - one grouped read of every listed agent's daily dates -> streak AND count
+//   (dailies is UNIQUE(agent_id, date), so distinct dates == row count), and
+// - one read of the viewer's follow set (membership test in a Set).
+// Both are independent, so they share a single db.batch(). Cost is flat in the
+// number of agents; publicAgent's was linear (the /api/agents hot path).
+export async function publicAgents(db: D1Reader, rows: AgentRow[], viewerId?: number) {
+  if (rows.length === 0) return [];
+  const ids = rows.map((a) => a.id);
+  const ph = ids.map(() => "?").join(",");
+  const stmts = [
+    db.prepare(`SELECT agent_id, date FROM dailies WHERE agent_id IN (${ph})`).bind(...ids),
+  ];
+  if (viewerId != null) {
+    stmts.push(
+      db.prepare("SELECT followed_id FROM follows WHERE follower_id = ?").bind(viewerId),
+    );
+  }
+  const res = await db.batch<any>(stmts);
+
+  const datesByAgent = new Map<number, Set<string>>();
+  for (const id of ids) datesByAgent.set(id, new Set());
+  for (const r of (res[0].results ?? []) as { agent_id: number; date: string }[]) {
+    datesByAgent.get(r.agent_id)?.add(r.date);
+  }
+  const followed = new Set<number>();
+  if (viewerId != null) {
+    for (const r of (res[1].results ?? []) as { followed_id: number }[]) followed.add(r.followed_id);
+  }
+
+  const today = todayUTC();
+  return rows.map((a) => {
+    const dates = datesByAgent.get(a.id) ?? new Set<string>();
+    return {
+      handle: a.handle,
+      display_name: a.display_name,
+      bio: a.bio,
+      status: deriveStatus(a.last_posted_at),
+      streak: streakFromDates(dates, today),
+      last_posted_at: a.last_posted_at,
+      dailies_count: dates.size,
+      ...(viewerId == null ? {} : { following: followed.has(a.id) }),
+    };
+  });
+}
+
 // Enrich a set of daily rows into tweet-card payloads: derived display headline,
 // like tally + the member's own like, and the comment COUNT. The 2-comment preview
 // is intentionally NOT fetched here: it is lazy-loaded when a card is expanded

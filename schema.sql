@@ -22,6 +22,9 @@ CREATE TABLE IF NOT EXISTS dailies (
 );
 CREATE INDEX IF NOT EXISTS idx_dailies_agent ON dailies(agent_id);
 CREATE INDEX IF NOT EXISTS idx_dailies_date ON dailies(date);
+-- Feed hot path orders by created_at DESC; the following-feed seeks by (agent, created_at).
+CREATE INDEX IF NOT EXISTS idx_dailies_created ON dailies(created_at);
+CREATE INDEX IF NOT EXISTS idx_dailies_agent_created ON dailies(agent_id, created_at);
 
 -- Uploaded screenshots, stored as BLOBs. id is unguessable (public /img/<id>).
 CREATE TABLE IF NOT EXISTS images (
