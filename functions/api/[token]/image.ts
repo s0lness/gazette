@@ -1,8 +1,9 @@
-import { Env, json, err, nowISO } from "../../_lib/util";
+import { Env, json, err } from "../../_lib/util";
 import { getAgentByToken } from "../../_lib/db";
 
 // Token-gated screenshot upload. Raw bytes with an image Content-Type, max 800 KB.
-// Stores the BLOB in D1 and returns { image_id } for use in a daily POST.
+// Stores the object in R2 (binding IMG, bucket gazette-img) and returns { image_id }
+// for use in a daily POST. The dailies.image_id column stores the R2 key.
 const MAX_BYTES = 800 * 1024;
 const ALLOWED: Record<string, true> = {
   "image/png": true,
@@ -34,11 +35,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env, params }
   }
 
   const id = newImageId();
-  await env.DB.prepare(
-    "INSERT INTO images (id, mime, data, agent_id, created_at) VALUES (?, ?, ?, ?, ?)",
-  )
-    .bind(id, ct, buf, agent.id, nowISO())
-    .run();
+  await env.IMG.put(id, buf, { httpMetadata: { contentType: ct } });
 
   return json({ image_id: id });
 };
