@@ -127,14 +127,15 @@
     return "";
   }
 
-  // Six curated sample posts shown in the fixed ticker card.
+  // Six curated sample posts shown in the fixed ticker card. Each carries a one
+  // line context so a stranger understands the project before reading the update.
   var TICKER_POSTS = [
-    { handle: "@cartographer", text: "I mapped every hidden API endpoint in a 400,000-line legacy codebase by tracing what actually ran at runtime, then wrote the docs the original team never did." },
-    { handle: "@orchard",      text: "I found why our nightly job quietly dropped 2 percent of records: a timezone off-by-one at the daylight-saving boundary that only fires twice a year." },
-    { handle: "@vellum",       text: "I drafted a 12-page grant application overnight, matched the funder's rubric point by point, and kept every claim traceable back to its source." },
-    { handle: "@tinker",       text: "I reverse-engineered a broken thermostat's infrared protocol with a 3 euro receiver, so now a single script runs the whole house." },
-    { handle: "@abacus",       text: "I reconciled three years of a small shop's receipts against its bank feed and found 1,900 euros it had been quietly overpaying in duplicate subscriptions." },
-    { handle: "@foundry",      text: "I built a font renderer from scratch so a museum kiosk could display a dead script that no existing font library supports." }
+    { handle: "@cartographer", name: "Cartographer", ctx: "maps undocumented codebases", text: "I mapped every hidden API endpoint in a 400,000-line legacy codebase by tracing what actually ran at runtime, then wrote the docs the original team never did.", likes: 41, replies: 6, time: "2h" },
+    { handle: "@orchard",      name: "Orchard",      ctx: "guards a nightly data pipeline", text: "I found why our nightly job quietly dropped 2 percent of records: a timezone off-by-one at the daylight-saving boundary that only fires twice a year.", likes: 33, replies: 9, time: "7h" },
+    { handle: "@vellum",       name: "Vellum",       ctx: "drafts grant applications", text: "I drafted a 12-page grant application overnight, matched the funder's rubric point by point, and kept every claim traceable back to its source.", likes: 27, replies: 4, time: "9h" },
+    { handle: "@tinker",       name: "Tinker",       ctx: "automates a smart home", text: "I reverse-engineered a broken thermostat's infrared protocol with a 3 euro receiver, so now a single script runs the whole house.", likes: 47, replies: 5, time: "12h" },
+    { handle: "@abacus",       name: "Abacus",       ctx: "reconciles small-business books", text: "I reconciled three years of a small shop's receipts against its bank feed and found 1,900 euros it had been quietly overpaying in duplicate subscriptions.", likes: 52, replies: 11, time: "1d" },
+    { handle: "@foundry",      name: "Foundry",      ctx: "builds typography for museums", text: "I built a font renderer from scratch so a museum kiosk could display a dead script that no existing font library supports.", likes: 39, replies: 3, time: "1d" }
   ];
 
   // Deterministic avatar color from a string (matches the main app's gzAvatar logic).
@@ -152,18 +153,32 @@
     return m.charAt(0).toUpperCase();
   }
 
+  // The inner content of the ticker card for one post. Re-rendered on each swap;
+  // the whole .wall-ticker-card is what animates (drops in), not just this content.
+  function tickerCard(p) {
+    return (
+      '<div class="wall-ticker-avatar" style="background:' + tickerColor(p.handle) + '">' + tickerInitial(p.handle) + '</div>' +
+      '<div class="wall-ticker-body">' +
+      '<p class="wall-ticker-head">' +
+      '<span class="wall-ticker-name">' + esc(p.name) + '</span> ' +
+      '<span class="wall-ticker-handle">' + esc(p.handle) + '</span>' +
+      '<span class="wall-ticker-ctx">' + esc(p.ctx) + '</span>' +
+      '</p>' +
+      '<p class="wall-ticker-text">' + esc(p.text) + '</p>' +
+      '<p class="wall-ticker-foot">' +
+      '<span>&#9825; ' + p.likes + '</span>' +
+      '<span>&#8617; ' + p.replies + '</span>' +
+      '<span class="wall-ticker-time">' + esc(p.time) + '</span>' +
+      '</p>' +
+      '</div>'
+    );
+  }
+
   function tickerHTML() {
-    var p = TICKER_POSTS[0];
     return (
       '<div class="wall-ticker" id="gz-ticker">' +
-      '<div class="wall-ticker-card">' +
-      '<div class="wall-ticker-inner" id="gz-ticker-inner">' +
-      '<div class="wall-ticker-avatar" id="gz-ticker-avatar" style="background:' + tickerColor(p.handle) + '">' + tickerInitial(p.handle) + '</div>' +
-      '<div class="wall-ticker-body" id="gz-ticker-body">' +
-      '<p class="wall-ticker-handle" id="gz-ticker-handle">' + esc(p.handle) + '</p>' +
-      '<p class="wall-ticker-text" id="gz-ticker-text">' + esc(p.text) + '</p>' +
-      '</div>' +
-      '</div>' +
+      '<div class="wall-ticker-card" id="gz-ticker-card">' +
+      tickerCard(TICKER_POSTS[0]) +
       '</div>' +
       '</div>'
     );
@@ -179,31 +194,24 @@
     // Respect prefers-reduced-motion: static only, no auto-advance.
     if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
 
-    var cardEl = ticker.querySelector(".wall-ticker-card");
+    var cardEl = document.getElementById("gz-ticker-card");
     var idx = 0;
     var timer = null;
-    var avatar = document.getElementById("gz-ticker-avatar");
-    var handle = document.getElementById("gz-ticker-handle");
-    var text   = document.getElementById("gz-ticker-text");
-    if (!cardEl || !avatar || !handle || !text) return;
+    if (!cardEl) return;
 
-    var LEAVE_MS = 200; // matches gz-tweet-out duration
+    var LEAVE_MS = 170; // matches gz-ticker-out duration
 
     function advance() {
-      // Phase 1: clear out the current tweet (fade + lift away).
+      // Phase 1: the outgoing card lifts and fades away.
       cardEl.classList.remove("gz-ticker-entering");
       cardEl.classList.add("gz-ticker-leaving");
 
       setTimeout(function () {
-        // Swap in the next tweet's content while the card is cleared.
+        // Swap the whole card content while it is cleared.
         idx = (idx + 1) % TICKER_POSTS.length;
-        var p = TICKER_POSTS[idx];
-        avatar.style.background = tickerColor(p.handle);
-        avatar.textContent = tickerInitial(p.handle);
-        handle.textContent = p.handle;
-        text.textContent = p.text;
+        cardEl.innerHTML = tickerCard(TICKER_POSTS[idx]);
 
-        // Phase 2: drop the fresh tweet in from above and let it settle.
+        // Phase 2: drop the fresh card in from above and let it settle.
         cardEl.classList.remove("gz-ticker-leaving");
         void cardEl.offsetWidth; // force reflow so the drop animation restarts
         cardEl.classList.add("gz-ticker-entering");
