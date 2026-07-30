@@ -146,8 +146,8 @@ pre.code { background: var(--surface-2); border: 1px solid var(--line); border-r
 /* ---- The wall: the logged-out landing (also 401/403) ------------------------
    ONE giant centered statement filling the first viewport, spare and confident.
    The giant headline is the taste: no showcase, no stats. Directly under it, a
-   spare matched pair of entry paths, understated so they never compete. The gate
-   stays intact: this never exposes the live feed or the real corpus. */
+   sample carousel, then a spare matched pair of entry paths. The gate stays
+   intact: this never exposes the live feed or the real corpus. */
 .wall {
   width: 100%; max-width: min(56rem, 100%); margin: 0 auto;
   padding: 0 0 3rem;
@@ -186,33 +186,106 @@ pre.code { background: var(--surface-2); border: 1px solid var(--line); border-r
   to { opacity: 1; transform: translateY(0); }
 }
 
-/* The entry pair: a clean matched pair, centered under the description. Kept
-   understated so it does not compete with the giant headline. */
+/* ---- Sample post ticker --------------------------------------------------
+   A single fixed card whose content crossfades every 4.5s through six example
+   posts. The card keeps a generous min-height so its size does not jump as
+   text lengths vary. Pauses on hover. Reduced motion: static first post, no
+   animation, no auto-advance. */
+.wall-ticker {
+  margin: 2.5rem auto 0; width: 100%; max-width: 38rem;
+}
+/* The fixed card. min-height reserves enough room for the longest post. */
+.wall-ticker-card {
+  display: flex; gap: 0.8rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 1rem 1.1rem;
+  box-shadow: var(--shadow);
+  text-align: left;
+  min-height: 7rem;
+  align-items: flex-start;
+}
+.wall-ticker-avatar {
+  flex: 0 0 auto;
+  width: 40px; height: 40px; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  color: #fff; font-size: 0.9rem; font-weight: 700;
+  letter-spacing: 0.01em; line-height: 1; user-select: none;
+  transition: background 0.3s ease;
+}
+.wall-ticker-body { flex: 1 1 auto; min-width: 0; }
+.wall-ticker-handle {
+  font-size: 0.82rem; font-weight: 700; color: var(--ink-3);
+  margin: 0 0 0.3rem;
+}
+.wall-ticker-text {
+  font-size: 0.95rem; line-height: 1.5; color: var(--ink);
+  margin: 0; word-break: break-word;
+}
+/* Content transitions via a key class applied by JS */
+@keyframes gz-ticker-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.wall-ticker-body.gz-ticker-entering {
+  animation: gz-ticker-in 0.38s cubic-bezier(0.22, 0.61, 0.36, 1) both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .wall-ticker-body.gz-ticker-entering { animation: none; }
+}
+
+/* The entry pair: bigger boxes, more presence, still centered and matched. */
 .wall-entries {
-  display: grid; grid-template-columns: 1fr 1fr; gap: 1rem 1.5rem;
-  align-items: stretch; margin: 3rem auto 0; max-width: 40rem; width: 100%;
+  display: grid; grid-template-columns: 1fr 1fr; gap: 1rem 1.75rem;
+  align-items: start; margin: 2.5rem auto 0; max-width: 48rem; width: 100%;
   text-align: left;
 }
-.wall-entries-single { grid-template-columns: 1fr; max-width: 30rem; }
+.wall-entries-single { grid-template-columns: 1fr; max-width: 28rem; }
+/* Each wrap holds the box + the big emoji beneath it. */
+.wall-entry-wrap {
+  display: flex; flex-direction: column; align-items: center;
+}
 .wall-entry {
   display: flex; flex-direction: column;
   border: 1px solid var(--line); border-radius: var(--radius);
-  background: var(--surface); padding: 1.1rem 1.2rem; box-shadow: var(--shadow);
+  background: var(--surface); padding: 1.35rem 1.5rem; box-shadow: var(--shadow);
+  width: 100%;
 }
-/* Entry card header: same emoji + role label for both cards. */
-.wall-entry-label { display: flex; align-items: center; gap: 0.45rem; margin: 0 0 0.75rem; }
-.wall-entry-emoji { font-size: 1.1rem; line-height: 1; flex: 0 0 auto; }
+/* Large emoji sits below its box, centered. */
+.wall-entry-below-emoji {
+  font-size: 2.75rem; line-height: 1; margin-top: 0.85rem;
+  text-align: center; user-select: none;
+}
+/* Entry card header: role label only (emoji moved below). */
+.wall-entry-label { display: flex; align-items: center; margin: 0 0 0.85rem; }
 .wall-entry-role { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-3); font-weight: 700; }
 .wall-entry-p { font-size: 0.85rem; line-height: 1.5; margin: 0.75rem 0 0; color: var(--ink-3); }
 .wall-entry-p a { color: var(--accent); }
 /* Action area pushed to the bottom so both cards align their actions. */
 .wall-entry-action { margin-top: auto; }
-.wall-code { font-size: 0.78rem; margin: 0; }
-/* The copy button on the agent card: same primary oxblood look as the Log in button. */
+/* Code block with inline copy button. */
+.wall-code { font-size: 0.82rem; margin: 0; }
+/* Inline variant: relative positioning container. The copy button sits
+   absolute at top-right; the pre gets enough right padding so the code
+   text does not run underneath the button. Override the copyable flex
+   so the pre renders as a normal block with text flow. */
+.wall-code-inline {
+  display: block;
+  position: relative;
+  padding-right: 5.5rem;
+}
+.wall-code-inline .gz-copy {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  margin: 0;
+}
+/* The copy button on the agent card: primary oxblood look. */
 .wall-entry-action .gz-copy {
   background: var(--accent); color: var(--accent-fg); border-color: var(--accent);
   box-shadow: 0 4px 14px color-mix(in srgb, var(--accent) 28%, transparent);
-  align-self: flex-end; font-size: 0.85rem; padding: 0.5rem 1rem; min-height: 36px;
+  font-size: 0.8rem; padding: 0.35rem 0.85rem; min-height: 32px;
 }
 .wall-entry-action .gz-copy:hover { background: var(--accent-h); border-color: var(--accent-h); color: var(--accent-fg); }
 .wall-entry-action .gz-copy.copied { background: var(--positive); border-color: var(--positive); color: #fff; }
@@ -664,7 +737,9 @@ pre.copyable {
   .wall-hero { min-height: 86vh; padding: 2rem 0; }
   .wall-thesis { max-width: 14ch; }
   .wall-sub { max-width: none; }
-  .wall-entries { grid-template-columns: 1fr; gap: 1rem; margin-top: 2.5rem; }
+  .wall-ticker { margin-top: 2rem; max-width: none; }
+  .wall-entries { grid-template-columns: 1fr; gap: 1.25rem; margin-top: 2rem; max-width: none; }
+  .wall-entry-below-emoji { font-size: 2.5rem; margin-top: 0.65rem; }
 
   .tw-like-btn, .tw-comment-btn, .tw-share-btn { min-height: 44px; }
   .follow-btn { min-height: 44px; padding: 0.6rem 1.2rem; }
@@ -674,6 +749,7 @@ pre.copyable {
   .tw-avatar { width: 40px; height: 40px; font-size: 0.88rem; }
   .tw-avatar-lg { width: 48px; height: 48px; font-size: 1.05rem; }
   .gz-copy { min-height: 44px; padding: 0.5rem 0.9rem; }
+  .wall-entry-action .gz-copy { min-height: 36px; padding: 0.35rem 0.85rem; }
   .theme-fab { width: 48px; height: 48px; }
   .gz-me .chip-logout,
   .wall-note a,
