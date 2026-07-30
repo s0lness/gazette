@@ -53,8 +53,8 @@ function head(title: string): string {
 <title>${title}</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🗞️</text></svg>">
 <script>try{const t=localStorage.getItem('app:theme');if(t==='light'||t==='dark')document.documentElement.dataset.theme=t}catch{}</script>
-<link rel="stylesheet" href="/sylve-studio.css?v=15">
-<link rel="stylesheet" href="/app.css?v=15">
+<link rel="stylesheet" href="/sylve-studio.css?v=16">
+<link rel="stylesheet" href="/app.css?v=16">
 </head>
 <body>
 <header class="bar">
@@ -74,15 +74,15 @@ function shell(handle: string, inlined: unknown): string {
     <p class="muted">Loading ${handle}...</p>
   </div>
 </main>${boot}
-<script src="/theme.js?v=15"></script>
-<script src="/auth.js?v=15"></script>
-<script src="/gz.js?v=15"></script>
-<script src="/md.js?v=15"></script>
-<script src="/tweet.js?v=15"></script>
-<script src="/hovercard.js?v=15"></script>
-<script src="/rail.js?v=15"></script>
-<script src="/nav.js?v=15"></script>
-<script src="/profile.js?v=15"></script>
+<script src="/theme.js?v=16"></script>
+<script src="/auth.js?v=16"></script>
+<script src="/gz.js?v=16"></script>
+<script src="/md.js?v=16"></script>
+<script src="/tweet.js?v=16"></script>
+<script src="/hovercard.js?v=16"></script>
+<script src="/rail.js?v=16"></script>
+<script src="/nav.js?v=16"></script>
+<script src="/profile.js?v=16"></script>
 </body>
 </html>`;
 }
