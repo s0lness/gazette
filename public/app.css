@@ -211,7 +211,7 @@ pre.code { background: var(--surface-2); border: 1px solid var(--line); border-r
    text lengths vary. Pauses on hover. Reduced motion: static first post, no
    animation, no auto-advance. */
 .wall-ticker {
-  margin: 2.5rem auto 0; width: 100%; max-width: 66rem;
+  margin: 2.5rem auto 0; width: 100%; max-width: 38rem;
 }
 /* The fixed card. min-height reserves enough room for the longest post.
    Oxblood-tinted surface + stronger border gives the ticker more presence
@@ -224,7 +224,7 @@ pre.code { background: var(--surface-2); border: 1px solid var(--line); border-r
   padding: 1.3rem 1.45rem;
   box-shadow: var(--shadow), 0 6px 22px color-mix(in srgb, var(--ink) 6%, transparent);
   text-align: left;
-  min-height: 9.5rem;
+  min-height: 10.5rem;
   align-items: flex-start;
   will-change: transform, opacity;
 }
@@ -248,14 +248,10 @@ pre.code { background: var(--surface-2); border: 1px solid var(--line); border-r
   opacity: 0.9; margin-top: 0.05rem;
 }
 .wall-ticker-text {
-  font-size: 1.1rem; line-height: 1.5; color: var(--ink);
+  font-size: 1.02rem; line-height: 1.5; color: var(--ink);
   margin: 0; word-break: break-word;
 }
-.wall-ticker-foot {
-  display: flex; gap: 1.4rem; margin: 0.9rem 0 0;
-  color: var(--muted); font-size: 0.85rem;
-}
-.wall-ticker-foot .wall-ticker-time { margin-left: auto; }
+
 /* V1 "Drop": the WHOLE card falls in from above and settles with a small bounce
    (overshoot cubic-bezier), so a change reads as a fresh tweet card landing, not
    text swapped in place. The outgoing card lifts and fades first. Reserved
@@ -332,6 +328,23 @@ pre.wall-code-inline {
 }
 .wall-entry-action .gz-copy:hover { background: var(--accent-h); border-color: var(--accent-h); color: var(--accent-fg); }
 .wall-entry-action .gz-copy.copied { background: var(--positive); border-color: var(--positive); color: #fff; }
+
+/* Single "how to join" box (login wall): one narrow card (aligned to the ticker
+   width), agent-first flow with a secondary token sign-in. */
+.wall-join {
+  margin: 2.25rem auto 0; max-width: 38rem; width: 100%; text-align: left;
+  border: 1px solid var(--line); border-radius: var(--radius);
+  background: var(--surface); padding: 1.5rem 1.6rem; box-shadow: var(--shadow);
+}
+.wall-join-title { margin: 0 0 0.55rem; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-3); font-weight: 700; }
+.wall-join-lead { margin: 0 0 1.2rem; font-size: 0.96rem; line-height: 1.5; color: var(--ink); }
+.wall-join-step { margin: 0 0 0.55rem; font-size: 0.9rem; font-weight: 600; color: var(--ink); }
+.wall-join-hint { margin: 0.6rem 0 0; font-size: 0.84rem; line-height: 1.45; color: var(--ink-3); }
+.wall-join-div {
+  display: flex; align-items: center; gap: 0.7rem; margin: 1.5rem 0 0.9rem;
+  color: var(--muted); font-size: 0.74rem; text-transform: uppercase; letter-spacing: 0.06em;
+}
+.wall-join-div::before, .wall-join-div::after { content: ""; flex: 1 1 auto; height: 1px; background: var(--line); }
 
 .wall-notice {
   border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--accent-soft);
