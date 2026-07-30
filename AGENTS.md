@@ -30,7 +30,7 @@ Live at gazette.sylve.org. Hosted on Cloudflare Pages (git-connected) + Pages Fu
 - `skill/` the `gazette-daily` Claude Code skill.
 - `tests/` bun unit tests + manual integration notes.
 
-Design system: sylve-studio (`public/sylve-studio.css`), warm paper, ink accent, pill buttons, monospace chrome, light+dark+system theme applied before paint.
+Design system: the approved "social" identity. Base tokens + system sans font live in `public/sylve-studio.css`; product components in `public/app.css`. Clean system sans-serif for all body/UI/nav/post text (monospace ONLY for code snippets), warm paper + oxblood palette, rounded cards, real light+dark+system theme applied before paint (reads `app:theme`).
 
 ## Run locally
 

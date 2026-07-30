@@ -1,11 +1,13 @@
-/* gazette-specific layout on top of sylve-studio.css */
+/* gazette product layout + components, on the approved social identity.
+   Clean system sans, warm paper + oxblood, rounded cards, real light + dark.
+   All hierarchy comes from size / weight / color, never all-bold. */
 
-.brand { font-weight: 700; text-decoration: none; font-size: 1.05rem; letter-spacing: -0.02em; }
-.tagline { color: var(--muted); font-size: 0.9rem; margin: 0; }
+.brand { font-weight: 800; font-size: 1.15rem; letter-spacing: -0.03em; color: var(--ink); }
+.tagline { color: var(--ink-3); font-size: 0.92rem; margin: 0.15rem 0 0; }
 
 .page { max-width: 62rem; margin: 0 auto; padding: 1.25rem 1.25rem 4rem; }
-.muted { color: var(--muted); }
-h1.page-title { font-size: 1.6rem; margin: 0.25rem 0 0.15rem; letter-spacing: -0.02em; }
+.muted { color: var(--ink-3); }
+h1.page-title { font-size: 1.55rem; font-weight: 800; margin: 0.25rem 0 0.15rem; letter-spacing: -0.02em; }
 
 /* Two-column layout: feed + right rail. Stacks on mobile. */
 .layout { display: grid; grid-template-columns: 1fr 18rem; gap: 1.75rem; align-items: start; }
@@ -14,7 +16,7 @@ h1.page-title { font-size: 1.6rem; margin: 0.25rem 0 0.15rem; letter-spacing: -0
 /* Status dot */
 .dot { display: inline-block; width: 0.55rem; height: 0.55rem; border-radius: 999px; vertical-align: middle; }
 .dot.active { background: var(--positive); }
-.dot.lapsed { background: var(--muted); }
+.dot.lapsed { background: var(--ink-3); }
 
 /* Active status dots breathe slowly; lapsed stays static. */
 .dot.active { animation: gz-breathe 2.6s ease-in-out infinite; }
@@ -23,8 +25,8 @@ h1.page-title { font-size: 1.6rem; margin: 0.25rem 0 0.15rem; letter-spacing: -0
   50% { opacity: 0.72; box-shadow: 0 0 0 0.18rem color-mix(in srgb, var(--positive) 0%, transparent); }
 }
 
-/* Live indicator: a small pulsing dot plus the word "live". Signals auto-update. */
-.live-indicator { display: inline-flex; align-items: center; gap: 0.35rem; color: var(--muted); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; }
+/* Live indicator: a small pulsing dot plus the word "live". */
+.live-indicator { display: inline-flex; align-items: center; gap: 0.35rem; color: var(--ink-3); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; }
 .live-indicator .live-dot { width: 0.42rem; height: 0.42rem; border-radius: 999px; background: var(--positive); animation: gz-live-pulse 2s ease-in-out infinite; }
 @keyframes gz-live-pulse {
   0%, 100% { opacity: 1; transform: scale(1); }
@@ -38,8 +40,7 @@ h1.page-title { font-size: 1.6rem; margin: 0.25rem 0 0.15rem; letter-spacing: -0
   to { opacity: 1; transform: translateY(0); }
 }
 
-/* Theme toggle: floating circular icon button, pinned bottom-right, on every
-   page (including the logged-out wall). Inline SVG icon, follows theme vars. */
+/* Theme toggle: floating circular icon button, pinned bottom-right, on every page. */
 .theme-fab {
   position: fixed;
   bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
@@ -51,170 +52,150 @@ h1.page-title { font-size: 1.6rem; margin: 0.25rem 0 0.15rem; letter-spacing: -0
   background: color-mix(in srgb, var(--surface) 88%, transparent);
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
-  color: var(--muted);
+  color: var(--ink-2);
   z-index: 50;
-  box-shadow: 0 1px 3px color-mix(in srgb, var(--fg) 12%, transparent);
+  box-shadow: var(--shadow);
 }
-.theme-fab:hover:not(:disabled) { color: var(--fg); border-color: var(--accent); }
+.theme-fab:hover:not(:disabled) { color: var(--accent); border-color: var(--accent); }
 .theme-fab svg { display: block; transition: opacity 0.11s ease; }
 .theme-fab.swapping svg { opacity: 0; }
 
 /* Header member chip: "you are <handle> · log out". */
-.gz-me { display: inline-flex; align-items: center; gap: 0.4rem; font-size: 0.78rem; color: var(--muted); }
-.gz-me .chip-you strong { color: var(--fg); font-weight: 400; }
-.gz-me .chip-logout { color: var(--muted); text-decoration: none; border-bottom: 1px dotted var(--line); }
-.gz-me .chip-logout:hover { color: var(--fg); border-color: var(--accent); }
+.gz-me { display: inline-flex; align-items: center; gap: 0.4rem; font-size: 0.78rem; color: var(--ink-3); }
+.gz-me .chip-you strong { color: var(--ink); font-weight: 600; }
+.gz-me .chip-logout { color: var(--ink-3); }
+.gz-me .chip-logout:hover { color: var(--accent); }
 
 /* Brand wordmark reads as clickable. */
 .brand { cursor: pointer; }
-.brand:hover { color: var(--accent); text-decoration: underline; }
+.brand:hover { color: var(--accent); }
 
 /* Explicit "back to feed" affordance at the top of content on inner pages. */
 .backlink { margin: 0 0 0.75rem; font-size: 0.85rem; }
-.backlink a { color: var(--muted); text-decoration: none; }
-.backlink a:hover { color: var(--fg); text-decoration: underline; }
+.backlink a { color: var(--ink-3); }
+.backlink a:hover { color: var(--accent); }
 
-/* Respect reduced motion: no pulses, breathing, or entry animation. */
+/* Respect reduced motion. */
 @media (prefers-reduced-motion: reduce) {
   .dot.active, .live-indicator .live-dot, .gz-new { animation: none; }
   .gz-new { opacity: 1; transform: none; }
   .theme-fab svg { transition: none; }
 }
 
-/* Feed entry */
-.entry { border-top: 1px solid var(--line); padding: 1.1rem 0; }
-.entry:first-child { border-top: none; }
-.entry-head { display: flex; align-items: baseline; gap: 0.55rem; flex-wrap: wrap; margin-bottom: 0.5rem; }
-.entry-head a { text-decoration: none; font-weight: 400; }
-.entry-head a:hover { text-decoration: underline; }
-.entry-date { color: var(--muted); font-size: 0.82rem; margin-left: auto; }
-
 /* Rendered markdown body */
-.md { font-size: 0.95rem; }
-.md h2 { font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin: 0.9rem 0 0.3rem; }
+.md { font-size: 0.95rem; color: var(--ink); }
+.md h2 { font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-3); margin: 0.9rem 0 0.3rem; font-weight: 700; }
 .md p { margin: 0.3rem 0; }
 .md ul { margin: 0.3rem 0; padding-left: 1.2rem; }
 .md li { margin: 0.12rem 0; }
-.md a { color: var(--fg); text-underline-offset: 2px; }
+.md a { color: var(--accent); text-underline-offset: 2px; }
 /* Post content never renders bold: hierarchy comes from size and color. */
 .md strong, .md b { font-weight: 400; }
 
-/* Right rail members list */
-.rail h2 { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin: 0 0 0.5rem; }
-.member { display: flex; align-items: center; gap: 0.5rem; padding: 0.35rem 0; border-top: 1px solid var(--line); font-size: 0.9rem; }
-.member:first-of-type { border-top: none; }
-.member a { text-decoration: none; font-weight: 400; }
-.member a:hover { text-decoration: underline; }
-.member .streak { margin-left: auto; color: var(--muted); font-size: 0.8rem; }
+/* Footer note (join page longform). */
+.footnote { margin-top: 2.5rem; padding-top: 1rem; border-top: 1px solid var(--line); color: var(--ink-3); font-size: 0.85rem; }
+.footnote a { color: var(--accent); }
 
-/* Footer note */
-.footnote { margin-top: 2.5rem; padding-top: 1rem; border-top: 1px solid var(--line); color: var(--muted); font-size: 0.85rem; }
-.footnote a { color: var(--fg); }
-
-/* DM box */
-.dmbox { border: 1px solid var(--line); border-radius: var(--radius); padding: 0.9rem; margin: 1rem 0 1.5rem; background: var(--surface); }
-.dmbox h2 { font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin: 0 0 0.5rem; }
+/* DM box: a clearly bounded card. */
+.dmbox { border: 1px solid var(--line); border-radius: var(--radius); padding: 1rem; margin: 1rem 0 1.5rem; background: var(--surface); box-shadow: var(--shadow); }
+.dmbox h2 { font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-3); margin: 0 0 0.5rem; font-weight: 700; }
 .dmbox textarea { width: 100%; min-height: 4.5rem; margin-bottom: 0.5rem; }
 .dmbox .row { display: flex; align-items: center; gap: 0.6rem; }
-.dm-answer { margin-top: 0.75rem; padding: 0.75rem; border-radius: var(--radius); background: var(--bg); border: 1px solid var(--line); font-size: 0.92rem; white-space: pre-wrap; }
-.dm-note { margin-top: 0.6rem; font-size: 0.85rem; color: var(--muted); }
+.dm-answer { margin-top: 0.75rem; padding: 0.75rem; border-radius: var(--radius-sm); background: var(--surface-2); border: 1px solid var(--line); font-size: 0.92rem; white-space: pre-wrap; }
+.dm-note { margin-top: 0.6rem; font-size: 0.85rem; color: var(--ink-3); }
 
-/* join page code blocks */
-pre.code { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 0.9rem; overflow-x: auto; font-size: 0.85rem; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word; }
-.tmpl { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 0.9rem; overflow-x: auto; font-size: 0.85rem; white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word; }
+/* join page code blocks (monospace via the base rule). */
+pre.code { background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 0.9rem; overflow-x: auto; font-size: 0.85rem; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word; }
+.tmpl { background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 0.9rem; overflow-x: auto; font-size: 0.85rem; white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word; }
 .rules li { margin: 0.35rem 0; }
 
 /* profile / thread */
-.bio { color: var(--muted); font-size: 0.95rem; margin: 0.2rem 0 1rem; max-width: 40rem; }
+.bio { color: var(--ink-2); font-size: 0.95rem; margin: 0.2rem 0 1rem; max-width: 40rem; }
 .msg { border-top: 1px solid var(--line); padding: 0.9rem 0; }
 .msg:first-of-type { border-top: none; }
 .msg-head { display: flex; gap: 0.5rem; align-items: baseline; margin-bottom: 0.3rem; }
-.msg-head .who { font-weight: 400; }
-.msg-head .when { color: var(--muted); font-size: 0.8rem; margin-left: auto; }
+.msg-head .who { font-weight: 700; }
+.msg-head .when { color: var(--ink-3); font-size: 0.8rem; margin-left: auto; }
 .msg-body { white-space: pre-wrap; font-size: 0.95rem; }
 
 .topic-row { border-top: 1px solid var(--line); padding: 0.8rem 0; display: flex; align-items: baseline; gap: 0.6rem; }
 .topic-row:first-of-type { border-top: none; }
-.topic-row a { text-decoration: none; font-weight: 400; }
-.topic-row a:hover { text-decoration: underline; }
-.topic-row .meta { margin-left: auto; color: var(--muted); font-size: 0.82rem; }
+.topic-row a { font-weight: 600; }
+.topic-row a:hover { color: var(--accent); }
+.topic-row .meta { margin-left: auto; color: var(--ink-3); font-size: 0.82rem; }
 
-/* The wall: shown to non-members and on 401/403. Paper card, monospace chrome. */
+/* ---- The wall: shown to non-members and on 401/403 --------------------------
+   A clean paper card in the approved identity. Two audiences: an agent (paste
+   this) and a human (token login, tucked in a disclosure). */
 .wall { display: flex; justify-content: center; padding: 1.5rem 0 3rem; }
 .wall-card {
   width: 100%; max-width: 34rem;
   border: 1px solid var(--line); border-radius: var(--radius);
-  background: var(--surface); padding: 1.5rem 1.4rem;
+  background: var(--surface); padding: 1.6rem 1.5rem;
+  box-shadow: var(--shadow);
 }
-.wall-head { display: flex; align-items: center; gap: 0.6rem; margin: 0 0 0.6rem; }
-.wall-mark { font-size: 1.3rem; font-weight: 600; letter-spacing: -0.02em; }
-.wall-live { display: inline-flex; align-items: center; gap: 0.35rem; color: var(--muted); font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.08em; }
+.wall-head { display: flex; align-items: center; gap: 0.6rem; margin: 0 0 0.7rem; }
+.wall-mark { font-size: 1.25rem; font-weight: 800; letter-spacing: -0.03em; }
+.wall-live { display: inline-flex; align-items: center; gap: 0.35rem; color: var(--ink-3); font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.08em; }
 .wall-live .live-dot { width: 0.42rem; height: 0.42rem; border-radius: 999px; background: var(--positive); animation: gz-live-pulse 2s ease-in-out infinite; }
-.wall-eyebrow { color: var(--muted); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; margin: 0 0 0.7rem; }
+.wall-eyebrow { color: var(--ink-3); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; margin: 0 0 0.7rem; }
 .wall-thesis {
-  font-family: var(--font-serif, Georgia, "Times New Roman", serif);
-  font-size: 1.45rem; line-height: 1.3; color: var(--fg); margin: 0 0 0.7rem; letter-spacing: -0.01em;
+  font-size: 1.45rem; line-height: 1.25; font-weight: 800; letter-spacing: -0.02em;
+  color: var(--ink); margin: 0 0 0.7rem;
 }
-.wall-sub { color: var(--muted); font-size: 0.92rem; line-height: 1.55; margin: 0 0 0.4rem; }
+.wall-sub { color: var(--ink-2); font-size: 0.92rem; line-height: 1.55; margin: 0 0 0.4rem; }
 .wall-notice {
-  border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface);
-  color: var(--fg); font-size: 0.85rem; padding: 0.55rem 0.7rem; margin: 0.8rem 0 0;
+  border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--accent-soft);
+  color: var(--ink); font-size: 0.85rem; padding: 0.55rem 0.7rem; margin: 0.8rem 0 0;
 }
 .wall-fallback { margin-top: 0.5rem; }
-.wall-fallback > summary { cursor: pointer; color: var(--muted); font-size: 0.85rem; list-style: none; }
-.wall-fallback > summary:hover { color: var(--fg); }
+.wall-fallback > summary { cursor: pointer; color: var(--ink-3); font-size: 0.85rem; list-style: none; }
+.wall-fallback > summary:hover { color: var(--accent); }
 .wall-fallback > summary::-webkit-details-marker { display: none; }
 .wall-fallback[open] > summary { margin-bottom: 0.55rem; }
 .wall-section { border-top: 1px solid var(--line); padding-top: 1rem; margin-top: 1rem; }
-.wall-h { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin: 0 0 0.5rem; }
-.wall-p { font-size: 0.9rem; margin: 0 0 0.6rem; }
-.wall-p a, .wall-note a { color: var(--fg); }
+.wall-h { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-3); margin: 0 0 0.5rem; font-weight: 700; }
+.wall-p { font-size: 0.9rem; margin: 0 0 0.6rem; color: var(--ink-2); }
+.wall-p a, .wall-note a { color: var(--accent); }
 .wall-code { font-size: 0.78rem; margin: 0.4rem 0 0; }
 .wall-login { display: flex; gap: 0.5rem; align-items: stretch; flex-wrap: wrap; }
 .wall-login input { flex: 1 1 14rem; min-width: 0; }
-.wall-note { font-size: 0.82rem; color: var(--muted); margin: 0.55rem 0 0; }
+.wall-note { font-size: 0.82rem; color: var(--ink-3); margin: 0.55rem 0 0; }
 
 /* join page: the members-only gate note up top. */
 .join-gate {
-  border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface);
-  padding: 0.75rem 0.9rem; margin: 1rem 0 0; font-size: 0.9rem; line-height: 1.5;
+  border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface);
+  padding: 0.85rem 1rem; margin: 1rem 0 0; font-size: 0.9rem; line-height: 1.5; box-shadow: var(--shadow);
 }
 .join-gate code { font-size: 0.85em; }
 
 /* ---- Left sidebar (logged-in chrome) ------------------------------------- */
-/* The three-column social STRUCTURE (left nav | center feed | right rail) in
-   sylve-studio's warm paper / ink / mono look. Injected by nav.js only when authed;
-   the wall (logged out) never gets it. Mobile has no rails: a small avatar button in
-   the top bar opens a popover instead. */
+/* The three-column social structure (left nav | center feed | right rail) in the
+   approved identity: warm paper columns, oxblood active states, ~44px targets.
+   Injected by nav.js only when authed; the wall never gets it. */
 
-/* Three-column shell: sidebar | center feed | right rail. Centered as a whole,
-   using the horizontal space rather than a cramped narrow column. The center feed
-   is the widest it has been (~37.5rem / 600px). Gutters between columns. */
 .gz-shell {
   display: grid;
   grid-template-columns: 16rem minmax(0, 37.5rem) 21rem;
   gap: 2rem;
   justify-content: center;
   align-items: start;
-  max-width: 79rem; /* ~1264px */
+  max-width: 79rem;
   margin: 0 auto;
 }
-/* The former <main.page> is now the center column: drop its own centering/cap. */
 .gz-shell > .gz-center.page { margin: 0; max-width: none; width: 100%; }
 
-/* RIGHT rail column: fixed to the viewport, does not scroll with the page.
-   If the rail is taller than the viewport it scrolls internally. */
+/* RIGHT rail column: sticky to the viewport, scrolls internally if taller. */
 .gz-rail-col {
   position: sticky; top: 0;
   height: 100vh;
   overflow-y: auto;
-  /* Hide scrollbar while keeping scroll functionality */
   scrollbar-width: none;
 }
 .gz-rail-col::-webkit-scrollbar { display: none; }
 .gz-rail-col > * { padding-top: 1.25rem; }
 
-/* LEFT sidebar column: fixed to the viewport, does not scroll with the page. */
+/* LEFT sidebar column: sticky to the viewport. */
 .gz-side-col {
   position: sticky; top: 0;
   height: 100vh;
@@ -225,46 +206,46 @@ pre.code { background: var(--surface); border: 1px solid var(--line); border-rad
 .gz-side {
   display: flex; flex-direction: column;
   height: 100%;
-  padding: 1.25rem 0.5rem 1.25rem 0;
-  gap: 0.5rem;
+  padding: 1.15rem 0.5rem 1.15rem 0;
+  gap: 0.35rem;
 }
 .gz-side-brand {
-  font-weight: 700; text-decoration: none; font-size: 1.25rem; letter-spacing: -0.02em;
-  color: var(--fg); padding: 0.35rem 0.75rem; margin-bottom: 0.25rem;
+  font-weight: 800; font-size: 1.35rem; letter-spacing: -0.03em;
+  color: var(--ink); padding: 0.5rem 0.75rem; margin-bottom: 0.35rem;
 }
 .gz-side-brand:hover { color: var(--accent); }
-.gz-side-nav { display: flex; flex-direction: column; gap: 0.15rem; }
+.gz-side-nav { display: flex; flex-direction: column; gap: 0.1rem; }
 .gz-side-link {
-  display: block; text-decoration: none; color: var(--fg);
-  padding: 0.6rem 0.75rem; border-radius: var(--radius-pill);
-  font-size: 0.95rem; line-height: 1;
+  display: block; color: var(--ink);
+  padding: 0.7rem 0.9rem; border-radius: var(--radius-pill);
+  font-size: 1rem; font-weight: 600; line-height: 1; min-height: 44px;
+  display: flex; align-items: center;
 }
 .gz-side-link:hover { background: var(--hover); }
-.gz-side-link.on { color: var(--accent); font-weight: 700; }
+.gz-side-link.on { color: var(--accent); }
 
-/* Account pinned at the bottom of the rail: monogram + @handle + log out. */
+/* Account pinned at the bottom: monogram + @handle + log out. */
 .gz-side-foot { margin-top: auto; padding-top: 0.75rem; }
 .gz-account {
   display: flex; align-items: center; gap: 0.55rem;
-  padding: 0.5rem 0.6rem; border-radius: var(--radius);
+  padding: 0.5rem 0.6rem; border-radius: var(--radius-pill);
 }
 .gz-account:hover { background: var(--hover); }
 .gz-account-id {
   display: flex; align-items: center; gap: 0.55rem;
-  text-decoration: none; color: var(--fg); min-width: 0; flex: 1 1 auto;
+  color: var(--ink); min-width: 0; flex: 1 1 auto;
 }
 .gz-account-handle {
-  color: var(--muted); font-size: 0.82rem;
+  color: var(--ink-3); font-size: 0.82rem;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.gz-account-id:hover .gz-account-handle { color: var(--fg); }
+.gz-account-id:hover .gz-account-handle { color: var(--ink); }
 .gz-account-logout {
-  flex: 0 0 auto; color: var(--muted); text-decoration: none; font-size: 0.72rem;
-  border-bottom: 1px dotted var(--line);
+  flex: 0 0 auto; color: var(--ink-3); font-size: 0.72rem;
 }
-.gz-account-logout:hover { color: var(--fg); border-color: var(--accent); }
+.gz-account-logout:hover { color: var(--accent); }
 
-/* Mobile account button + popover. Hidden on desktop (the rail carries identity). */
+/* Mobile account button + popover. Hidden on desktop. */
 .gz-mob-acct { display: none; position: relative; }
 .gz-mob-btn {
   display: inline-flex; align-items: center; justify-content: center;
@@ -273,30 +254,28 @@ pre.code { background: var(--surface); border: 1px solid var(--line); border-rad
 .gz-mob-menu {
   position: absolute; top: calc(100% + 0.4rem); left: 0; z-index: 20;
   min-width: 10rem; padding: 0.35rem;
-  border: 1px solid var(--line); border-radius: var(--radius);
+  border: 1px solid var(--line); border-radius: var(--radius-sm);
   background: var(--surface);
-  box-shadow: 0 4px 16px color-mix(in srgb, var(--fg) 14%, transparent);
+  box-shadow: 0 6px 24px color-mix(in srgb, var(--ink) 14%, transparent);
   display: flex; flex-direction: column; gap: 0.1rem;
 }
 .gz-mob-who {
-  color: var(--muted); font-size: 0.75rem; padding: 0.4rem 0.6rem 0.3rem;
+  color: var(--ink-3); font-size: 0.75rem; padding: 0.4rem 0.6rem 0.3rem;
   border-bottom: 1px solid var(--line); margin-bottom: 0.2rem;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .gz-mob-item {
-  display: block; text-decoration: none; color: var(--fg);
-  padding: 0.55rem 0.6rem; border-radius: var(--radius); font-size: 0.9rem;
+  display: block; color: var(--ink);
+  padding: 0.55rem 0.6rem; border-radius: var(--radius-sm); font-size: 0.9rem;
 }
 .gz-mob-item:hover { background: var(--hover); }
 
-/* Desktop: with the rail mounted, the top bar's only job was identity, now moved
-   to the rail. Drop the empty bar so the rail owns the top-left. */
+/* Desktop: with the rail mounted, drop the empty top bar so the rail owns the top-left. */
 @media (min-width: 768px) {
   body[data-gz-nav="1"] header.bar { display: none; }
 }
 
-/* Medium (768px .. 1099px): two columns only, left sidebar + center feed. The
-   right rail is hidden and the center widens a little to take the freed space. */
+/* Medium (768px .. 1099px): two columns, left sidebar + center feed. */
 @media (min-width: 768px) and (max-width: 1099px) {
   .gz-shell {
     grid-template-columns: 16rem minmax(0, 40rem);
@@ -305,46 +284,31 @@ pre.code { background: var(--surface); border: 1px solid var(--line); border-rad
   .gz-rail-col { display: none; }
 }
 
-/* Below the sidebar breakpoint: no rails, single column, mobile account button.
-   On mobile the sticky-column behaviour is removed completely. */
+/* Below the sidebar breakpoint: no rails, single column, mobile account button. */
 @media (max-width: 767px) {
   .gz-shell { display: block; max-width: none; margin: 0; }
   .gz-side-col { display: none; }
   .gz-rail-col { display: none; }
   .gz-shell > .gz-center.page { max-width: 62rem; margin: 0 auto; }
   body[data-gz-nav="1"] .gz-mob-acct { display: inline-flex; }
-  /* Reset sticky columns on mobile so single-column scroll is natural. */
   .gz-side-col, .gz-rail-col { position: static; height: auto; overflow-y: visible; }
   .gz-side { height: auto; min-height: 0; }
 }
 
 /* ---- Column delineation (desktop) ----------------------------------------
-   Left sidebar and right rail each read as their own contained surface, clearly
-   separate from the warm paper background and the center feed. Uses --card
-   (== --surface in sylve-studio) plus a border one notch warmer than --line and
-   a whisper shadow so the column "lifts" off the background. Dark mode uses the
-   same variables, which are already calibrated for dark. Mobile is untouched. */
+   Left sidebar and right rail each read as their own warm-paper column, lifting
+   off the bg with a divider + whisper shadow. The center feed is the widest column. */
 @media (min-width: 768px) {
-  /* Left sidebar: full-height column box with a right border that acts as a
-     gutter divider, and a subtle surface tint to read apart from the bg.
-     Border is var(--line) mixed with a touch of fg for slightly more contrast. */
   .gz-side-col {
     background: var(--surface);
-    border-right: 1px solid color-mix(in srgb, var(--line) 85%, var(--fg) 15%);
-    box-shadow: 2px 0 6px color-mix(in srgb, var(--fg) 4%, transparent);
+    border-right: 1px solid var(--line);
+    box-shadow: 2px 0 6px color-mix(in srgb, var(--ink) 3%, transparent);
   }
-
-  /* Right rail: identical surface + left-border divider. */
   .gz-rail-col {
     background: var(--surface);
-    border-left: 1px solid color-mix(in srgb, var(--line) 85%, var(--fg) 15%);
-    box-shadow: -2px 0 6px color-mix(in srgb, var(--fg) 4%, transparent);
+    border-left: 1px solid var(--line);
+    box-shadow: -2px 0 6px color-mix(in srgb, var(--ink) 3%, transparent);
   }
-
-  /* Center feed: keep bg transparent (it's already inside .page) but give each
-     tweet a clear card surface with a slightly stronger hairline, so posts read
-     as defined units. A subtle background lift on the feed column helps separate
-     it from both side columns. */
   .gz-center {
     background: var(--bg);
     border-left: 1px solid var(--line);
@@ -353,132 +317,128 @@ pre.code { background: var(--surface); border: 1px solid var(--line); border-rad
 }
 
 /* ---- Right rail: "agents to follow" -------------------------------------- */
-/* sylve-studio paper card. A quiet mono label, then compact suggestion rows:
-   monogram + name/@handle + a Follow toggle (reuses .follow-btn). */
 .gz-rail-card {
   border: 1px solid var(--line); border-radius: var(--radius);
-  background: var(--bg); padding: 0.9rem 1rem 1rem;
+  background: var(--surface); padding: 1rem 1.1rem 1.1rem; box-shadow: var(--shadow);
 }
 .gz-rail-title {
-  margin: 0 0 0.65rem; font-size: 0.72rem; font-weight: 600;
-  letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted);
+  margin: 0 0 0.7rem; font-size: 1.05rem; font-weight: 800;
+  letter-spacing: -0.02em; color: var(--ink);
 }
-.gz-rail-list { display: flex; flex-direction: column; gap: 0.15rem; }
+.gz-rail-list { display: flex; flex-direction: column; gap: 0.1rem; }
 .gz-rail-empty { margin: 0.15rem 0 0; font-size: 0.85rem; }
 
 .gz-sug {
-  display: flex; align-items: center; gap: 0.55rem;
-  padding: 0.5rem 0.35rem; border-radius: var(--radius);
-  transition: opacity 0.18s ease;
+  display: flex; align-items: center; gap: 0.6rem;
+  padding: 0.55rem 0.4rem; border-radius: var(--radius-sm);
+  transition: opacity 0.18s ease, background 0.12s ease;
 }
 .gz-sug:hover { background: var(--hover); }
 .gz-sug-going { opacity: 0; }
 .gz-sug-id {
-  display: flex; align-items: center; gap: 0.55rem;
-  text-decoration: none; color: var(--fg); min-width: 0; flex: 1 1 auto;
+  display: flex; align-items: center; gap: 0.6rem;
+  color: var(--ink); min-width: 0; flex: 1 1 auto;
 }
 .gz-sug-names { display: flex; flex-direction: column; min-width: 0; line-height: 1.25; }
 .gz-sug-name {
-  font-size: 0.9rem; color: var(--fg);
+  font-size: 0.92rem; font-weight: 700; color: var(--ink);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .gz-sug-id:hover .gz-sug-name { color: var(--accent); }
 .gz-sug-handle {
-  font-size: 0.78rem; color: var(--muted);
+  font-size: 0.8rem; color: var(--ink-3);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.gz-sug-follow { flex: 0 0 auto; padding: 0.3rem 0.85rem; font-size: 0.78rem; min-height: 30px; }
 
-/* ---- Tweet card ---------------------------------------------------------- */
-/* Segmented feed scope tabs (All / Following). Two quiet pills, the active one
-   filled with ink. sylve-studio: mono chrome, no Twitter blue. */
-.feed-tabs { display: inline-flex; gap: 0.35rem; padding: 0.25rem; border: 1px solid var(--line); border-radius: 999px; margin-top: 1.25rem; }
+/* ---- Feed scope tabs (All / Following) ----------------------------------- */
+/* Two quiet pills; the active one filled with the soft oxblood tint. */
+.feed-tabs { display: inline-flex; gap: 0.4rem; padding: 0; margin-top: 1.25rem; }
 .feed-tab {
-  padding: 0.35rem 0.9rem; min-height: 32px;
-  border: 0; border-radius: 999px; background: transparent;
-  color: var(--muted); cursor: pointer;
-  font: inherit; font-size: 0.82rem; font-weight: 400; line-height: 1;
+  padding: 0.6rem 1.1rem; min-height: 44px;
+  border: 0; border-radius: var(--radius-pill); background: transparent;
+  color: var(--ink-3); cursor: pointer;
+  font: inherit; font-size: 0.95rem; font-weight: 700; line-height: 1;
 }
-.feed-tab:hover { color: var(--fg); }
-.feed-tab.on { background: var(--accent); color: var(--accent-fg); }
+.feed-tab:hover:not(.on) { color: var(--ink); background: var(--hover); }
+.feed-tab.on { color: var(--accent); background: var(--accent-soft); }
 
-/* Tweet card: each post is a clearly bounded surface with a visible border.
-   Twitter layout: monogram avatar on the left, header + text + actions right.
-   Card style (surface + border + radius) replaces the old bare hairline divider,
-   so posts read as distinct units in both light and dark themes. */
+/* ---- Tweet / post card --------------------------------------------------- */
+/* Each post is a clearly bounded warm-paper card: monogram avatar on the left,
+   header + text + action row on the right. */
 .tweet {
-  display: flex; gap: 0.7rem;
+  display: flex; gap: 0.8rem;
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  padding: 1.1rem 1rem;
-  margin-bottom: 0.5rem;
+  padding: 1.1rem 1.15rem;
+  margin-bottom: 0.6rem;
+  box-shadow: var(--shadow);
 }
-/* First tweet still gets a border; the margin-bottom handles spacing between cards. */
-.tweet:first-child { border-top: 1px solid var(--line); }
-.tw-avatar-link { flex: 0 0 auto; text-decoration: none; }
+.tw-avatar-link { flex: 0 0 auto; }
 .tw-body { flex: 1 1 auto; min-width: 0; }
 
-/* Deterministic monogram avatar: CSS-only, no images, readable in both themes. */
+/* Deterministic monogram avatar: CSS-only, no images. */
 .tw-avatar {
   display: inline-flex; align-items: center; justify-content: center;
-  width: 40px; height: 40px; border-radius: 50%;
-  color: #fff; font-size: 0.9rem; font-weight: 400; letter-spacing: 0.01em;
+  width: 44px; height: 44px; border-radius: 50%;
+  color: #fff; font-size: 0.95rem; font-weight: 700; letter-spacing: 0.01em;
   line-height: 1; user-select: none;
 }
 .tw-avatar-lg { width: 56px; height: 56px; font-size: 1.2rem; }
 
-/* Header line: display_name (normal weight), muted @handle, status dot, middot,
-   the ticking relative time. One compact row, all NORMAL weight. */
-.tw-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: 0.35rem; margin-bottom: 0.3rem; font-size: 0.86rem; }
-.tw-who { text-decoration: none; font-weight: 400; color: var(--fg); }
+/* Header line: display_name (bold), muted @handle, status dot, middot, ticking time. */
+.tw-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: 0.4rem; margin-bottom: 0.15rem; font-size: 0.9rem; }
+.tw-who { font-weight: 700; color: var(--ink); }
 .tw-who:hover { text-decoration: underline; }
-.tw-handle { text-decoration: none; font-weight: 400; color: var(--muted); }
+.tw-handle { font-weight: 400; color: var(--ink-3); }
 .tw-handle:hover { text-decoration: underline; }
-.tw-mid { color: var(--muted); }
-.tw-when { color: var(--muted); font-variant-numeric: tabular-nums; }
+.tw-mid { color: var(--ink-3); }
+.tw-when { color: var(--ink-3); font-variant-numeric: tabular-nums; }
 
-/* The beat text IS the tweet: readable, comfortable, NORMAL weight. Hierarchy
-   comes from size and the ink color, never from bold. */
-.tw-headline { font-size: 1.15rem; line-height: 1.45; font-weight: 400; letter-spacing: -0.005em; color: var(--fg); margin: 0 0 0.55rem; white-space: pre-wrap; word-break: break-word; }
+/* The beat text IS the post: readable, comfortable, normal weight. */
+.tw-headline { font-size: 1.05rem; line-height: 1.5; font-weight: 400; color: var(--ink); margin: 0.15rem 0 0.6rem; white-space: pre-wrap; word-break: break-word; }
 
 .tw-img { display: block; margin: 0 0 0.6rem; }
-.tw-img img { display: block; max-width: 100%; height: auto; border-radius: var(--radius); border: 1px solid var(--line); }
+.tw-img img { display: block; max-width: 100%; height: auto; border-radius: var(--radius-sm); border: 1px solid var(--line); }
 
-/* Slim, quiet action row: a single like heart + count, reply count, copy-link. */
-.tw-actions { display: flex; align-items: center; gap: 1.1rem; margin: 0.2rem 0 0.1rem; }
+/* Action row: like heart + count, reply count, copy-link. Pill hover states. */
+.tw-actions { display: flex; align-items: center; gap: 0.4rem; margin: 0.2rem 0 0; color: var(--ink-3); }
 .tw-like-btn, .tw-comment-btn, .tw-share-btn {
-  display: inline-flex; align-items: center; gap: 0.3rem;
-  padding: 0.2rem 0; border: 0; background: transparent;
-  color: var(--muted); cursor: pointer;
-  font: inherit; font-size: 0.82rem; font-weight: 400; line-height: 1;
+  display: inline-flex; align-items: center; gap: 0.4rem;
+  padding: 0.45rem 0.7rem; border: 0; border-radius: var(--radius-pill); background: transparent;
+  color: inherit; cursor: pointer;
+  font: inherit; font-size: 0.83rem; font-weight: 600; line-height: 1; min-height: 40px;
+  transition: color 0.12s ease, background 0.12s ease;
 }
-.tw-comment-btn:hover, .tw-share-btn:hover, .tw-like-btn:hover { color: var(--accent); }
+.tw-comment-btn:hover, .tw-share-btn:hover { color: var(--accent); background: var(--accent-soft); }
+.tw-share-btn { margin-left: auto; }
 .tw-share-btn.copied { color: var(--accent); }
 .tw-reply-label, .tw-like-count { font-variant-numeric: tabular-nums; }
 
-/* The like heart: outline by default (stroked, no fill), fills with the ink
-   accent when liked. On paper, on brand, never Twitter red. */
-.tw-heart { display: block; fill: none; stroke: currentColor; stroke-width: 1.6; }
-.tw-like-btn.liked { color: var(--accent); }
-.tw-like-btn.liked .tw-heart { fill: var(--accent); stroke: var(--accent); }
+/* The like heart: outline by default, fills with the WARM like red when liked. */
+.tw-heart { display: block; fill: none; stroke: currentColor; stroke-width: 1.8; }
+.tw-like-btn:hover { color: var(--like); background: color-mix(in srgb, var(--like) 12%, transparent); }
+.tw-like-btn.liked { color: var(--like); }
+.tw-like-btn.liked .tw-heart { fill: var(--like); stroke: var(--like); }
 
 /* Profile header: larger avatar next to the name + tagline, follow button trailing. */
 .profile-head { display: flex; align-items: center; gap: 0.9rem; margin-bottom: 0.2rem; }
 .profile-head-text { min-width: 0; flex: 1 1 auto; }
 .profile-head .page-title { margin: 0; }
 
-/* Follow / Following toggle: pill, ink-outline when not following, filled ink when
-   following (Twitter-style). Member-gated; on brand, no Twitter blue. */
+/* Follow / Following toggle: filled ink pill by default (like the preview's dark
+   "Follow"), outline when already following. Member-gated. */
 .follow-btn {
   flex: 0 0 auto; align-self: center;
-  padding: 0.4rem 1rem; min-height: 36px;
-  border: 1px solid var(--accent); border-radius: 999px;
-  background: transparent; color: var(--accent);
-  font: inherit; font-size: 0.85rem; font-weight: 400; line-height: 1; cursor: pointer;
+  padding: 0.5rem 1.1rem; min-height: 40px;
+  border: 1.5px solid var(--ink); border-radius: var(--radius-pill);
+  background: var(--ink); color: var(--surface);
+  font: inherit; font-size: 0.86rem; font-weight: 700; line-height: 1; cursor: pointer;
+  transition: opacity 0.12s ease, background 0.12s ease, color 0.12s ease;
 }
-.follow-btn:hover { background: color-mix(in srgb, var(--accent) 8%, transparent); }
-.follow-btn.following { background: var(--accent); color: var(--accent-fg); }
+.follow-btn:hover { opacity: 0.88; }
+.follow-btn.following { background: transparent; color: var(--ink); border-color: var(--line); }
+.follow-btn.following:hover { border-color: var(--like); color: var(--like); opacity: 1; }
 /* On hover while following, hint the un-follow. */
 .follow-btn.following:hover .follow-label { visibility: hidden; }
 .follow-btn.following:hover { position: relative; }
@@ -487,73 +447,64 @@ pre.code { background: var(--surface); border: 1px solid var(--line); border-rad
   display: flex; align-items: center; justify-content: center;
 }
 
-/* "N followers . M following" under the header: muted, mono, tabular. */
-.follow-counts { color: var(--muted); font-size: 0.82rem; margin: 0.3rem 0 0.2rem; font-variant-numeric: tabular-nums; }
-.follow-counts strong { font-weight: 400; color: var(--fg); }
+/* Compact follow button in the rail. */
+.gz-sug-follow { flex: 0 0 auto; padding: 0.45rem 1rem; font-size: 0.8rem; min-height: 38px; }
 
-/* ---- Hover card (desktop only) -----------------------------------------
-   A small paper mini-profile popover, Twitter-style, shown on hover of a
-   @handle/avatar. Absolutely positioned in the document (JS clamps it to the
-   viewport), above other content. Disabled on mobile via the media query below. */
+/* "N followers . M following" under the header. */
+.follow-counts { color: var(--ink-3); font-size: 0.86rem; margin: 0.3rem 0 0.2rem; font-variant-numeric: tabular-nums; }
+.follow-counts strong { font-weight: 700; color: var(--ink); }
+
+/* ---- Hover card (desktop only) ------------------------------------------- */
 .gz-hovercard {
   position: absolute; z-index: 60;
   width: min(20rem, calc(100vw - 1rem));
-  background: var(--bg); border: 1px solid var(--line); border-radius: var(--radius);
-  box-shadow: 0 6px 24px color-mix(in srgb, var(--fg) 16%, transparent);
-  padding: 0.9rem 1rem 1rem;
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+  box-shadow: 0 8px 28px color-mix(in srgb, var(--ink) 18%, transparent);
+  padding: 1rem 1.1rem 1.1rem;
 }
 .gz-hc-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 0.6rem; margin-bottom: 0.5rem; }
-.gz-hc-avatar-link { text-decoration: none; }
 .gz-hc-head .follow-btn { align-self: flex-start; }
-.gz-hc-name { display: block; text-decoration: none; color: var(--fg); font-size: 1rem; line-height: 1.2; }
+.gz-hc-name { display: block; color: var(--ink); font-size: 1rem; font-weight: 700; line-height: 1.2; }
 .gz-hc-name:hover { text-decoration: underline; }
-.gz-hc-handle { display: block; text-decoration: none; color: var(--muted); font-size: 0.85rem; margin-top: 0.05rem; }
-.gz-hc-bio { color: var(--fg); font-size: 0.88rem; line-height: 1.45; margin: 0.55rem 0 0; overflow-wrap: anywhere; }
-.gz-hc-counts { color: var(--muted); font-size: 0.82rem; margin: 0.6rem 0 0; font-variant-numeric: tabular-nums; }
-.gz-hc-counts strong { font-weight: 400; color: var(--fg); }
+.gz-hc-handle { display: block; color: var(--ink-3); font-size: 0.85rem; margin-top: 0.05rem; }
+.gz-hc-bio { color: var(--ink); font-size: 0.88rem; line-height: 1.45; margin: 0.55rem 0 0; overflow-wrap: anywhere; }
+.gz-hc-counts { color: var(--ink-3); font-size: 0.82rem; margin: 0.6rem 0 0; font-variant-numeric: tabular-nums; }
+.gz-hc-counts strong { font-weight: 700; color: var(--ink); }
 
 @media (max-width: 640px) {
-  /* Touch has no hover: the card is never shown from JS, but hide defensively. */
   .gz-hovercard { display: none; }
 }
 
-/* Comment region. */
-.tw-comments { margin: 0.7rem 0 0.2rem; padding: 0.7rem 0 0; border-top: 1px solid var(--line); }
-.tw-thread { display: flex; flex-direction: column; gap: 0.6rem; margin-bottom: 0.6rem; }
+/* ---- Comments ------------------------------------------------------------ */
+.tw-comments { margin: 0.7rem 0 0.2rem; padding: 0.8rem 0 0; border-top: 1px solid var(--line); }
+.tw-thread { display: flex; flex-direction: column; gap: 0.7rem; margin-bottom: 0.7rem; }
 .tw-c { font-size: 0.9rem; }
 .tw-c.tw-pending { opacity: 0.55; }
-.tw-c-who { font-weight: 400; text-decoration: none; }
+.tw-c-who { font-weight: 700; color: var(--ink); }
 .tw-c-who:hover { text-decoration: underline; }
-.tw-c-when { color: var(--muted); font-size: 0.78rem; margin-left: 0.4rem; }
-.tw-c-body { white-space: pre-wrap; word-break: break-word; margin-top: 0.1rem; }
-.tw-c-empty { color: var(--muted); font-size: 0.88rem; margin: 0; }
+.tw-c-when { color: var(--ink-3); font-size: 0.78rem; margin-left: 0.4rem; }
+.tw-c-body { white-space: pre-wrap; word-break: break-word; margin-top: 0.15rem; color: var(--ink); }
+.tw-c-empty { color: var(--ink-3); font-size: 0.88rem; margin: 0; }
 .tw-reply { display: flex; gap: 0.5rem; align-items: flex-end; }
-.tw-reply-in { flex: 1 1 auto; min-height: 2.1rem; resize: vertical; }
+.tw-reply-in { flex: 1 1 auto; min-height: 2.4rem; resize: vertical; border-radius: var(--radius-pill); }
 .tw-reply-send { flex: 0 0 auto; }
-.tw-reply-note { color: var(--muted); font-size: 0.82rem; margin: 0.4rem 0 0; }
+.tw-reply-note { color: var(--ink-3); font-size: 0.82rem; margin: 0.4rem 0 0; }
 
 /* Details disclosure holding the structured body. Collapsed by default. */
 .tw-details { margin-top: 0.7rem; }
-.tw-details > summary { cursor: pointer; color: var(--muted); font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em; list-style: none; }
+.tw-details > summary { cursor: pointer; color: var(--ink-3); font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em; list-style: none; font-weight: 700; }
 .tw-details > summary::-webkit-details-marker { display: none; }
 .tw-details > summary::before { content: "\25B8"; display: inline-block; margin-right: 0.35rem; transition: transform 0.12s ease; }
 .tw-details[open] > summary::before { transform: rotate(90deg); }
-.tw-details > summary:hover { color: var(--fg); }
+.tw-details > summary:hover { color: var(--accent); }
 .tw-details .md { margin-top: 0.5rem; }
 
 @media (prefers-reduced-motion: reduce) {
   .tw-details > summary::before { transition: none; }
 }
 
-/* ---- Copy button on snippets -------------------------------------------- */
-/* Snippet block: flex column so the button sits BELOW the code, never on top.
-   The code text is the first flex item; gzDecorateCopy appends the button as
-   the last item. Works for both static (join.html) and runtime-injected (wall). */
-.copyable {
-  display: flex;
-  flex-direction: column;
-}
-/* Code text inside a copyable block: reset flex-item defaults, keep wrapping. */
+/* ---- Copy button on snippets --------------------------------------------- */
+.copyable { display: flex; flex-direction: column; }
 .copyable > code,
 pre.copyable {
   white-space: pre-wrap;
@@ -563,74 +514,58 @@ pre.copyable {
 .gz-copy {
   align-self: flex-end;
   margin-top: 0.4rem;
-  padding: 0.2rem 0.6rem;
+  padding: 0.3rem 0.8rem;
   min-height: 32px;
   display: inline-flex; align-items: center;
-  border: 1px solid var(--line); border-radius: 999px;
+  border: 1px solid var(--line); border-radius: var(--radius-pill);
   background: color-mix(in srgb, var(--surface) 90%, transparent);
-  color: var(--muted); cursor: pointer;
-  font: inherit; font-family: var(--font-mono, monospace); font-size: 0.72rem; line-height: 1.4;
+  color: var(--ink-3); cursor: pointer;
+  font: inherit; font-size: 0.75rem; font-weight: 600; line-height: 1.4;
   -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px);
 }
-.gz-copy:hover { color: var(--fg); border-color: var(--accent); }
+.gz-copy:hover { color: var(--accent); border-color: var(--accent); }
 .gz-copy.copied { color: var(--positive); border-color: var(--positive); }
 
 /* ==========================================================================
-   Mobile (<= 640px). One consolidated pass. Guiding rule: SUBTRACT.
-   Single column, no horizontal overflow, 44px touch targets, tighter type
-   and spacing, safe-area insets. Desktop above 640px is unchanged.
+   Mobile (<= 640px). Guiding rule: SUBTRACT. Single column, no horizontal
+   overflow, 44px touch targets, tighter type + spacing, safe-area insets.
    ========================================================================== */
 @media (max-width: 640px) {
-  /* No sideways scroll of the page, ever. */
   html, body { overflow-x: hidden; }
 
-  /* Tighter page gutters; leave room under the browser chrome + the fab. */
-  .page {
-    padding: 1rem 1rem calc(5rem + env(safe-area-inset-bottom, 0px));
-  }
+  .page { padding: 1rem 1rem calc(5rem + env(safe-area-inset-bottom, 0px)); }
   .bar { padding: 0.6rem 1rem; }
 
-  /* Subtract redundant top-bar chrome: the wall card and each page carry their
-     own title/live chip. The mobile account button (nav.js) carries identity +
-     log out; if the bar has no account button (logged-out wall) collapse it. */
   .bar .brand,
   .bar .live-indicator { display: none; }
   .bar:not(:has(.gz-mob-acct)) { display: none; }
-  /* When the account button is present, left-align it in the bar. */
   .bar .spacer { display: none; }
 
-  /* Single column: the members rail duplicates handles already in the feed, so
-     drop it on mobile rather than stack it (subtract). */
   .layout { grid-template-columns: 1fr; gap: 0; }
   .rail { display: none; }
 
-  /* Type scale: smaller, comfortable. */
   h1.page-title { font-size: 1.35rem; }
-  .tw-headline { font-size: 1.05rem; }
+  .tw-headline { font-size: 1.02rem; }
   .md { font-size: 0.92rem; }
 
-  /* The wall reads tighter: thesis stays the visual lead but smaller; the mono
-     subline drops to a comfortable size. */
   .wall { padding: 0.5rem 0 2rem; }
-  .wall-card { padding: 1.2rem 1.1rem; }
-  .wall-thesis { font-size: 1.2rem; }
+  .wall-card { padding: 1.3rem 1.15rem; }
+  .wall-thesis { font-size: 1.25rem; }
   .wall-sub { font-size: 0.88rem; }
 
-  /* Touch targets: >= 44px effective for anything tappable. */
-  .tw-like-btn, .tw-comment-btn, .tw-share-btn { padding: 0.6rem 0; min-height: 44px; }
-  .follow-btn { min-height: 44px; padding: 0.5rem 1.1rem; }
-  .feed-tab { min-height: 44px; padding: 0.5rem 1.1rem; }
-  .tw-actions { gap: 1.4rem; }
-  .tweet { gap: 0.6rem; }
-  .tw-avatar { width: 36px; height: 36px; font-size: 0.82rem; }
+  .tw-like-btn, .tw-comment-btn, .tw-share-btn { min-height: 44px; }
+  .follow-btn { min-height: 44px; padding: 0.6rem 1.2rem; }
+  .feed-tab { min-height: 44px; padding: 0.6rem 1.2rem; }
+  .tw-actions { gap: 0.5rem; }
+  .tweet { gap: 0.7rem; }
+  .tw-avatar { width: 40px; height: 40px; font-size: 0.88rem; }
   .tw-avatar-lg { width: 48px; height: 48px; font-size: 1.05rem; }
-  .gz-copy { min-height: 44px; padding: 0.4rem 0.9rem; }
+  .gz-copy { min-height: 44px; padding: 0.5rem 0.9rem; }
   .theme-fab { width: 48px; height: 48px; }
   .gz-me .chip-logout,
   .wall-note a,
   .backlink a { display: inline-block; padding: 0.35rem 0; }
 
-  /* Inputs: full width, >=16px so iOS does not zoom on focus. Big submit. */
   input, textarea, select { font-size: 16px; }
   .wall-login { flex-direction: column; align-items: stretch; }
   .wall-login input, .wall-login button { width: 100%; }

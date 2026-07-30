@@ -1,45 +1,88 @@
 /*
-  sylve-studio design system  (the "are.na editor" look)
-  Extracted from ~/s0lness-repo/studio (index.html + Studio.vue). Source of truth
-  lives there; this is the portable drop-in copy.
+  gazette base design system (the approved "social" identity).
+  Clean SYSTEM SANS-SERIF, warm paper + oxblood, rounded cards, real light + dark.
+  Monospace is reserved for actual code snippets only (see .code / pre / code below);
+  all body/UI/nav/post text is sans.
 
-  Identity: warm cream paper, near-black ink, warm borders, MONOSPACE chrome,
-  pill buttons. Light is the base; System follows the OS; an explicit
-  data-theme on <html> overrides both. Dark is a complementary warm dark.
+  Tokens carry two names on purpose:
+   - the descriptive palette names (--bg, --surface, --hover, --ink, --accent, --like, ...);
+   - legacy aliases the app layer already references (--fg, --muted, --line, --accent-fg,
+     --radius, --radius-pill) so app.css keeps working with zero cold-gray/ink leakage.
 
-  When to use THIS vs family-budget.css:
-  - sylve-studio: reading/writing tools, prose, anything that wants dark mode and
-    a calm are.na feel. Ink accent (monochrome), pill controls.
-  - family-budget: data/finance dashboards, tables, chips, terracotta accent,
-    fixed light. Both share the warm-paper ground, so they feel related.
+  Light is the base. System follows the OS (prefers-color-scheme). An explicit
+  data-theme on <html> overrides both (applied before paint by the head script,
+  reading localStorage 'app:theme').
 */
 
 :root {
-  --fg: #1a1a1a;
-  --muted: #8c8475;
-  --line: #e3ddcc;
-  --bg: #f3efe0;
-  --surface: #faf7ec;
-  --hover: #eae4d2;
-  --accent: #1a1a1a;      /* the ink; interactive emphasis references this */
-  --accent-fg: #f7f3e7;
-  --positive: #22aa77;
-  --danger: #bb2233;
-  --warning: #b8860b;
-  --scheme: light;
-  --radius: 8px;
+  --sans: -apple-system, system-ui, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --mono: ui-monospace, "SF Mono", "SFMono-Regular", Menlo, Consolas, "Liberation Mono", monospace;
+
+  --bg: #f7f5f0;
+  --surface: #ffffff;
+  --surface-2: #faf8f3;
+  --hover: #f4ede8;
+  --ink: #1a1712;
+  --ink-2: #55504a;
+  --ink-3: #8a847b;
+  --line: #e2ddd3;
+  --accent: #7a1f1f;      /* oxblood */
+  --accent-h: #621919;
+  --accent-soft: #f4e7e5;
+  --like: #b03636;
+
+  --radius: 16px;
+  --radius-sm: 10px;
   --radius-pill: 999px;
+  --shadow: 0 1px 3px rgba(26,23,18,.06), 0 1px 2px rgba(26,23,18,.04);
+
+  /* legacy aliases used across app.css / JS inline styles */
+  --fg: var(--ink);
+  --muted: var(--ink-3);
+  --accent-fg: #ffffff;   /* text on the oxblood fill */
+  --positive: #2f9e6a;
+  --danger: var(--like);
+
+  --scheme: light;
 }
-:root[data-theme='dark'] {
-  --fg: #ece7da; --muted: #918a7b; --line: #322e26; --bg: #1a1814;
-  --surface: #211e18; --hover: #2a261f; --accent: #ece7da; --accent-fg: #1a1814;
-  --positive: #4cc38a; --danger: #e0685f; --warning: #d1a24a; --scheme: dark;
+
+:root[data-theme="dark"] {
+  --bg: #16130f;
+  --surface: #1e1a15;
+  --surface-2: #241f19;
+  --hover: #2a2318;
+  --ink: #f2ede4;
+  --ink-2: #b6afa4;
+  --ink-3: #837c71;
+  --line: #322c24;
+  --accent: #d98a8a;
+  --accent-h: #e8a0a0;
+  --accent-soft: #2c2019;
+  --like: #e08a8a;
+  --shadow: 0 1px 3px rgba(0,0,0,.4);
+  --accent-fg: #16130f;
+  --positive: #4cc38a;
+  --scheme: dark;
 }
+
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme='light']) {
-    --fg: #ece7da; --muted: #918a7b; --line: #322e26; --bg: #1a1814;
-    --surface: #211e18; --hover: #2a261f; --accent: #ece7da; --accent-fg: #1a1814;
-    --positive: #4cc38a; --danger: #e0685f; --warning: #d1a24a; --scheme: dark;
+  :root:not([data-theme="light"]) {
+    --bg: #16130f;
+    --surface: #1e1a15;
+    --surface-2: #241f19;
+    --hover: #2a2318;
+    --ink: #f2ede4;
+    --ink-2: #b6afa4;
+    --ink-3: #837c71;
+    --line: #322c24;
+    --accent: #d98a8a;
+    --accent-h: #e8a0a0;
+    --accent-soft: #2c2019;
+    --like: #e08a8a;
+    --shadow: 0 1px 3px rgba(0,0,0,.4);
+    --accent-fg: #16130f;
+    --positive: #4cc38a;
+    --scheme: dark;
   }
 }
 
@@ -48,75 +91,72 @@ html { color-scheme: var(--scheme); }
 html, body {
   margin: 0;
   background: var(--bg);
-  color: var(--fg);
-  /* Monospace chrome is core to the look. A long-form editor surface should
-     override this back to a reading font (Inter/serif); only the UI is mono. */
-  font-family: ui-monospace, "SF Mono", "SFMono-Regular", Menlo, Consolas, "Liberation Mono", monospace;
+  color: var(--ink);
+  font-family: var(--sans);
   font-size: 15px;
-  line-height: 1.55;
+  line-height: 1.5;
   -webkit-font-smoothing: antialiased;
 }
-a { color: inherit; }
+a { color: inherit; text-decoration: none; }
 
-/* Form controls follow the theme everywhere (no native white in dark mode). */
-button, input, textarea, select { font: inherit; color: var(--fg); background-color: transparent; }
-input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
+/* Form controls follow the theme everywhere. */
+button, input, textarea, select { font: inherit; color: var(--ink); background-color: transparent; }
+input::placeholder, textarea::placeholder { color: var(--ink-3); opacity: 1; }
+svg { display: block; }
 
-/* Pill buttons: warm border, ink border on hover, solid ink when primary. */
+/* Buttons: rounded, warm surface, oxblood on hover. .primary is the oxblood fill. */
 button {
   cursor: pointer;
   border-radius: var(--radius-pill);
-  padding: 0.45rem 0.95rem;
+  padding: 0.5rem 1rem;
   border: 1px solid var(--line);
   background: var(--surface);
-  color: var(--fg);
+  color: var(--ink);
+  font-weight: 600;
   transition: border-color .15s ease, background .15s ease, color .15s ease;
 }
-button:hover:not(:disabled) { border-color: var(--accent); }
+button:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
 button:disabled { opacity: .5; cursor: default; }
-.primary { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+.primary {
+  background: var(--accent); color: var(--accent-fg); border-color: var(--accent);
+  box-shadow: 0 4px 14px color-mix(in srgb, var(--accent) 28%, transparent);
+}
+.primary:hover:not(:disabled) { background: var(--accent-h); border-color: var(--accent-h); color: var(--accent-fg); }
 .ghost { background: transparent; border-color: transparent; }
 .ghost:hover:not(:disabled) { background: var(--hover); border-color: transparent; }
-.ghost.icon { padding: 0.45rem 0.7rem; font-weight: 600; }
-.danger { color: var(--danger); }
-/* segmented toggle: mark the active with .on */
+.danger { color: var(--like); }
 button.on { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
 
-/* Inputs / rounded fields */
+/* Inputs / rounded fields. */
 input, textarea, select {
   border: 1px solid var(--line);
   border-radius: var(--radius-pill);
   background: var(--surface);
-  padding: 0.45rem 0.9rem;
+  padding: 0.55rem 0.95rem;
 }
-input:focus, textarea:focus, select:focus { outline: none; border-color: var(--accent); }
-textarea { border-radius: var(--radius); }
-
-/* Dashed monospace meta link (e.g. a live URL) */
-.metalink {
-  color: var(--muted); font-size: 0.82rem; text-decoration: none;
-  border-bottom: 1px dashed var(--line); padding-bottom: 1px;
+input:focus, textarea:focus, select:focus {
+  outline: none; border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
 }
-.metalink:hover { color: var(--fg); border-bottom-color: var(--fg); }
+textarea { border-radius: var(--radius-sm); }
 
-/* Sticky full-width bar: brand/back left, actions far right (Substack-style) */
+/* Sticky full-width bar: brand left, actions right. */
 .bar {
   display: flex; align-items: center; gap: 0.5rem;
   padding: 0.75rem 1.5rem; position: sticky; top: 0; z-index: 5; background: var(--bg);
 }
 .bar .spacer { flex: 1; }
 
-/* Toast: ink chip, floats above the bottom controls */
+/* Toast: ink chip. */
 .toast {
   position: fixed; bottom: 4.5rem; left: 50%; transform: translateX(-50%);
-  background: var(--fg); color: var(--bg); padding: 0.5rem 0.9rem;
-  border-radius: var(--radius); font-size: 0.88rem; display: flex; align-items: center; gap: 0.6rem;
+  background: var(--ink); color: var(--bg); padding: 0.5rem 0.9rem;
+  border-radius: var(--radius-sm); font-size: 0.88rem; display: flex; align-items: center; gap: 0.6rem;
 }
 
-/* Modal */
+/* Modal. */
 .overlay { position: fixed; inset: 0; background: rgba(0,0,0,.35); display: grid; place-items: center; z-index: 10; }
-.sheet { background: var(--bg); border: 1px solid var(--line); border-radius: 12px; padding: 1.1rem 1.25rem 1.35rem; width: min(22rem, 90vw); }
+.sheet { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 1.1rem 1.25rem 1.35rem; width: min(22rem, 90vw); box-shadow: var(--shadow); }
 
-/* Anti-flicker: apply the saved theme before paint, in <head>:
-   <script>try{const t=localStorage.getItem('app:theme');
-   if(t==='light'||t==='dark')document.documentElement.dataset.theme=t}catch{}</script> */
+/* Code is the ONLY monospace surface. Actual API/skill snippets. */
+code, pre, .code, .tmpl, pre.code, .wall-code { font-family: var(--mono); }
