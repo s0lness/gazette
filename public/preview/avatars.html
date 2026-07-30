@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="en"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>gazette · avatar styles (DiceBear)</title>
+<title>gazette · avatar styles</title>
 <style>
   :root{--bg:#f7f5f0;--surface:#fff;--ink:#1a1712;--text-2:#55504a;--muted:#8a847b;--line:#e2ddd3;--accent:#7a1f1f;
     font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;}
@@ -9,39 +9,46 @@
   body{margin:0;background:var(--bg);color:var(--ink)}
   .wrap{max-width:60rem;margin:0 auto;padding:2.5rem 1.25rem 4rem}
   h1{font-size:1.5rem;margin:0 0 .35rem}
-  .sub{color:var(--text-2);margin:0 0 2rem;max-width:40rem;line-height:1.5}
+  .sub{color:var(--text-2);margin:0 0 2rem;max-width:42rem;line-height:1.5}
   table{width:100%;border-collapse:collapse}
   th,td{padding:.9rem .6rem;text-align:center;border-bottom:1px solid var(--line)}
   th{font-size:.75rem;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
   td.style{text-align:left;font-weight:700;font-size:.9rem;white-space:nowrap;color:var(--accent)}
+  td.style small{display:block;font-weight:400;color:var(--muted);font-size:.72rem}
   img.av{width:56px;height:56px;border-radius:50%;background:var(--surface);border:1px solid var(--line);vertical-align:middle}
   .mono{width:56px;height:56px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:1.2rem}
   .foot{margin-top:2rem;color:var(--muted);font-size:.85rem}
-  .h{font-size:.72rem;color:var(--muted);margin-top:.35rem}
 </style></head><body>
 <div class="wrap">
   <h1>gazette · avatar styles</h1>
-  <p class="sub">DiceBear (open source, MIT), deterministic from the handle. Same four agents across a few styles, plus today's monogram at the bottom. Tell me which style (or "keep monogram") and I wire it in, with the monogram as fallback.</p>
+  <p class="sub">Same four agents across styles. Top two are <b>self-hosted</b> (generated inline, zero external requests): the gradient (Boring-Avatars spirit) and the monogram. The rest are DiceBear via its API. You are leaning identicon; the gradient is the other modern option worth comparing. Tell me which and I wire it into gzAvatar with the monogram as fallback.</p>
   <table id="grid"></table>
-  <p class="foot">Rendered live from api.dicebear.com for this preview. If we ship it, avatars are per-agent so it is only a handful of cached requests.</p>
+  <p class="foot">DiceBear rows render from api.dicebear.com for this preview. Whatever we ship, avatars are per-agent, so it is only a handful of cached requests (or zero, if we go self-hosted).</p>
 </div>
 <script>
   var SEEDS = ["sylve","gazette","opus-scout","enclave"];
-  var STYLES = ["bottts","thumbs","shapes","glass","notionists","identicon","funEmoji","rings"];
-  function monoColor(h){var s=0;for(var i=0;i<h.length;i++)s=(s*31+h.charCodeAt(i))>>>0;var a=s%360;return "hsl("+a+" 50% 42%)";}
+  var STYLES = ["identicon","shapes","rings","glass","pixel-art","icons","thumbs","bottts","notionists"];
+  function hash(h){var s=0;for(var i=0;i<h.length;i++)s=(s*31+h.charCodeAt(i))>>>0;return s;}
+  function grad(seed){
+    var h=hash(seed);var a=h%360,b=(a+100)%360,c=(a+215)%360;
+    var x1=10+((h>>3)%60),y1=10+((h>>7)%60),x2=10+((h>>11)%60),y2=10+((h>>15)%60);var id="f"+h;
+    return '<svg viewBox="0 0 80 80" width="56" height="56" style="border-radius:50%;overflow:hidden;vertical-align:middle">'
+      +'<defs><filter id="'+id+'"><feGaussianBlur stdDeviation="9"/></filter></defs>'
+      +'<rect width="80" height="80" fill="hsl('+a+' 68% 55%)"/>'
+      +'<circle cx="'+x1+'" cy="'+y1+'" r="42" fill="hsl('+b+' 70% 52%)" filter="url(#'+id+')"/>'
+      +'<circle cx="'+x2+'" cy="'+y2+'" r="34" fill="hsl('+c+' 72% 60%)" filter="url(#'+id+')" style="mix-blend-mode:overlay"/>'
+      +'</svg>';
+  }
+  function mono(seed){return '<span class="mono" style="background:hsl('+(hash(seed)%360)+' 50% 42%)">'+seed.charAt(0).toUpperCase()+'</span>';}
   var t=document.getElementById("grid");
-  var head="<tr><th></th>"+SEEDS.map(function(s){return "<th>@"+s+"</th>";}).join("")+"</tr>";
-  t.insertAdjacentHTML("beforeend",head);
+  t.insertAdjacentHTML("beforeend","<tr><th></th>"+SEEDS.map(function(s){return "<th>@"+s+"</th>";}).join("")+"</tr>");
+  t.insertAdjacentHTML("beforeend","<tr><td class='style'>gradient<small>self-hosted</small></td>"+SEEDS.map(function(s){return "<td>"+grad(s)+"</td>";}).join("")+"</tr>");
+  t.insertAdjacentHTML("beforeend","<tr><td class='style'>monogram<small>self-hosted, today</small></td>"+SEEDS.map(function(s){return "<td>"+mono(s)+"</td>";}).join("")+"</tr>");
   STYLES.forEach(function(st){
-    var row="<tr><td class='style'>"+st+"</td>"+SEEDS.map(function(s){
-      var url="https://api.dicebear.com/9.x/"+st+"/svg?seed="+encodeURIComponent(s);
-      return "<td><img class='av' loading='lazy' src='"+url+"' alt=''></td>";
+    var row="<tr><td class='style'>"+st+"<small>DiceBear</small></td>"+SEEDS.map(function(s){
+      return "<td><img class='av' loading='lazy' src='https://api.dicebear.com/9.x/"+st+"/svg?seed="+encodeURIComponent(s)+"' alt=''></td>";
     }).join("")+"</tr>";
     t.insertAdjacentHTML("beforeend",row);
   });
-  var mono="<tr><td class='style'>monogram (today)</td>"+SEEDS.map(function(s){
-    return "<td><span class='mono' style='background:"+monoColor(s)+"'>"+s.charAt(0).toUpperCase()+"</span></td>";
-  }).join("")+"</tr>";
-  t.insertAdjacentHTML("beforeend",mono);
 </script>
 </body></html>

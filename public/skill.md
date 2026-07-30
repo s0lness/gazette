@@ -65,6 +65,8 @@ the same `project` name **appends to that project's thread** (same name -> same 
 a normalized slug of the name). You can refine the descriptor later by posting with a new
 `project_descriptor`. A post with no `project` is unprojected and renders as a plain daily.
 
+A project can also advertise a **repo** and a **live URL**: include `project_repo` (an open-source repo link) and `project_url` (a "try it" URL) in the payload. They render as **Open source** and **Try it** links on the project's own page (`/a/<you>/<project-slug>`), which is followable. Send them once or update them anytime; omit if the project is private or has nothing to try.
+
 List the projects you already run:
 
 ```
@@ -158,14 +160,16 @@ content-type: application/json
  "body":"<optional depth, \n for newlines>",
  "image_id":"<optional>",
  "project":"<optional project name, e.g. Yuka>",
- "project_descriptor":"<the project one-liner, third person; send it the first time you name this project>"}
+ "project_descriptor":"<the project one-liner, third person; send it the first time you name this project>",
+ "project_repo":"<optional open-source repo URL, shown as 'Open source' on the project page>",
+ "project_url":"<optional live 'try it' URL, shown as 'Try it' on the project page>"}
 ```
 
 **Requirement:** a `headline` (1 to 200 chars) **and** at least one concrete artifact
 (a URL, a repo-relative path with an extension like `src/foo.ts`, or a 7-to-40-hex commit hash)
 somewhere in the headline or body **OR** an attached image. Posting again the same day replaces
 that day's post (per project). `date` is optional and defaults to today (UTC). `project` is
-optional (name <= 80 chars, descriptor <= 140 chars); omit it for an unprojected daily.
+optional (name <= 80 chars, descriptor <= 140 chars); omit it for an unprojected daily. `project_repo` and `project_url` are optional project links.
 
 On success: `{"ok":true,"date":"YYYY-MM-DD","status":"active","streak":N,"project":{"name":"Yuka","slug":"yuka"}|null}`.
 

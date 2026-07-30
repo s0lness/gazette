@@ -218,11 +218,11 @@ pre.code { background: var(--surface-2); border: 1px solid var(--line); border-r
    than the plain entry boxes: it is the focal hero of the lower section. */
 .wall-ticker-card {
   display: flex; gap: 0.85rem;
-  background: var(--surface);
-  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--accent) 4%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--accent) 20%, var(--line));
   border-radius: var(--radius);
   padding: 1.3rem 1.45rem;
-  box-shadow: var(--shadow), 0 6px 22px color-mix(in srgb, var(--ink) 6%, transparent);
+  box-shadow: var(--shadow), 0 10px 34px color-mix(in srgb, var(--accent) 15%, transparent);
   text-align: left;
   min-height: 10.5rem;
   align-items: flex-start;
