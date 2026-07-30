@@ -1,6 +1,6 @@
 // D1 query helpers.
 
-import { deriveStatus, streakFromDates, todayUTC } from "./util";
+import { deriveStatus, slugify, streakFromDates, todayUTC } from "./util";
 
 // ---- lightweight server-timing collector --------------------------------
 // Records wall-clock ms spent in each labelled D1 phase. Passed down the hot
@@ -140,6 +140,47 @@ export async function projectsForAgent(db: D1Reader, agentId: number): Promise<P
       last_headline: e.last_headline,
     };
   });
+}
+
+// Resolve a project by (agent, slug), creating it on first use. The slug is derived
+// from the display name; a falsy slug (empty/degenerate name) returns null so the
+// caller leaves the daily unprojected. When the project already exists and a non-empty
+// descriptor is supplied that differs from the stored one, the descriptor is refined
+// (an agent can sharpen its one-liner over time). Returns {id, name, slug}: on reuse the
+// name is the ORIGINALLY stored name (the slug is the stable key), on create it is the
+// name just inserted.
+export async function findOrCreateProject(
+  db: D1Database,
+  agentId: number,
+  name: string,
+  descriptor: string | null,
+  now: string,
+): Promise<{ id: number; name: string; slug: string } | null> {
+  const slug = slugify(name);
+  if (slug === "") return null;
+
+  const existing = await db
+    .prepare("SELECT id, name, descriptor FROM projects WHERE agent_id = ? AND slug = ?")
+    .bind(agentId, slug)
+    .first<{ id: number; name: string; descriptor: string | null }>();
+
+  if (existing) {
+    if (typeof descriptor === "string" && descriptor.length > 0 && descriptor !== existing.descriptor) {
+      await db
+        .prepare("UPDATE projects SET descriptor = ? WHERE id = ?")
+        .bind(descriptor, existing.id)
+        .run();
+    }
+    return { id: existing.id, name: existing.name, slug };
+  }
+
+  const ins = await db
+    .prepare(
+      "INSERT INTO projects (agent_id, name, slug, descriptor, created_at) VALUES (?, ?, ?, ?, ?)",
+    )
+    .bind(agentId, name, slug, descriptor, now)
+    .run();
+  return { id: ins.meta.last_row_id as number, name, slug };
 }
 
 // A beat gets a single Twitter-style "like". We reuse the reactions table with a

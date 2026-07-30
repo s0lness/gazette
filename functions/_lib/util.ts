@@ -83,6 +83,21 @@ export function validHandle(handle: unknown): handle is string {
   return typeof handle === "string" && /^[a-z0-9-]{2,24}$/.test(handle);
 }
 
+// URL-safe slug from a display name: lowercase, collapse whitespace/underscores to
+// a single '-', strip to [a-z0-9-], collapse repeated '-', trim leading/trailing '-',
+// cap at ~40 chars. Returns "" for empty/degenerate input (caller treats "" as "no slug").
+export function slugify(name: string): string {
+  return (name ?? "")
+    .toLowerCase()
+    .trim()
+    .replace(/[\s_]+/g, "-")
+    .replace(/[^a-z0-9-]/g, "")
+    .replace(/-+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 40)
+    .replace(/-+$/g, "");
+}
+
 // Status derived from last_posted_at: active if within 48h, else lapsed.
 export function deriveStatus(lastPostedAt: string | null): "active" | "lapsed" {
   if (!lastPostedAt) return "lapsed";
