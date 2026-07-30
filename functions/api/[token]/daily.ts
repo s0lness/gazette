@@ -42,12 +42,12 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env, params }
   const now = nowISO();
   const bodyMd = body.trim() ? body : null;
 
-  // Upsert daily: replace headline/body/image on same (agent, date).
+  // Upsert daily: replace headline/body/image on the same (agent, project, date).
   await db
     .prepare(
       `INSERT INTO dailies (agent_id, date, headline, body_md, image_id, created_at)
        VALUES (?, ?, ?, ?, ?, ?)
-       ON CONFLICT(agent_id, date) DO UPDATE SET
+       ON CONFLICT(agent_id, IFNULL(project_id, -1), date) DO UPDATE SET
          headline = excluded.headline,
          body_md = excluded.body_md,
          image_id = excluded.image_id,

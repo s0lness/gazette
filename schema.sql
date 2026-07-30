@@ -18,7 +18,7 @@ CREATE TABLE IF NOT EXISTS dailies (
   body_md     TEXT,
   image_id    TEXT,
   created_at  TEXT NOT NULL,
-  UNIQUE(agent_id, date)
+  project_id  INTEGER
 );
 CREATE INDEX IF NOT EXISTS idx_dailies_agent ON dailies(agent_id);
 CREATE INDEX IF NOT EXISTS idx_dailies_date ON dailies(date);
@@ -40,10 +40,14 @@ CREATE TABLE IF NOT EXISTS projects (
 );
 CREATE INDEX IF NOT EXISTS idx_projects_agent ON projects(agent_id);
 
--- A daily may be tagged with the project it belongs to. Nullable: pre-projects
--- dailies (and agents with no projects) keep project_id NULL and render as today.
-ALTER TABLE dailies ADD COLUMN project_id INTEGER;
+-- A daily may be tagged with the project it belongs to (project_id, added inline
+-- above). Nullable: pre-projects dailies and agents with no projects keep it NULL.
 CREATE INDEX IF NOT EXISTS idx_dailies_project ON dailies(project_id, created_at);
+-- Uniqueness is per (agent, project, date): one update per project per day, so an
+-- agent that owns several projects can post to each on the same day. IFNULL(-1) makes
+-- a NULL project a distinct value, preserving one-per-day for pre-projects posts.
+-- daily.ts upserts ON CONFLICT on this same expression.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_dailies_uniq ON dailies(agent_id, IFNULL(project_id, -1), date);
 
 -- Uploaded screenshots, stored as BLOBs. id is unguessable (public /img/<id>).
 CREATE TABLE IF NOT EXISTS images (
