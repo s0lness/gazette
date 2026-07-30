@@ -149,7 +149,7 @@ pre.code { background: var(--surface-2); border: 1px solid var(--line); border-r
    sample carousel, then a spare matched pair of entry paths. The gate stays
    intact: this never exposes the live feed or the real corpus. */
 .wall {
-  width: 100%; max-width: min(56rem, 100%); margin: 0 auto;
+  width: 100%; max-width: min(66rem, 100%); margin: 0 auto;
   padding: 0 0 3rem;
 }
 .wall-sub, .wall-entry-p, .wall-thesis { overflow-wrap: anywhere; }
@@ -162,6 +162,25 @@ pre.code { background: var(--surface-2); border: 1px solid var(--line); border-r
   text-align: center;
   padding: 3rem 0;
 }
+/* Landing masthead: the newspaper logo + "gazette" wordmark, above the giant
+   headline, so the site name is unmistakable. Centered with the rest of the hero. */
+.wall-masthead {
+  display: inline-flex; align-items: center; gap: 0.6rem;
+  margin: 0 0 1.75rem;
+  animation: gz-rise 0.7s cubic-bezier(0.22, 0.61, 0.36, 1) both;
+}
+.wall-masthead .gz-logo {
+  width: 42px; height: 42px; flex: none; display: block;
+}
+.wall-wordmark {
+  font-size: clamp(1.9rem, 4vw, 2.6rem);
+  font-weight: 800; letter-spacing: -0.03em; line-height: 1;
+  color: var(--ink);
+}
+/* Themeable logo: outline follows text color, accent block is the oxblood var. */
+.gz-logo-stroke { stroke: currentColor; fill: none; }
+.gz-logo-accent { fill: var(--accent); }
+
 .wall-eyebrow {
   color: var(--accent); font-size: 0.72rem; text-transform: uppercase;
   letter-spacing: 0.09em; margin: 0 0 1.25rem; font-weight: 700;
@@ -192,7 +211,7 @@ pre.code { background: var(--surface-2); border: 1px solid var(--line); border-r
    text lengths vary. Pauses on hover. Reduced motion: static first post, no
    animation, no auto-advance. */
 .wall-ticker {
-  margin: 2.5rem auto 0; width: 100%; max-width: 48rem;
+  margin: 2.5rem auto 0; width: 100%; max-width: 66rem;
 }
 /* The fixed card. min-height reserves enough room for the longest post.
    Oxblood-tinted surface + stronger border gives the ticker more presence
@@ -255,7 +274,7 @@ pre.code { background: var(--surface-2); border: 1px solid var(--line); border-r
 /* The entry pair: bigger boxes, more presence, still centered and matched. */
 .wall-entries {
   display: grid; grid-template-columns: 1fr 1fr; gap: 1rem 1.75rem;
-  align-items: stretch; margin: 2.5rem auto 0; max-width: 48rem; width: 100%;
+  align-items: stretch; margin: 2.5rem auto 0; max-width: 66rem; width: 100%;
   text-align: left;
 }
 .wall-entries-single { grid-template-columns: 1fr; max-width: 28rem; }
@@ -271,24 +290,34 @@ pre.code { background: var(--surface-2); border: 1px solid var(--line); border-r
 .wall-entry-role { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-3); font-weight: 700; }
 .wall-entry-p { font-size: 0.85rem; line-height: 1.5; margin: 0.75rem 0 0; color: var(--ink-3); }
 .wall-entry-p a { color: var(--accent); }
-/* Action area pushed to the bottom so both cards align their actions. */
+/* Action area pushed to the bottom so both cards align their actions. It is the
+   positioning context for the inline copy button, so the button stays pinned at
+   the right edge even when the code box scrolls horizontally inside itself. */
 .wall-entry-action { margin-top: auto; }
 /* Code block with inline copy button. */
 .wall-code { font-size: 0.82rem; margin: 0; }
-/* Inline variant: relative positioning container. The copy button sits
-   absolute at top-right; the pre gets enough right padding so the code
-   text does not run underneath the button. Override the copyable flex
-   so the pre renders as a normal block with text flow. */
-.wall-code-inline {
-  display: block;
-  position: relative;
-  padding-right: 5.5rem;
+/* Inline variant (desktop): the pre is a flex row. The code text lives in an
+   inner span that scrolls horizontally inside itself; the copy button is a
+   flex sibling pinned at the right, so the two never overlap and the one-liner
+   stays on ONE line. Overriding the base copyable flex-column. */
+pre.wall-code-inline {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 0.75rem;
+}
+.wall-code-inline .wall-code-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  /* Never wrap: one line, scroll horizontally inside its own box if it cannot
+     fit, so it never pushes the page sideways. */
+  white-space: nowrap;
+  overflow-x: auto;
 }
 .wall-code-inline .gz-copy {
-  position: absolute;
-  top: 0.5rem;
-  right: 0.5rem;
+  flex: 0 0 auto;
   margin: 0;
+  align-self: center;
 }
 /* The copy button on the agent card: primary oxblood look. */
 .wall-entry-action .gz-copy {
@@ -461,6 +490,13 @@ pre.code { background: var(--surface-2); border: 1px solid var(--line); border-r
 }
 /* Wall (logged-out / post-first): hide the top bar; the hero has its own masthead. */
 body.wall-open header.bar { display: none; }
+/* No theme toggle on the landing: the wall follows the OS color scheme (the
+   prefers-color-scheme defaults in sylve-studio.css). The fab returns in the app. */
+body.wall-open .theme-fab { display: none; }
+/* The landing content is wider than inner pages so the agent one-liner + copy
+   button sit comfortably on ONE line in the FOR AGENTS box (the hero text keeps
+   its own narrow ch-based max-widths and stays centered). */
+body.wall-open main.page { max-width: 70rem; }
 
 /* Medium (768px .. 1099px): two columns, left sidebar + center feed. */
 @media (min-width: 768px) and (max-width: 1099px) {
@@ -765,8 +801,35 @@ pre.copyable {
 
   input, textarea, select { font-size: 16px; }
   .wall-login { flex-direction: column; align-items: stretch; }
-  .wall-login input, .wall-login button { width: 100%; }
+  /* Compact, normal-height token field on mobile: a single ~44px pill, not an
+     oversized box. */
+  .wall-login input {
+    width: 100%; flex: none;
+    padding: 0.6rem 1rem; min-height: 44px; border-radius: var(--radius-pill);
+  }
+  .wall-login button { width: 100%; }
   .dmbox .row button,
   .wall-login button,
   .tw-reply-send { min-height: 44px; }
+
+  /* Grid items must be allowed to shrink below their content width, else the
+     nowrap agent one-liner blows the track out and the whole page scrolls
+     sideways. min-width:0 lets the code box keep its own overflow-x scroll. */
+  .wall-entries { min-width: 0; }
+  .wall-entry { min-width: 0; }
+  .wall-entry-action { min-width: 0; }
+
+  /* Mobile: stack the copy button BELOW the code so it never covers the URL.
+     The code text stays one line and scrolls horizontally inside its own box,
+     so the whole snippet is readable by scrolling, with no page overflow. */
+  pre.wall-code-inline { flex-direction: column; align-items: stretch; gap: 0; }
+  .wall-code-inline .wall-code-text {
+    width: 100%;
+    white-space: nowrap;
+    overflow-x: auto;
+  }
+  .wall-code-inline .gz-copy {
+    align-self: flex-end;
+    margin-top: 0.6rem;
+  }
 }
