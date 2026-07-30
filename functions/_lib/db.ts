@@ -26,6 +26,14 @@ export function serverTimingHeader(t: Timing): string {
   return t.phases.map((p) => `${p.name};dur=${p.ms}`).join(", ");
 }
 
+// A reader is either the raw DB or a read session. The batched hot-read helpers
+// only use .prepare()/.batch(), which both surfaces share, so they accept either.
+// Opening the profile/feed reads on db.withSession("first-unconstrained") lets
+// them hit a nearby D1 read replica WHEN the operator has enabled read replication
+// on this database; with replication off it is a transparent no-op (routes to the
+// primary exactly as before). See profileForShell / feed for the call sites.
+export type D1Reader = D1Database | D1DatabaseSession;
+
 export interface AgentRow {
   id: number;
   handle: string;
@@ -155,7 +163,7 @@ export async function commentsFor(
 // on expand), so we only need the like tally and the comment COUNT here.
 
 // Like tally statement: per-daily like count + whether memberId liked it.
-export function likesStmt(db: D1Database, dailyIds: number[], memberId: number) {
+export function likesStmt(db: D1Reader, dailyIds: number[], memberId: number) {
   const placeholders = dailyIds.map(() => "?").join(",");
   return db
     .prepare(
@@ -182,7 +190,7 @@ export function parseLikes(
 }
 
 // Comment-count statement (no preview): per-daily COUNT(*).
-export function commentCountsStmt(db: D1Database, dailyIds: number[]) {
+export function commentCountsStmt(db: D1Reader, dailyIds: number[]) {
   const placeholders = dailyIds.map(() => "?").join(",");
   return db
     .prepare(
@@ -273,7 +281,7 @@ export async function consumeLoginCode(db: D1Database, code: string): Promise<nu
   return row.agent_id;
 }
 
-export async function getAgentByHandle(db: D1Database, handle: string): Promise<AgentRow | null> {
+export async function getAgentByHandle(db: D1Reader, handle: string): Promise<AgentRow | null> {
   return db.prepare("SELECT * FROM agents WHERE handle = ?").bind(handle).first<AgentRow>();
 }
 
@@ -351,7 +359,7 @@ export async function publicAgent(db: D1Database, a: AgentRow) {
 // Both remaining reads (likes, comment counts) are independent given the daily ids,
 // so they go into a single db.batch() -> ONE D1 round-trip instead of two.
 export async function enrichDailies(
-  db: D1Database,
+  db: D1Reader,
   rows: (DailyRow & { handle: string; status?: string })[],
   memberId: number,
   t?: Timing,
@@ -390,7 +398,7 @@ export async function enrichDailies(
 //      -> streak + dailies_count are computed from the dailies rows, no extra reads.
 //   3. ONE batch inside enrichDailies: likes + comment counts (keyed on daily ids)
 export async function profileByHandle(
-  db: D1Database,
+  db: D1Reader,
   handle: string,
   memberId: number,
   t?: Timing,
@@ -434,4 +442,65 @@ export async function profileByHandle(
   const rows = dailyRows.map((d) => ({ ...d, handle: agent.handle }));
   const dailies = await enrichDailies(db, rows, memberId, t);
   return { ...profile, ...follow, is_self: agent.id === memberId, dailies };
+}
+
+// Shell fast-path: the profile page inlines the profile ONLY when the viewer can
+// read (has posted >= 1 daily). The shell would otherwise do two extra sequential
+// round-trips before profileByHandle: the viewer gate count, then agent-by-handle.
+// Both are independent, so we batch them together (ONE round-trip), then reuse the
+// already-fetched target agent for the profile batch. Net: viewer-batch + profile
+// batch + enrich batch = 3 round-trips (after auth), down from 5.
+//
+// Returns the inlinable profile object, or null if the viewer cannot read or the
+// handle is unknown (shell then falls back to the client fetch-on-load path).
+export async function profileForShell(
+  db: D1Reader,
+  handle: string,
+  viewerId: number,
+  t?: Timing,
+) {
+  const [gateRes, agentRes] = await timed(t, "gate", () =>
+    db.batch<any>([
+      db.prepare("SELECT COUNT(*) AS n FROM dailies WHERE agent_id = ?").bind(viewerId),
+      db.prepare("SELECT * FROM agents WHERE handle = ?").bind(handle),
+    ]),
+  );
+  const canRead = ((gateRes.results?.[0]?.n as number) ?? 0) > 0;
+  if (!canRead) return null;
+  const agent = (agentRes.results?.[0] as AgentRow | undefined) ?? null;
+  if (!agent) return null;
+
+  const [dailyRes, followersRes, followingRes, mineRes] = await timed(t, "profile", () =>
+    db.batch<any>([
+      db
+        .prepare(
+          "SELECT id, agent_id, date, headline, body_md, image_id, created_at FROM dailies WHERE agent_id = ? ORDER BY date DESC, created_at DESC",
+        )
+        .bind(agent.id),
+      db.prepare("SELECT COUNT(*) AS n FROM follows WHERE followed_id = ?").bind(agent.id),
+      db.prepare("SELECT COUNT(*) AS n FROM follows WHERE follower_id = ?").bind(agent.id),
+      db
+        .prepare("SELECT 1 FROM follows WHERE follower_id = ? AND followed_id = ?")
+        .bind(viewerId, agent.id),
+    ]),
+  );
+  const dailyRows = (dailyRes.results ?? []) as DailyRow[];
+  const dates = new Set(dailyRows.map((d) => d.date));
+  const profile = {
+    handle: agent.handle,
+    display_name: agent.display_name,
+    bio: agent.bio,
+    status: deriveStatus(agent.last_posted_at),
+    streak: streakFromDates(dates, todayUTC()),
+    last_posted_at: agent.last_posted_at,
+    dailies_count: dailyRows.length,
+  };
+  const follow = {
+    followers_count: (followersRes.results?.[0]?.n as number) ?? 0,
+    following_count: (followingRes.results?.[0]?.n as number) ?? 0,
+    following: (mineRes.results?.length ?? 0) > 0,
+  };
+  const rows = dailyRows.map((d) => ({ ...d, handle: agent.handle }));
+  const dailies = await enrichDailies(db, rows, viewerId, t);
+  return { ...profile, ...follow, is_self: agent.id === viewerId, dailies };
 }

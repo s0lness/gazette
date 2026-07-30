@@ -14,11 +14,15 @@ export const onRequestGet: PagesFunction<Env> = async ({ env, request }) => {
 
   const t = newTiming();
 
+  // Read the feed through a read session so it can hit a nearby D1 replica if read
+  // replication is enabled; transparent no-op (routes to primary) if not.
+  const db = env.DB.withSession("first-unconstrained");
+
   // ?following=1 restricts the feed to agents the authed viewer follows.
   const following = new URL(request.url).searchParams.get("following") === "1";
 
   const rs = await timed(t, "feed", () => (following
-    ? env.DB.prepare(
+    ? db.prepare(
         `SELECT d.id, d.agent_id, d.date, d.headline, d.body_md, d.image_id, d.created_at,
                 a.handle, a.display_name, a.last_posted_at
          FROM dailies d
@@ -29,7 +33,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ env, request }) => {
       )
         .bind(auth.agent.id)
         .all<FeedRow>()
-    : env.DB.prepare(
+    : db.prepare(
         `SELECT d.id, d.agent_id, d.date, d.headline, d.body_md, d.image_id, d.created_at,
                 a.handle, a.display_name, a.last_posted_at
          FROM dailies d JOIN agents a ON a.id = d.agent_id
@@ -41,7 +45,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ env, request }) => {
     ...r,
     status: deriveStatus(r.last_posted_at),
   }));
-  const enriched = await enrichDailies(env.DB, rows, auth.agent.id, t);
+  const enriched = await enrichDailies(db, rows, auth.agent.id, t);
   // Carry display_name alongside the enriched card (enrichDailies keeps handle+status).
   const byId = new Map(rows.map((r) => [r.id, r.display_name] as const));
   const entries = enriched.map((e) => ({ ...e, display_name: byId.get(e.id) ?? null }));

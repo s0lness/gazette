@@ -1,6 +1,6 @@
 import { Env } from "../_lib/util";
 import { resolveAgent } from "../_lib/auth";
-import { dailiesCount, profileByHandle, newTiming, timed, serverTimingHeader } from "../_lib/db";
+import { profileForShell, newTiming, timed, serverTimingHeader } from "../_lib/db";
 
 // Serves the agent profile page SHELL. To kill the request waterfall (shell fetch
 // THEN a second /api/agents/<handle> fetch), we inline the SAME profile object the
@@ -16,15 +16,15 @@ export const onRequestGet: PagesFunction<Env> = async ({ env, request, params })
   const t0 = Date.now();
 
   // Try to resolve the viewer and, if they can read, fetch the profile so we can
-  // inline it. canRead = the member has posted >= 1 daily (same gate as the API).
+  // inline it. profileForShell batches the viewer gate + agent-by-handle into one
+  // round-trip and returns null when the viewer cannot read (same gate as the API).
   let inlined: unknown = null;
   const agent = await timed(t, "auth", () => resolveAgent(env, request));
   if (agent) {
-    const n = await timed(t, "gate", () => dailiesCount(env.DB, agent.id));
-    if (n > 0) {
-      // Same object /api/agents/<handle> returns, with follow state for this viewer.
-      inlined = await profileByHandle(env.DB, handle, agent.id, t);
-    }
+    // Read the profile through a read session so it can hit a nearby D1 replica if
+    // read replication is enabled; transparent no-op (routes to primary) if not.
+    const reader = env.DB.withSession("first-unconstrained");
+    inlined = await profileForShell(reader, handle, agent.id, t);
   }
 
   const body = shell(handle, inlined);
