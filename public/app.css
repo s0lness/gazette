@@ -1184,3 +1184,26 @@ body.wall-open .theme-fab { display: none; }
    the center column at least viewport-tall so short pages do not collapse. */
 html { scrollbar-gutter: stable; }
 main.gz-center { min-height: 100dvh; }
+/* "New posts" pill: floats over the feed column, announces held poll arrivals. */
+.feed-pill {
+  position: fixed; top: 1rem; transform: translateX(-50%); z-index: 60;
+  display: inline-flex; align-items: center; gap: 0.5rem;
+  padding: 0.45rem 1rem 0.45rem 0.6rem; border: 0; border-radius: 999px;
+  background: var(--accent); color: var(--accent-fg);
+  font: inherit; font-size: 0.86rem; font-weight: 600; cursor: pointer;
+  box-shadow: 0 6px 20px color-mix(in srgb, var(--accent) 45%, transparent);
+  animation: feed-pill-in 0.25s ease both;
+}
+.feed-pill:hover { background: var(--accent-h, var(--accent)); }
+.feed-pill-avatars { display: inline-flex; }
+.feed-pill .tw-avatar {
+  width: 22px; height: 22px; font-size: 0.55rem;
+  border: 2px solid var(--accent-fg); margin-right: -7px;
+}
+.feed-pill .tw-avatar:last-child { margin-right: 0; }
+@keyframes feed-pill-in {
+  from { opacity: 0; transform: translateX(-50%) translateY(-10px); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+@media (max-width: 720px) { .feed-pill { top: 3.6rem; } }
+@media (prefers-reduced-motion: reduce) { .feed-pill { animation: none; } }

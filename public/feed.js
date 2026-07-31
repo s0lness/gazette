@@ -55,6 +55,67 @@
   let lastFeed = null;
   // Live-poll handle for the current mount, so unmount can stop it.
   let poll = null;
+  // True once the first network load of a mount has resolved: only later polls
+  // hold new posts behind the pill; the entry paint always shows the newest.
+  let firstLoadDone = false;
+
+  // ---- "new posts" pill (Twitter-style) -----------------------------------
+  // New entries arriving via the poll are HELD in `pending` and announced by a
+  // floating pill; clicking it reveals them and scrolls back to the top.
+  let pending = null;
+  let pill = null;
+
+  function idSet(entries) {
+    const s = new Set();
+    (entries || []).forEach(function (e) { s.add(e.id); });
+    return s;
+  }
+
+  function hidePill() {
+    if (pill) { pill.remove(); pill = null; }
+    window.removeEventListener("resize", positionPill);
+    pending = null;
+  }
+
+  function positionPill() {
+    if (!pill) return;
+    const feed = document.getElementById("feed");
+    if (!feed) return;
+    const r = feed.getBoundingClientRect();
+    pill.style.left = (r.left + r.width / 2) + "px";
+  }
+
+  function revealPending() {
+    const feed = document.getElementById("feed");
+    const data = pending;
+    hidePill();
+    if (feed && data) paintFeed(feed, data, currentTab, false);
+    const reduce = window.gzReduceMotion && window.gzReduceMotion();
+    window.scrollTo({ top: 0, behavior: reduce ? "auto" : "smooth" });
+  }
+
+  function showPill(fresh) {
+    if (!pill) {
+      pill = document.createElement("button");
+      pill.type = "button";
+      pill.className = "feed-pill";
+      pill.addEventListener("click", revealPending);
+      document.body.appendChild(pill);
+      window.addEventListener("resize", positionPill);
+    }
+    const handles = [];
+    for (const e of fresh) {
+      if (handles.indexOf(e.handle) === -1) handles.push(e.handle);
+      if (handles.length === 3) break;
+    }
+    const avatars = window.gzAvatar
+      ? handles.map(function (h) { return window.gzAvatar(h); }).join("")
+      : "";
+    pill.innerHTML =
+      '<span class="feed-pill-avatars">' + avatars + "</span>" +
+      "<span>Show " + fresh.length + (fresh.length === 1 ? " post" : " posts") + "</span>";
+    positionPill();
+  }
 
   // Paint a payload into the feed. Returns true if it repainted, false if the
   // payload matched the last render (no-op) or a mid-reply skip. `noAnim`
@@ -116,6 +177,25 @@
     // Dedup on the entries themselves, not the tab: with the viewer following
     // everyone, All and Following return identical entries, so the key matches and
     // the repaint is skipped entirely (nothing moves on a tab click).
+    //
+    // Poll updates carrying genuinely NEW posts are held behind the pill instead
+    // of repainting under the reader; metadata-only changes (like/comment counts)
+    // paint silently. The entry load and tab switches paint directly.
+    const isPollUpdate = firstLoadDone && lastFeed !== null && !noAnim;
+    firstLoadDone = true;
+    if (isPollUpdate) {
+      let painted = [];
+      try { painted = JSON.parse(lastFeed); } catch (e) { painted = []; }
+      const have = idSet(painted);
+      const fresh = (data.entries || []).filter(function (e) { return !have.has(e.id); });
+      if (fresh.length > 0) {
+        pending = data;
+        showPill(fresh);
+        return;
+      }
+      paintFeed(feed, data, tab, true);
+      return;
+    }
     paintFeed(feed, data, tab, noAnim);
   }
 
@@ -151,6 +231,7 @@
         // entries actually differ (see the key check), so an identical feed (you
         // follow everyone) does not repaint at all.
         suppressAnim = true;
+        hidePill();
         loadFeed();
       });
     }
@@ -215,6 +296,8 @@
     suppressAnim = false;
     lastFeed = null;
     lastMembers = null;
+    firstLoadDone = false;
+    hidePill();
     wireTabs();
     paintFromCache();
     poll = window.gzLivePoll(refresh);
@@ -228,6 +311,7 @@
   function unmount() {
     if (poll && poll.stop) poll.stop();
     poll = null;
+    hidePill();
   }
 
   window.gzPages = window.gzPages || {};
