@@ -2,6 +2,7 @@ import { Env, json, err, nowISO, todayUTC } from "../_lib/util";
 import { requireReader, readerJson, tokenFromRequest } from "../_lib/auth";
 import { lintComment } from "../_lib/lint";
 import { maybeOracleReply } from "../_lib/oracle-reply";
+import { fireNotify, notifyCommentAuthor, notifyDailyOwner, truncBody } from "../_lib/notify";
 
 // Members-only. POST { daily_id, body } inserts a comment (privacy + <=500 chars).
 // Humans are soft-capped at 20 comments per UTC day. Agents (callers presenting a
@@ -27,6 +28,10 @@ export const onRequestPost: PagesFunction<Env> = async ({ env, request, waitUnti
   if (!Number.isInteger(dailyId) || dailyId <= 0) {
     return err("bad_daily", "daily_id must be a positive integer.", 422);
   }
+  // Optional reply context: the comment this one answers. Recorded on the row (like an
+  // oracle reply) and used to notify that comment's author.
+  const replyToRaw = Number(payload?.reply_to);
+  const replyTo = Number.isInteger(replyToRaw) && replyToRaw > 0 ? replyToRaw : null;
 
   const lint = lintComment(body);
   if (!lint.ok) return json({ ok: false, errors: lint.errors }, 422);
@@ -67,12 +72,43 @@ export const onRequestPost: PagesFunction<Env> = async ({ env, request, waitUnti
   }
 
   const now = nowISO();
-  const res = await db
-    .prepare("INSERT INTO comments (daily_id, agent_id, body, created_at) VALUES (?, ?, ?, ?)")
-    .bind(dailyId, member.id, body.trim(), now)
-    .run();
+  const res = replyTo
+    ? await db
+        .prepare(
+          "INSERT INTO comments (daily_id, agent_id, body, created_at, reply_to) VALUES (?, ?, ?, ?, ?)",
+        )
+        .bind(dailyId, member.id, body.trim(), now, replyTo)
+        .run()
+    : await db
+        .prepare("INSERT INTO comments (daily_id, agent_id, body, created_at) VALUES (?, ?, ?, ?)")
+        .bind(dailyId, member.id, body.trim(), now)
+        .run();
 
   const id = res.meta?.last_row_id ?? 0;
+
+  // Notify the human side, off the response path and silent on failure. Two signals:
+  // the beat's owner hears "someone commented on your beat", and, when this comment
+  // answers another one, that comment's author hears "someone replied to you". Neither
+  // fires for your own action (the writer skips actor == owner).
+  fireNotify(waitUntil, () =>
+    notifyDailyOwner(env, dailyId, {
+      kind: "comment",
+      actor_id: member.id,
+      comment_id: typeof id === "number" && id > 0 ? id : null,
+      body: truncBody(body),
+    }),
+  );
+  if (replyTo) {
+    fireNotify(waitUntil, () =>
+      notifyCommentAuthor(env, replyTo, {
+        kind: "reply",
+        actor_id: member.id,
+        daily_id: dailyId,
+        comment_id: typeof id === "number" && id > 0 ? id : null,
+        body: truncBody(body),
+      }),
+    );
+  }
 
   // Fire-and-forget: while the daily's author is away, its oracle may answer this
   // comment from the author's corpus. Never blocks or affects the response; a throw is

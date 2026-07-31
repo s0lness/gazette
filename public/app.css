@@ -1648,3 +1648,133 @@ audio.status-media { width: 100%; }
 .ma-ask-count { color: var(--ink-3); font-size: 0.82rem; margin-left: auto; font-variant-numeric: tabular-nums; }
 .ma-ask-list { margin: 0.5rem 0 0.25rem; padding-left: 1.1rem; display: flex; flex-direction: column; gap: 0.3rem; }
 .ma-ask-q { color: var(--ink-2); font-size: 0.9rem; word-break: break-word; }
+
+/* ---- Search entry (chrome) ------------------------------------------------ */
+/* One query box, two surfaces: a compact input at the top of the desktop rail, and a
+   magnifier in the mobile top bar that expands into a full-width row. Both drive
+   /search?q= (debounced while typing, immediate on Enter). */
+
+.gz-side-search {
+  position: relative;
+  margin: 0 0.25rem 0.85rem 0.15rem;
+}
+.gz-search-glyph {
+  position: absolute; left: 0.85rem; top: 50%; transform: translateY(-50%);
+  width: 17px; height: 17px; pointer-events: none;
+  fill: none; stroke: var(--ink-3); stroke-width: 1.9;
+  stroke-linecap: round; stroke-linejoin: round;
+}
+.gz-search-input {
+  width: 100%; min-height: 42px;
+  padding: 0.5rem 0.9rem 0.5rem 2.4rem;
+  border: 1px solid var(--line); border-radius: var(--radius-pill);
+  background: var(--surface-2); color: var(--ink);
+  font: inherit; font-size: 0.92rem;
+  -webkit-appearance: none; appearance: none;
+}
+.gz-search-input::placeholder { color: var(--ink-3); }
+.gz-search-input:focus {
+  outline: none; border-color: var(--accent);
+  background: var(--surface);
+}
+.gz-search-input::-webkit-search-cancel-button { -webkit-appearance: none; }
+
+/* ---- Unread badge (bell) -------------------------------------------------- */
+.gz-badge {
+  flex: 0 0 auto;
+  min-width: 1.25rem; height: 1.25rem; padding: 0 0.35rem;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 999px; background: var(--accent); color: var(--accent-fg);
+  font-size: 0.7rem; font-weight: 700; line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.gz-badge[hidden] { display: none; }
+/* On the rail the badge sits at the end of the row; on the mobile bell it rides the
+   icon's top-right corner. */
+.gz-badge-mob { position: absolute; top: 2px; right: 2px; }
+
+/* ---- Mobile top-bar actions ---------------------------------------------- */
+.gz-mob-actions { display: none; align-items: center; gap: 0.15rem; margin-left: auto; }
+.gz-mob-icon {
+  position: relative;
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 44px; height: 44px; padding: 0;
+  border: 0; background: transparent; border-radius: 50%;
+  color: var(--ink); cursor: pointer;
+}
+.gz-mob-icon:active { background: var(--hover); }
+.gz-mob-icon .gz-nav-icon { width: 22px; height: 22px; }
+.gz-mob-glyph {
+  width: 21px; height: 21px;
+  fill: none; stroke: currentColor; stroke-width: 1.9;
+  stroke-linecap: round; stroke-linejoin: round;
+}
+.gz-mob-search { display: none; }
+
+@media (max-width: 767px) {
+  body[data-gz-nav="1"] header.bar { flex-wrap: wrap; }
+  body[data-gz-nav="1"] .gz-mob-actions { display: inline-flex; }
+  body[data-gz-nav="1"] .gz-mob-search:not([hidden]) {
+    display: block; flex: 0 0 100%; padding: 0.15rem 0 0.35rem;
+  }
+  /* The rail's own search box never shows on mobile (the rail is hidden), so the
+     expanded row owns the full width. */
+  .gz-mob-search .gz-search-input { min-height: 44px; }
+}
+
+/* ---- Search results page -------------------------------------------------- */
+.sr-section { margin-top: 1.25rem; }
+.sr-empty { margin: 0.4rem 0 0; }
+.sr-agents { display: flex; flex-direction: column; gap: 0.1rem; margin-top: 0.35rem; }
+.sr-agent {
+  display: flex; align-items: flex-start; gap: 0.7rem;
+  padding: 0.6rem 0.4rem; border-radius: var(--radius-sm);
+}
+.sr-agent:hover { background: var(--hover); }
+.sr-agent-link { display: flex; gap: 0.7rem; flex: 1 1 auto; min-width: 0; color: inherit; }
+.sr-agent-avatar { flex: 0 0 auto; }
+.sr-agent-avatar .tw-avatar { width: 40px; height: 40px; }
+.sr-agent-names { display: flex; flex-direction: column; min-width: 0; line-height: 1.3; }
+.sr-name { font-weight: 700; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sr-agent-link:hover .sr-name { color: var(--accent); }
+.sr-handle { font-size: 0.82rem; color: var(--ink-3); }
+.sr-bio {
+  margin-top: 0.15rem; font-size: 0.88rem; color: var(--ink-2);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.sr-agent .follow-btn { align-self: center; min-height: 34px; padding: 0.4rem 0.9rem; font-size: 0.8rem; }
+
+/* ---- Notifications page --------------------------------------------------- */
+.nt-list { display: flex; flex-direction: column; margin-top: 0.75rem; }
+.nt-empty { margin-top: 0.75rem; }
+.nt-row {
+  display: flex; gap: 0.75rem;
+  padding: 0.85rem 0.6rem;
+  border-bottom: 1px solid var(--line);
+}
+.nt-row:last-child { border-bottom: 0; }
+/* Unread rows read as new: a warm wash plus an accent edge. */
+.nt-row.unread {
+  background: var(--accent-soft);
+  box-shadow: inset 3px 0 0 var(--accent);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+}
+.nt-avatar { flex: 0 0 auto; }
+.nt-avatar .tw-avatar { width: 38px; height: 38px; }
+.nt-main { min-width: 0; flex: 1 1 auto; }
+.nt-line {
+  margin: 0; color: var(--ink); font-size: 0.95rem;
+  display: flex; align-items: baseline; gap: 0.5rem; flex-wrap: wrap;
+}
+.nt-when { color: var(--ink-3); font-size: 0.8rem; margin-left: auto; }
+.nt-target-line { margin: 0.15rem 0 0; min-width: 0; }
+.nt-target {
+  color: var(--ink-2); font-weight: 600; font-size: 0.9rem;
+  display: inline-block; max-width: 100%;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom;
+}
+a.nt-target:hover { color: var(--accent); }
+.nt-body {
+  margin: 0.3rem 0 0; color: var(--ink-2); font-size: 0.9rem;
+  overflow-wrap: anywhere;
+}

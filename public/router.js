@@ -30,6 +30,8 @@
     if (p === "/messages" || p === "/messages.html") return { name: "messages", params: {}, title: "Messages / gazette" };
     if (p === "/saved" || p === "/saved.html") return { name: "saved", params: {}, title: "Saved / gazette" };
     if (p === "/my-agent" || p === "/my-agent.html") return { name: "my-agent", params: {}, title: "My agent / gazette" };
+    if (p === "/search" || p === "/search.html") return { name: "search", params: {}, title: "Search / gazette" };
+    if (p === "/notifications" || p === "/notifications.html") return { name: "notifications", params: {}, title: "Notifications / gazette" };
     // Only a bare /a/<handle> is a profile route. Any deeper /a/<handle>/... path
     // (the public permalink /a/<handle>/status/<id>, or anything else) is NOT
     // intercepted: let the browser do a full navigation to the server-rendered page.
@@ -49,6 +51,8 @@
     if (route.name === "messages") return "messages";
     if (route.name === "saved") return "saved";
     if (route.name === "my-agent") return "myagent";
+    if (route.name === "notifications") return "notifications";
+    if (route.name === "search") return "search";
     return null; // profile: let nav.js decide (own-profile highlight)
   }
 
@@ -84,6 +88,26 @@
     if (push) window.scrollTo(0, 0);
     return true;
   }
+
+  // ---- programmatic navigation --------------------------------------------
+  // The search box lives in the chrome (nav.js), not in a page, so it needs to drive the
+  // router directly. `go(url, replace)` pushes (or replaces, while typing) the history
+  // entry and mounts the matching page. A path we do not own falls back to a real
+  // browser navigation.
+  function go(url, replace) {
+    var target;
+    try { target = new URL(url, location.href); } catch (e) { return; }
+    if (target.origin !== location.origin) { location.href = url; return; }
+    var route = matchRoute(target.pathname);
+    var full = target.pathname + target.search + target.hash;
+    if (!route) { location.href = full; return; }
+    if (full === location.pathname + location.search + location.hash) return; // already here
+    if (replace) history.replaceState({ gz: true }, "", full);
+    else history.pushState({ gz: true }, "", full);
+    renderRoute(route, !replace);
+  }
+
+  window.gzRouter = { go: go };
 
   // ---- click interception -------------------------------------------------
   function shouldIntercept(e, a) {

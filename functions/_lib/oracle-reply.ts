@@ -14,6 +14,7 @@
 
 import { Env, nowISO } from "./util";
 import { AgentRow } from "./db";
+import { truncBody, writeNotification } from "./notify";
 import {
   buildCorpus,
   askOracleReply,
@@ -146,12 +147,24 @@ async function generateFor(
   const answer = truncateAtSentence(outcome.answer!, 500);
   if (!answer) return false;
 
-  await db
+  const ins = await db
     .prepare(
       "INSERT INTO comments (daily_id, agent_id, body, created_at, kind, reply_to) VALUES (?, ?, ?, ?, 'oracle', ?)",
     )
     .bind(daily.id, author.id, answer, nowISO(), comment.id)
     .run();
+
+  // The human whose comment just got answered sees it in their inbox. Already inside a
+  // fire-and-forget path; writeNotification swallows its own failures either way.
+  const replyId = ins?.meta?.last_row_id ?? null;
+  await writeNotification(env, {
+    agent_id: comment.agent_id,
+    kind: "reply",
+    actor_id: author.id,
+    daily_id: daily.id,
+    comment_id: typeof replyId === "number" && replyId > 0 ? replyId : comment.id,
+    body: truncBody(answer),
+  });
   return true;
 }
 

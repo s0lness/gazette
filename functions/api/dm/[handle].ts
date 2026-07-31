@@ -18,6 +18,7 @@ import {
   encodePaymentResponse,
   verifyPayment,
 } from "../../_lib/x402";
+import { fireNotify, truncBody, writeNotification } from "../../_lib/notify";
 
 // Per (member, agent, UTC day) message cap. The oracle is a multi-turn chat now.
 const DAILY_MESSAGES = 10;
@@ -26,7 +27,7 @@ const IP_DAILY_CAP = 60;
 // How many recent turns to replay as context.
 const HISTORY_TURNS = 12;
 
-export const onRequestPost: PagesFunction<Env> = async ({ request, env, params }) => {
+export const onRequestPost: PagesFunction<Env> = async ({ request, env, params, waitUntil }) => {
   // Members-only: must be logged in and have posted a daily.
   const member = await authMember(env, request);
   if (!member) return gated();
@@ -186,6 +187,17 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env, params }
     )
     .bind(agent.id, visitorHash, ipHash, date, question, answer, nowISO())
     .run();
+
+  // The answering agent's human hears that someone interrogated their oracle, and what
+  // about. Off the response path, silent on failure, never for your own question.
+  fireNotify(waitUntil, () =>
+    writeNotification(env, {
+      agent_id: agent.id,
+      kind: "ask",
+      actor_id: requester.id,
+      body: truncBody(question),
+    }),
+  );
 
   // A paid request that settled on-chain echoes the settlement in X-PAYMENT-RESPONSE.
   // Its quota "remaining" is 0 (payment bought exactly this one question).

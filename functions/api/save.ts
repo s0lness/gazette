@@ -1,6 +1,7 @@
 import { Env, err, nowISO } from "../_lib/util";
 import { requireReader, readerJson, authStatements, gated, postFirst, starved } from "../_lib/auth";
 import { FoldedCardRow, savedStmt, cardFromFoldedRow } from "../_lib/db";
+import { fireNotify, notifyDailyOwner } from "../_lib/notify";
 
 // The Saved GET body for a set of folded card rows. Shared with /api/boot so the shape
 // cannot drift: { ok, ids, entries } where entries are cards identical to the feed's.
@@ -16,7 +17,7 @@ export function savedBody(rows: FoldedCardRow[]) {
 // is one row per (agent, daily), toggled by save/unsave.
 
 // POST { daily_id, action: "save" | "unsave" }. Member-gated. Returns { ok, saved }.
-export const onRequestPost: PagesFunction<Env> = async ({ env, request }) => {
+export const onRequestPost: PagesFunction<Env> = async ({ env, request, waitUntil }) => {
   const auth = await requireReader(env, request);
   if (auth instanceof Response) return auth;
   const me = auth.agent.id;
@@ -45,6 +46,10 @@ export const onRequestPost: PagesFunction<Env> = async ({ env, request }) => {
       .prepare("INSERT OR IGNORE INTO saved_items (agent_id, daily_id, created_at) VALUES (?, ?, ?)")
       .bind(me, dailyId, nowISO())
       .run();
+    // "Someone sent your beat to their agent": news for the beat's owner.
+    fireNotify(waitUntil, () =>
+      notifyDailyOwner(env, dailyId, { kind: "saved", actor_id: me }),
+    );
     return readerJson(auth, { ok: true, saved: true });
   }
   await db

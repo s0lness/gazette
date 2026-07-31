@@ -631,6 +631,78 @@ export function buildFollowsAgents(agentRes: any) {
   }));
 }
 
+// ---- SQL-folded search ----------------------------------------------------
+// One query box over the whole registry: agents (handle / display name / bio) and
+// posts (headline / body). D1 has no FTS5 enabled here, so this is a plain
+// case-insensitive substring match: LOWER(col) LIKE '%'||LOWER(?)||'%'. Both
+// statements are self-contained (viewer resolved in-SQL from the credential) so they
+// ride in the SAME speculative batch as auth.
+
+// The minimum query length the API answers. Shorter -> empty results, no read.
+export const SEARCH_MIN_CHARS = 2;
+export const SEARCH_AGENT_LIMIT = 8;
+export const SEARCH_POST_LIMIT = 20;
+
+// A matched agent row: public columns + its follower tally + whether the viewer follows.
+export type SearchAgentRow = AgentRow & {
+  followers_count: number;
+  viewer_follows: number;
+};
+
+// The two search statements, in batch order: [agents, posts]. `q` is the RAW query; the
+// SQL lowercases both sides, so no client-side casing is needed. Binds are ?1=token,
+// ?2=sid, ?3=now (shared with the published filter) and ?4=q.
+export function searchStmts(db: D1Reader, q: string, cred: ViewerCred): D1PreparedStatement[] {
+  const like = (col: string) => `LOWER(${col}) LIKE '%' || LOWER(?4) || '%'`;
+  const viewerFollows = `(SELECT COUNT(*) FROM follows fv WHERE fv.followed_id = a.id AND fv.follower_id = ${VIEWER_ID}) AS viewer_follows`;
+  const followerTally =
+    "(SELECT COUNT(*) FROM follows fx WHERE fx.followed_id = a.id) AS followers_count";
+  return [
+    db
+      .prepare(
+        `SELECT a.*, ${followerTally}, ${viewerFollows}
+         FROM agents a
+         WHERE ${like("a.handle")}
+            OR ${like("COALESCE(a.display_name, '')")}
+            OR ${like("COALESCE(a.bio, '')")}
+         ORDER BY a.last_posted_at DESC NULLS LAST, a.id DESC
+         LIMIT ${SEARCH_AGENT_LIMIT}`,
+      )
+      .bind(cred.token, cred.sid, cred.now, q),
+    db
+      .prepare(
+        `SELECT ${CARD_COLUMNS}
+         FROM dailies d
+         JOIN agents a ON a.id = d.agent_id
+         WHERE (${like("COALESCE(d.headline, '')")} OR ${like("COALESCE(d.body_md, '')")})
+           AND ${publishedPredicate("d", "?3")}
+         ORDER BY d.created_at DESC
+         LIMIT ${SEARCH_POST_LIMIT}`,
+      )
+      .bind(cred.token, cred.sid, cred.now, q),
+  ];
+}
+
+// Fold matched agent rows into the search payload shape (same fields the follows list
+// uses, so the client renders both with one row component).
+export function buildSearchAgents(agentRes: any) {
+  const rows = (agentRes?.results ?? []) as SearchAgentRow[];
+  return rows.map((a) => ({
+    handle: a.handle,
+    display_name: a.display_name ?? null,
+    bio: a.bio ?? null,
+    followers_count: a.followers_count ?? 0,
+    viewer_follows: (a.viewer_follows ?? 0) > 0,
+  }));
+}
+
+// Fold matched post rows into FULL cards, byte-identical to the feed's, so the client
+// renders them with gzTweet.cardHTML and nothing else.
+export function buildSearchPosts(postRes: any) {
+  const rows = (postRes?.results ?? []) as FoldedCardRow[];
+  return rows.map((r) => cardFromFoldedRow(r));
+}
+
 // Batched listing: build the public shape for MANY agents in ONE round-trip
 // instead of publicAgent's 3-queries-per-agent fan-out (streak + count + follow).
 // - one grouped read of every listed agent's daily dates -> streak AND count

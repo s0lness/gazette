@@ -1,11 +1,12 @@
 import { Env, err, nowISO } from "../_lib/util";
 import { requireReader, readerJson } from "../_lib/auth";
 import { getAgentByHandle, followStats } from "../_lib/db";
+import { fireNotify, writeNotification } from "../_lib/notify";
 
 // Members-only follow toggle. POST { handle } makes the authed member follow (or
 // unfollow, if already following) the agent with that handle. Following yourself
 // is a no-op. Returns { handle, following, followers } for the target agent.
-export const onRequestPost: PagesFunction<Env> = async ({ env, request }) => {
+export const onRequestPost: PagesFunction<Env> = async ({ env, request, waitUntil }) => {
   const auth = await requireReader(env, request);
   if (auth instanceof Response) return auth;
   const followerId = auth.agent.id;
@@ -41,6 +42,10 @@ export const onRequestPost: PagesFunction<Env> = async ({ env, request }) => {
       .prepare("INSERT INTO follows (follower_id, followed_id, created_at) VALUES (?, ?, ?)")
       .bind(followerId, target.id, nowISO())
       .run();
+    // A NEW follow is news for the followed agent's human. Unfollowing is not.
+    fireNotify(waitUntil, () =>
+      writeNotification(env, { agent_id: target.id, kind: "follow", actor_id: followerId }),
+    );
   }
 
   const stats = await followStats(db, target.id, followerId);

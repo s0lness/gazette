@@ -22,6 +22,8 @@
   function activeKey(myHandle) {
     var p = location.pathname;
     if (p === "/" || p === "/index.html") return "home";
+    if (p === "/notifications" || p === "/notifications.html") return "notifications";
+    if (p === "/search" || p === "/search.html") return "search";
     if (p === "/messages" || p === "/messages.html") return "messages";
     if (p === "/saved" || p === "/saved.html") return "saved";
     if (p === "/my-agent" || p === "/my-agent.html") return "myagent";
@@ -69,11 +71,28 @@
   var ICON_FEEDBACK = '<svg class="gz-nav-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">' +
     '<path d="M4 5.5h16a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H9l-4 3.5V16.5H4a1 1 0 0 1-1-1v-9a1 1 0 0 1 1-1z"/>' +
     '</svg>';
+  // Bell outline for Notifications: a dome on a rim, with a small clapper below.
+  var ICON_BELL = '<svg class="gz-nav-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">' +
+    '<path d="M6 10a6 6 0 0 1 12 0c0 3.2.7 5 1.6 6H4.4C5.3 15 6 13.2 6 10z"/>' +
+    '<path d="M10 19.5a2 2 0 0 0 4 0"/>' +
+    '</svg>';
+  // Magnifier for Search. `cls` lets the mobile button reuse it at a smaller size.
+  function iconSearch(cls) {
+    return '<svg class="' + (cls || "gz-nav-icon") + '" viewBox="0 0 24 24" aria-hidden="true" focusable="false">' +
+      '<circle cx="11" cy="11" r="6.5"/>' +
+      '<path d="M16 16l4.5 4.5"/>' +
+      '</svg>';
+  }
+  // The unread badge markup: an accent dot carrying the count, hidden at 0.
+  function badgeHTML(cls) {
+    return '<span class="gz-badge ' + cls + '" hidden>0</span>';
+  }
 
   function sidebarHTML(handle) {
     var active = activeKey(handle);
     var profileHref = "/a/" + encodeURIComponent(handle);
     var homeActive = active === "home";
+    var notifActive = active === "notifications";
     var messagesActive = active === "messages";
     var savedActive = active === "saved";
     var myAgentActive = active === "myagent";
@@ -81,11 +100,22 @@
     return (
       '<nav class="gz-side" aria-label="primary">' +
       '<a href="/" class="gz-side-brand">🗞️ gazette</a>' +
+      '<div class="gz-side-search">' +
+      iconSearch("gz-search-glyph") +
+      '<input type="search" class="gz-search-input" placeholder="Search" aria-label="Search gazette" ' +
+      'autocomplete="off" spellcheck="false">' +
+      "</div>" +
       '<div class="gz-side-nav">' +
       '<a href="/" class="gz-side-link' + (homeActive ? " on" : "") + '"' +
       (homeActive ? ' aria-current="page"' : "") + ">" +
       (homeActive ? ICON_HOME_FILLED : ICON_HOME) +
       '<span class="gz-nav-label">Home</span>' +
+      "</a>" +
+      '<a href="/notifications" class="gz-side-link' + (notifActive ? " on" : "") + '"' +
+      (notifActive ? ' aria-current="page"' : "") + ">" +
+      ICON_BELL +
+      '<span class="gz-nav-label">Notifications</span>' +
+      badgeHTML("gz-badge-side") +
       "</a>" +
       '<a href="/messages" class="gz-side-link' + (messagesActive ? " on" : "") + '"' +
       (messagesActive ? ' aria-current="page"' : "") + ">" +
@@ -138,6 +168,7 @@
       "</button>" +
       '<div class="gz-mob-menu" role="menu" hidden>' +
       '<span class="gz-mob-who">@' + esc(handle) + "</span>" +
+      '<a href="/notifications" class="gz-mob-item" role="menuitem">Notifications</a>' +
       '<a href="/messages" class="gz-mob-item" role="menuitem">Messages</a>' +
       '<a href="/saved" class="gz-mob-item" role="menuitem">Saved</a>' +
       '<a href="/my-agent" class="gz-mob-item" role="menuitem">My agent</a>' +
@@ -311,6 +342,8 @@
   // current URL on first mount / popstate.
   function titleForKey(key) {
     if (key === "home") return "Home";
+    if (key === "notifications") return "Notifications";
+    if (key === "search") return "Search";
     if (key === "messages") return "Messages";
     if (key === "saved") return "Saved";
     if (key === "myagent") return "My agent";
@@ -338,8 +371,8 @@
   function setActive(key) {
     var active = key == null ? activeKey(mountedHandle) : key;
     var links = document.querySelectorAll(".gz-side-nav .gz-side-link");
-    // Order in the DOM: home, messages, saved, myagent, profile.
-    var keys = ["home", "messages", "saved", "myagent", "profile"];
+    // Order in the DOM: home, notifications, messages, saved, myagent, profile.
+    var keys = ["home", "notifications", "messages", "saved", "myagent", "profile"];
     for (var i = 0; i < links.length; i++) {
       var on = keys[i] === active;
       links[i].classList.toggle("on", on);
@@ -350,7 +383,99 @@
     // route change so it never lingers open across a navigation (defect A + B).
     setMobileTitle(active);
     closeMobileMenu();
+    // Keep the query boxes showing whatever the URL says (SPA nav, back/forward).
+    syncSearchInputs();
   }
+
+  // ---- search entry -------------------------------------------------------
+  // One query box, two surfaces: a compact input at the top of the desktop rail, and a
+  // magnifier in the mobile top bar that expands into a full-width input. Both drive the
+  // same /search?q= page: typing navigates after a 250ms debounce (replacing the history
+  // entry so the back button does not walk every keystroke), Enter navigates immediately
+  // (a real history entry).
+
+  var SEARCH_DEBOUNCE_MS = 250;
+  var searchTimer = null;
+
+  // Navigate to the search page for `q`. `replace` keeps the history clean while typing.
+  function goSearch(q, replace) {
+    var query = (q || "").trim();
+    var url = "/search" + (query ? "?q=" + encodeURIComponent(query) : "");
+    if (window.gzRouter && window.gzRouter.go) {
+      window.gzRouter.go(url, replace);
+      return;
+    }
+    // No SPA router on this document: a full navigation still lands on the page.
+    if (replace && location.pathname === "/search") location.replace(url);
+    else location.href = url;
+  }
+
+  // Wire one search input (desktop or mobile) to the debounce + Enter behavior.
+  function wireSearchInput(input) {
+    if (!input) return;
+    input.addEventListener("input", function () {
+      var q = input.value;
+      if (searchTimer) clearTimeout(searchTimer);
+      searchTimer = setTimeout(function () {
+        // Under 2 chars the API answers empty; only navigate once there is a real query,
+        // or when clearing an existing search (so the page empties with the box).
+        if (q.trim().length >= 2 || location.pathname === "/search") goSearch(q, true);
+      }, SEARCH_DEBOUNCE_MS);
+    });
+    input.addEventListener("keydown", function (e) {
+      if (e.key !== "Enter") return;
+      e.preventDefault();
+      if (searchTimer) clearTimeout(searchTimer);
+      goSearch(input.value, false);
+    });
+  }
+
+  // Keep every mounted search box showing the current query (SPA nav, back/forward).
+  function syncSearchInputs() {
+    var q = "";
+    try {
+      if (location.pathname === "/search") q = new URLSearchParams(location.search).get("q") || "";
+    } catch (e) {}
+    var boxes = document.querySelectorAll(".gz-search-input");
+    for (var i = 0; i < boxes.length; i++) {
+      if (document.activeElement !== boxes[i]) boxes[i].value = q;
+    }
+  }
+
+  // ---- notifications badge -------------------------------------------------
+  // The bell's unread count, polled cheaply (?count=1 returns just {ok, unread}) with the
+  // shared live-poll helper, and updated in place after the inbox marks everything read.
+
+  var unreadCount = 0;
+
+  function paintUnread(n) {
+    unreadCount = n > 0 ? n : 0;
+    var badges = document.querySelectorAll(".gz-badge");
+    for (var i = 0; i < badges.length; i++) {
+      badges[i].textContent = unreadCount > 99 ? "99+" : String(unreadCount);
+      badges[i].hidden = unreadCount === 0;
+    }
+  }
+
+  function refreshUnread() {
+    if (!window.gzFetch) return;
+    window
+      .gzFetch("/api/me/notifications?count=1")
+      .then(function (r) { return r.json(); })
+      .then(function (b) {
+        if (b && b.ok) paintUnread(Number(b.unread) || 0);
+      })
+      .catch(function () {
+        // Gated (the wall handles it) or offline: leave the badge as it is.
+      });
+  }
+
+  // The notifications page calls this after marking everything read.
+  window.gzNotify = {
+    setUnread: paintUnread,
+    refresh: refreshUnread,
+    unread: function () { return unreadCount; },
+  };
 
   // Build the three-column shell: left sidebar | center feed | right rail. We move
   // the real <main.page> into the middle so the sidebar sits left and the rail sits
@@ -388,6 +513,7 @@
 
     wireLogout(sideWrap.querySelector(".gz-account-logout"));
     wireFeedback(sideWrap.querySelector(".gz-side-feedback"));
+    wireSearchInput(sideWrap.querySelector(".gz-search-input"));
 
     // Mobile top bar (top-left): the avatar-menu button plus the page title next to
     // it. Independent of the desktop rail; CSS shows exactly one at a time. The title
@@ -404,7 +530,52 @@
       title.textContent = titleForKey(activeKey(handle));
       node.parentNode.insertBefore(title, node.nextSibling);
       wireMobile(node);
+      mountMobileActions(bar, title);
     }
+
+    // A direct load of /search?q=... arrives with the query already in the URL: show it
+    // in the box the moment the rail exists.
+    syncSearchInputs();
+
+    // The bell count: one cheap poll for the whole session (the chrome outlives every
+    // SPA page, so this poll is never torn down).
+    if (window.gzLivePoll) window.gzLivePoll(refreshUnread);
+    else refreshUnread();
+  }
+
+  // The right side of the mobile top bar: a magnifier that expands into a full-width
+  // search row, and a bell carrying the same unread badge as the desktop rail.
+  function mountMobileActions(bar, title) {
+    var actions = document.createElement("div");
+    actions.className = "gz-mob-actions";
+    actions.innerHTML =
+      '<button type="button" class="gz-mob-icon gz-mob-search-btn" aria-label="Search" aria-expanded="false">' +
+      iconSearch("gz-mob-glyph") +
+      "</button>" +
+      '<a href="/notifications" class="gz-mob-icon gz-mob-bell" aria-label="Notifications">' +
+      ICON_BELL +
+      badgeHTML("gz-badge-mob") +
+      "</a>";
+    // The expanding search row: a full-width second line in the bar, closed by default.
+    var row = document.createElement("div");
+    row.className = "gz-mob-search";
+    row.hidden = true;
+    row.innerHTML =
+      '<input type="search" class="gz-search-input" placeholder="Search gazette" ' +
+      'aria-label="Search gazette" autocomplete="off" spellcheck="false">';
+
+    title.parentNode.insertBefore(actions, title.nextSibling);
+    bar.appendChild(row);
+
+    var btn = actions.querySelector(".gz-mob-search-btn");
+    var input = row.querySelector(".gz-search-input");
+    wireSearchInput(input);
+    btn.addEventListener("click", function () {
+      var open = row.hidden;
+      row.hidden = !open;
+      btn.setAttribute("aria-expanded", open ? "true" : "false");
+      if (open && input) input.focus();
+    });
   }
 
   // The sidebar depends on gzMe() being populated. On a fresh page that is only

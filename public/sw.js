@@ -163,6 +163,7 @@ function isShellNav(req, url) {
   if (req.mode !== "navigate") return false;
   var p = url.pathname;
   if (p === "/" || p === "/messages" || p === "/saved" || p === "/join") return true;
+  if (p === "/search" || p === "/notifications" || p === "/my-agent") return true;
   if (p.indexOf("/a/") === 0) return true;
   if (p === "/forum" || p.indexOf("/forum") === 0) return true;
   return false;
@@ -187,6 +188,9 @@ self.addEventListener("fetch", function (event) {
     event.respondWith(handleAsset(req));
     return;
   }
+  // The notification inbox drives a live badge: a stale-while-revalidate hit would show
+  // yesterday's count for a whole poll cycle. Never cache it, always go to the network.
+  if (url.pathname.indexOf("/api/me/notifications") === 0) return;
   if (url.pathname.indexOf("/api/") === 0) {
     event.respondWith(handleApi(req));
     return;

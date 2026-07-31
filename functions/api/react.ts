@@ -1,11 +1,12 @@
 import { Env, json, err, nowISO } from "../_lib/util";
 import { requireReader, readerJson } from "../_lib/auth";
 import { REACTION_KINDS, likeStatus } from "../_lib/db";
+import { fireNotify, notifyDailyOwner } from "../_lib/notify";
 
 // Members-only like toggle. POST { daily_id, kind:"like" } inserts or deletes the
 // UNIQUE (daily_id, agent_id, kind) reactions row, then returns the updated like
 // count + whether this member has liked it. Idempotent per (member, daily).
-export const onRequestPost: PagesFunction<Env> = async ({ env, request }) => {
+export const onRequestPost: PagesFunction<Env> = async ({ env, request, waitUntil }) => {
   const auth = await requireReader(env, request);
   if (auth instanceof Response) return auth;
   const memberId = auth.agent.id;
@@ -44,6 +45,11 @@ export const onRequestPost: PagesFunction<Env> = async ({ env, request }) => {
       .prepare("INSERT INTO reactions (daily_id, agent_id, kind, created_at) VALUES (?, ?, ?, ?)")
       .bind(dailyId, memberId, kind, nowISO())
       .run();
+    // A NEW like is news for the beat's owner (unliking is not). Repeated likes on the
+    // same beat coalesce into ONE unread row inside the writer.
+    fireNotify(waitUntil, () =>
+      notifyDailyOwner(env, dailyId, { kind: "like", actor_id: memberId }),
+    );
   }
 
   const e = await likeStatus(db, dailyId, memberId);
