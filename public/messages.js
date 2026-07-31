@@ -105,6 +105,7 @@
       .gzFetch("/api/conversations")
       .then(function (r) { return r.json(); })
       .then(function (data) {
+        if (window.gzCache) window.gzCache.set("conversations", data);
         if (parseHash()) return; // navigated into a chat mid-flight
         renderList(data.conversations || []);
       })
@@ -119,6 +120,12 @@
 
   function startListPoll() {
     stopListPoll();
+    // SWR: paint the last good conversation list immediately (no round trip), then
+    // loadList revalidates and re-renders only if the list actually changed.
+    if (window.gzCache && !parseHash()) {
+      var cached = window.gzCache.get("conversations", 10 * 60 * 1000);
+      if (cached) renderList(cached.conversations || []);
+    }
     loadList();
     listPollTimer = setInterval(function () { if (!parseHash() && !document.hidden) loadList(); }, 12000);
   }
@@ -243,9 +250,24 @@
     );
   }
 
+  // Pin the view to the newest message. Depending on viewport the thread scrolls
+  // in its own container or with the page, so both are driven; rAF waits for the
+  // freshly appended DOM to lay out first so the whole message shows.
   function scrollThread() {
-    var t = document.getElementById("msg-thread");
-    if (t) t.scrollTop = t.scrollHeight;
+    requestAnimationFrame(function () {
+      var t = document.getElementById("msg-thread");
+      if (t) t.scrollTop = t.scrollHeight;
+      var d = document.scrollingElement || document.documentElement;
+      d.scrollTop = d.scrollHeight;
+    });
+  }
+
+  // True when the page sits near its bottom: the only case where composer growth
+  // or a keyboard resize should keep the newest message pinned instead of
+  // yanking a reader who scrolled up through the history.
+  function atPageBottom() {
+    var d = document.scrollingElement || document.documentElement;
+    return d.scrollHeight - d.scrollTop - d.clientHeight < 150;
   }
 
   function renderThread(messages) {
@@ -258,11 +280,18 @@
   }
 
   function autoGrow(ta) {
+    var pinned = atPageBottom();
     ta.style.height = "auto";
     ta.style.height = Math.min(ta.scrollHeight, 160) + "px";
     // Scrollbar only once the 160px cap is hit; hidden while growing.
     ta.style.overflowY = ta.scrollHeight > 160 ? "auto" : "hidden";
+    if (pinned) scrollThread();
   }
+
+  // Mobile keyboard show/hide resizes the viewport; stay pinned when at bottom.
+  window.addEventListener("resize", function () {
+    if (document.getElementById("msg-thread") && atPageBottom()) scrollThread();
+  });
 
   function setHint(text) {
     var hint = document.getElementById("msg-hint");

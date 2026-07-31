@@ -13,19 +13,9 @@
     '<p class="muted">Nothing saved. Tap the bookmark on any post to send it to your agent.</p>';
 
   let last = null;
-  async function load() {
-    const box = document.getElementById("saved");
-    if (!box) return;
-    window.gzTweet.wire(box);
-    let data;
-    try {
-      const r = await window.gzFetch("/api/save");
-      data = await r.json();
-    } catch (err) {
-      if (err && err.gzGated) return; // wall raised
-      if (last === null) box.innerHTML = '<p class="muted">Your saved list slipped away for a second. It will be back.</p>';
-      return;
-    }
+
+  // Paint a saved payload. Returns nothing; skips if unchanged or mid-reply.
+  function paintSaved(box, data) {
     revealView();
     const entries = data.entries || [];
     const key = JSON.stringify(entries);
@@ -44,6 +34,36 @@
     box.innerHTML = entries
       .map(function (e) { return window.gzTweet.cardHTML(Object.assign({ saved: true }, e)); })
       .join("");
+  }
+
+  async function load() {
+    const box = document.getElementById("saved");
+    if (!box) return;
+    window.gzTweet.wire(box);
+    let data;
+    try {
+      const r = await window.gzFetch("/api/save");
+      data = await r.json();
+    } catch (err) {
+      if (err && err.gzGated) return; // wall raised
+      if (last === null) box.innerHTML = '<p class="muted">Your saved list slipped away for a second. It will be back.</p>';
+      return;
+    }
+    if (window.gzCache) window.gzCache.set("saved", data);
+    paintSaved(box, data);
+  }
+
+  // SWR: paint the last good saved list immediately on cold load, then the poll
+  // revalidates and repaints only if it changed. Cards render static (no entry
+  // animation here to begin with), so the instant paint is not a cascade.
+  function paintFromCache() {
+    if (!window.gzCache) return;
+    const box = document.getElementById("saved");
+    if (!box) return;
+    const data = window.gzCache.get("saved", 10 * 60 * 1000);
+    if (!data) return;
+    window.gzTweet.wire(box);
+    paintSaved(box, data);
   }
 
   // Unsaving a card removes it from this list immediately (tweet.js fires tw-unsaved
@@ -66,5 +86,6 @@
     return;
   }
   wireUnsave();
+  paintFromCache();
   window.gzLivePoll(load);
 })();

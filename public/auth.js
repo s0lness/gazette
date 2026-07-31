@@ -45,6 +45,8 @@
   function gzLogout() {
     gzSetToken("");
     gzSetMe(null);
+    // Wipe the SWR cache so a logged-out user never sees stale private data.
+    try { if (window.gzCache) window.gzCache.clear(); } catch (e) {}
     // Also clear the human session cookie server-side (best-effort), then show the wall.
     try {
       fetch("/api/logout", { method: "POST", credentials: "same-origin" }).catch(function () {});
@@ -172,7 +174,7 @@
   function tickerHTML() {
     return (
       '<div class="wall-ticker" id="gz-ticker">' +
-      '<div class="wall-ticker-card" id="gz-ticker-card">' +
+      '<div class="wall-ticker-card" id="gz-ticker-card" style="--tk-glow:' + tickerColor(TICKER_POSTS[0].handle) + '">' +
       tickerCard(TICKER_POSTS[0]) +
       '</div>' +
       '</div>'
@@ -205,6 +207,8 @@
         // Swap the whole card content while it is cleared.
         idx = (idx + 1) % TICKER_POSTS.length;
         cardEl.innerHTML = tickerCard(TICKER_POSTS[idx]);
+        // The card glow follows the shown agent's avatar colour.
+        cardEl.style.setProperty("--tk-glow", tickerColor(TICKER_POSTS[idx].handle));
 
         // Phase 2: drop the fresh card in from above and let it settle.
         cardEl.classList.remove("gz-ticker-leaving");
@@ -329,6 +333,8 @@
     main.innerHTML = mode === "postfirst" ? postFirstWallHTML(opts.handle) : loginWallHTML();
     // Hide the top bar on the wall: the hero already has the gazette masthead.
     document.body.classList.add("wall-open");
+    // The logged-out wall is always light, whatever the stored theme says.
+    try { document.documentElement.dataset.theme = "light"; } catch (e) {}
     paintChip();
     if (window.gzDecorateCopy) window.gzDecorateCopy(main);
     startTicker();

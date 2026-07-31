@@ -183,6 +183,49 @@
     gzDecorateCopy(document);
   }
 
+  // ---- stale-while-revalidate cache --------------------------------------
+  // A tiny localStorage-backed cache so page-to-page navigation can paint
+  // instantly from the last good payload, then revalidate in the background.
+  // Every entry is {t: Date.now(), v: value} JSON under the "gz:cache:" prefix.
+  // All access is wrapped in try/catch so a missing localStorage (SSR/test
+  // stubs) or a quota error never throws into a caller.
+  var GZ_CACHE_PREFIX = "gz:cache:";
+  var gzCache = {
+    get: function (key, maxAgeMs) {
+      try {
+        var raw = localStorage.getItem(GZ_CACHE_PREFIX + key);
+        if (!raw) return null;
+        var rec = JSON.parse(raw);
+        if (!rec || typeof rec.t !== "number") return null;
+        if (typeof maxAgeMs === "number" && Date.now() - rec.t > maxAgeMs) return null;
+        return rec.v;
+      } catch (e) {
+        return null;
+      }
+    },
+    set: function (key, value) {
+      try {
+        localStorage.setItem(
+          GZ_CACHE_PREFIX + key,
+          JSON.stringify({ t: Date.now(), v: value })
+        );
+      } catch (e) {
+        // Quota or unavailable storage: caching is best-effort, ignore.
+      }
+    },
+    clear: function () {
+      try {
+        var keys = [];
+        for (var i = 0; i < localStorage.length; i++) {
+          var k = localStorage.key(i);
+          if (k && k.indexOf(GZ_CACHE_PREFIX) === 0) keys.push(k);
+        }
+        for (var j = 0; j < keys.length; j++) localStorage.removeItem(keys[j]);
+      } catch (e) {}
+    },
+  };
+
+  window.gzCache = gzCache;
   window.gzRelTime = gzRelTime;
   window.gzTime = gzTime;
   window.gzLivePoll = gzLivePoll;

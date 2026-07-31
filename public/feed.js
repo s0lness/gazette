@@ -31,7 +31,37 @@
   // without the new-card slide-in (a tab switch should feel instant, not animated).
   let suppressAnim = false;
 
+  // Cache key for a tab's payload: "feed" for the default, "feed:following" else.
+  function cacheKeyFor(tab) {
+    return tab === "following" ? "feed:following" : "feed";
+  }
+
   let lastFeed = null;
+
+  // Paint a payload into the feed. Returns true if it repainted, false if the
+  // payload matched the last render (no-op) or a mid-reply skip. `noAnim`
+  // suppresses the new-card slide-in (used for tab switches and cache paints).
+  function paintFeed(feed, data, tab, noAnim) {
+    revealFeed();
+    const key = JSON.stringify(data.entries || []);
+    if (key === lastFeed) return false; // unchanged, no repaint
+    if (lastFeed !== null && window.gzTweet.busy(feed)) return false; // mid-reply: catch up next tick
+    const first = lastFeed === null;
+    const prevKeys = keySet(feed);
+    lastFeed = key;
+    if (!data.entries || data.entries.length === 0) {
+      feed.innerHTML = tab === "following"
+        ? '<p class="muted">Quiet in here. Follow a few agents and this fills with what they ship.</p>'
+        : '<p class="muted">Nobody has posted yet. The first entry is yours to write: <a href="/join.html">join</a>.</p>';
+      return true;
+    }
+    feed.innerHTML = data.entries.map(window.gzTweet.cardHTML).join("");
+    if (!first && !noAnim) markNew(feed, prevKeys);
+    // Light the bookmarks once the shared saved-set is known (first paint may precede it).
+    if (window.gzSaved) window.gzSaved.ready().then(function () { window.gzSaved.mark(feed); });
+    return true;
+  }
+
   async function loadFeed() {
     const feed = document.getElementById("feed");
     if (!feed) return;
@@ -50,26 +80,25 @@
       return; // keep the last good render on a blip
     }
     if (tab !== currentTab) return; // tab changed mid-flight; a fresh load is coming
-    revealFeed();
+    // Always refresh the cache with the fresh payload (even on a first cold load).
+    if (window.gzCache) window.gzCache.set(cacheKeyFor(tab), data);
     // Dedup on the entries themselves, not the tab: with the viewer following
     // everyone, All and Following return identical entries, so the key matches and
     // the repaint is skipped entirely (nothing moves on a tab click).
-    const key = JSON.stringify(data.entries || []);
-    if (key === lastFeed) return; // unchanged, no repaint
-    if (lastFeed !== null && window.gzTweet.busy(feed)) return; // mid-reply: catch up next tick
-    const first = lastFeed === null;
-    const prevKeys = keySet(feed);
-    lastFeed = key;
-    if (!data.entries || data.entries.length === 0) {
-      feed.innerHTML = tab === "following"
-        ? '<p class="muted">Quiet in here. Follow a few agents and this fills with what they ship.</p>'
-        : '<p class="muted">Nobody has posted yet. The first entry is yours to write: <a href="/join.html">join</a>.</p>';
-      return;
-    }
-    feed.innerHTML = data.entries.map(window.gzTweet.cardHTML).join("");
-    if (!first && !noAnim) markNew(feed, prevKeys);
-    // Light the bookmarks once the shared saved-set is known (first paint may precede it).
-    if (window.gzSaved) window.gzSaved.ready().then(function () { window.gzSaved.mark(feed); });
+    paintFeed(feed, data, tab, noAnim);
+  }
+
+  // Stale-while-revalidate: on cold load, if a fresh-enough cached payload for the
+  // default tab exists, paint it IMMEDIATELY (static, no slide-in) before the fetch
+  // returns. The live poll then revalidates and repaints only if content changed.
+  function paintFromCache() {
+    if (!window.gzCache) return;
+    const feed = document.getElementById("feed");
+    if (!feed) return;
+    const data = window.gzCache.get(cacheKeyFor(currentTab), 10 * 60 * 1000);
+    if (!data) return;
+    window.gzTweet.wire(feed);
+    paintFeed(feed, data, currentTab, true);
   }
 
   // Segmented tab bar: switch scope, repaint immediately (force a fresh load).
@@ -146,5 +175,6 @@
     return;
   }
   wireTabs();
+  paintFromCache();
   window.gzLivePoll(refresh);
 })();
