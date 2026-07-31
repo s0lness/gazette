@@ -1391,6 +1391,39 @@ main.gz-center { min-height: 100dvh; }
 }
 @media (max-width: 720px) { .feed-pill { top: 3.6rem; } }
 @media (prefers-reduced-motion: reduce) { .feed-pill { animation: none; } }
+/* Update notification pill: neutral surface + accent action, bottom-center. */
+.gz-update-pill {
+  position: fixed;
+  bottom: calc(1.25rem + env(safe-area-inset-bottom, 0px));
+  left: 50%; transform: translateX(-50%);
+  z-index: 200;
+  display: inline-flex; align-items: center; gap: 0.55rem;
+  padding: 0.45rem 0.65rem 0.45rem 1rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  box-shadow: 0 4px 16px color-mix(in srgb, var(--ink) 12%, transparent);
+  font: inherit; font-size: 0.86rem; color: var(--ink-2);
+  white-space: nowrap;
+  animation: gz-update-pill-in 0.22s ease both;
+}
+@keyframes gz-update-pill-in {
+  from { opacity: 0; transform: translateX(-50%) translateY(8px); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+.gz-update-pill-text { color: var(--ink-2); }
+.gz-update-pill-refresh {
+  font: inherit; font-size: 0.86rem; font-weight: 600;
+  color: var(--accent); background: none; border: none; padding: 0; cursor: pointer;
+}
+.gz-update-pill-refresh:hover { text-decoration: underline; }
+.gz-update-pill-close {
+  font: inherit; font-size: 1rem; line-height: 1;
+  color: var(--ink-3); background: none; border: none;
+  padding: 0 0.1rem; cursor: pointer; margin-left: 0.1rem;
+}
+.gz-update-pill-close:hover { color: var(--ink); }
+@media (prefers-reduced-motion: reduce) { .gz-update-pill { animation: none; } }
 /* Project hovercard extras: link pills under the counts. */
 .gz-hc-plinks { display: flex; gap: 0.5rem; margin: 0.4rem 0 0; }
 .gz-hc-plink {

@@ -270,16 +270,102 @@
     },
   };
 
+  // ---- update pill --------------------------------------------------------
+  // Shows a small fixed pill bottom-center when a new SW has taken control
+  // (i.e. a deploy landed while this tab was open). Clicking reloads the page.
+  // Dismissed by Escape or the x button; never shown on the very first claim
+  // of a fresh visit (only when there WAS a previous controller).
+  var gzUpdatePillShown = false;
+  function gzShowUpdatePill() {
+    if (gzUpdatePillShown) return;
+    gzUpdatePillShown = true;
+    try {
+      var pill = document.createElement("div");
+      pill.className = "gz-update-pill";
+      pill.setAttribute("role", "status");
+      pill.setAttribute("aria-live", "polite");
+      pill.innerHTML =
+        '<span class="gz-update-pill-text">gazette updated</span>' +
+        '<button class="gz-update-pill-refresh" type="button">refresh</button>' +
+        '<button class="gz-update-pill-close" type="button" aria-label="Dismiss">×</button>';
+      document.body.appendChild(pill);
+      pill.querySelector(".gz-update-pill-refresh").addEventListener("click", function () {
+        location.reload();
+      });
+      function dismiss() {
+        try { document.body.removeChild(pill); } catch (e) {}
+        document.removeEventListener("keydown", onKey);
+      }
+      pill.querySelector(".gz-update-pill-close").addEventListener("click", dismiss);
+      function onKey(e) {
+        if (e.key === "Escape") dismiss();
+      }
+      document.addEventListener("keydown", onKey);
+    } catch (e) {}
+  }
+
   // ---- service worker registration ---------------------------------------
   // Register /sw.js for instant cold start + offline reads. Feature-checked and
   // skipped on /admin (Cloudflare Access pages must never be SW-controlled). Every
   // step is guarded so a stubbed window (SSR/tests) never throws.
+  //
+  // Update detection:
+  //   (a) controllerchange fires when a new SW takes control; we suppress it on
+  //       the very first claim (no previous controller) to avoid false positives.
+  //   (b) updatefound on the registration tracks the installing worker through to
+  //       "activated", covering the case where the page is open but not yet
+  //       controlled by any SW (e.g. hard-refresh after first visit).
+  // Proactive check: on visibilitychange to visible, call registration.update()
+  // throttled to at most once per 10 minutes so long-lived tabs catch deploys.
+  var gzSwReg = null;
+  var gzSwLastUpdateCheck = 0;
+  var GZ_UPDATE_THROTTLE_MS = 10 * 60 * 1000;
+
   function gzRegisterSW() {
     try {
       if (!("serviceWorker" in navigator)) return;
       if (!window.isSecureContext) return;
       if (String(location.pathname).indexOf("/admin") === 0) return;
-      navigator.serviceWorker.register("/sw.js?v=45").catch(function () {});
+      var sw = navigator.serviceWorker;
+      // Track whether there was already a controller when this page loaded.
+      // If yes, a later controllerchange means a NEW sw took over (deploy). If not,
+      // the first controllerchange is just the sw claiming a freshly-loaded tab.
+      var hadController = !!sw.controller;
+
+      sw.register("/sw.js?v=63").then(function (reg) {
+        gzSwReg = reg;
+
+        // (b) updatefound: a new SW is being installed. Wait for it to activate.
+        reg.addEventListener("updatefound", function () {
+          var installing = reg.installing;
+          if (!installing) return;
+          installing.addEventListener("statechange", function () {
+            if (installing.state === "activated") {
+              // Only show if we already had a controller (not the very first install).
+              if (hadController) gzShowUpdatePill();
+            }
+          });
+        });
+      }).catch(function () {});
+
+      // (a) controllerchange: a new SW has claimed all clients.
+      sw.addEventListener("controllerchange", function () {
+        if (!hadController) {
+          // First claim of a fresh session: update the flag and don't show the pill.
+          hadController = true;
+          return;
+        }
+        gzShowUpdatePill();
+      });
+
+      // Proactive update check on tab becoming visible (throttled).
+      document.addEventListener("visibilitychange", function () {
+        if (document.hidden) return;
+        var now = Date.now();
+        if (now - gzSwLastUpdateCheck < GZ_UPDATE_THROTTLE_MS) return;
+        gzSwLastUpdateCheck = now;
+        if (gzSwReg) gzSwReg.update().catch(function () {});
+      });
     } catch (e) {}
   }
 
