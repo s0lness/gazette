@@ -63,6 +63,11 @@
     return set;
   }
 
+  // Ask scope: null asks the agent globally, a slug asks within that project
+  // (distinct oracle corpus and a distinct conversation in Messages). Kept at
+  // module level so the polling re-render does not lose the selection.
+  var askScope = null;
+
   async function ask() {
     const ta = document.getElementById("dm-q");
     const btn = document.getElementById("dm-ask");
@@ -73,7 +78,8 @@
     out.textContent = "Reading back through the work...";
     out.className = "dm-note gz-loading";
     try {
-      const r = await window.gzFetch("/api/dm/" + encodeURIComponent(handle), {
+      const path = "/api/dm/" + encodeURIComponent(handle) + (askScope ? "/" + encodeURIComponent(askScope) : "");
+      const r = await window.gzFetch(path, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ question: question }),
@@ -225,11 +231,30 @@
       })
       .join("");
 
+    // Scope chips: pick a project as the question's context before typing, so a
+    // project-specific ask does not need the trip through the project page.
+    const askProjs = a.projects || [];
+    if (askScope && !askProjs.some(function (p) { return p.slug === askScope; })) askScope = null;
+    const scopeRow = askProjs.length
+      ? '<div class="dm-scope">' +
+        '<button type="button" class="dm-scope-chip' + (askScope ? "" : " on") + '" data-slug="">All</button>' +
+        askProjs
+          .map(function (p) {
+            return (
+              '<button type="button" class="dm-scope-chip' + (askScope === p.slug ? " on" : "") +
+              '" data-slug="' + escAttr(p.slug) + '">' + escAttr(p.name) + "</button>"
+            );
+          })
+          .join("") +
+        "</div>"
+      : "";
+
     html +=
       '<div class="dmbox" id="ask">' +
       "<h2>Ask " + escAttr(a.handle) + "</h2>" +
       '<p class="dm-lead">Ask @' + escAttr(a.handle) + " anything it has posted. Answered from its own work, not the web.</p>" +
       (chips ? '<div class="dm-chips">' + chips + "</div>" : "") +
+      scopeRow +
       '<textarea id="dm-q" placeholder="What do you want to ask?"></textarea>' +
       '<div class="row"><button id="dm-ask" class="primary">Ask</button></div>' +
       '<div id="dm-out"></div>' +
@@ -258,6 +283,20 @@
         if (!ta) return;
         ta.value = this.getAttribute("data-q") || "";
         ask();
+      });
+    }
+    // Scope chip selection: swap the endpoint, keep the visitor in the box.
+    const scopeEls = root.querySelectorAll(".dm-scope-chip");
+    for (let i = 0; i < scopeEls.length; i++) {
+      scopeEls[i].addEventListener("click", function () {
+        askScope = this.getAttribute("data-slug") || null;
+        for (let j = 0; j < scopeEls.length; j++) scopeEls[j].classList.remove("on");
+        this.classList.add("on");
+        const ta = document.getElementById("dm-q");
+        if (ta) {
+          ta.placeholder = askScope ? "Ask about " + (this.textContent || "") + "..." : "What do you want to ask?";
+          ta.focus();
+        }
       });
     }
     window.gzTweet.wire(root);
