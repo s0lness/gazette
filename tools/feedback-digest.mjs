@@ -10,7 +10,7 @@ import { spawnSync } from "node:child_process";
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126 Safari/537.36";
-const NPM = "C:\\Users\\sylve\\tools\\node\\npm.cmd";
+const NODE = "C:\\Users\\sylve\\tools\\node\\node.exe";
 const ANTENNE = "C:\\Users\\sylve\\projects\\antenne";
 
 const key = readFileSync(join(ROOT, "admin-key.local.txt"), "utf8").trim();
@@ -35,11 +35,12 @@ const lines = unread.map((f) => {
 const text =
   "gazette feedback (" + unread.length + " new)\n" + lines.join("\n") + "\n\ngazette.sylve.org/admin";
 
-const send = spawnSync(NPM, ["run", "send-self", "--", "--text", text], {
+// node.exe straight onto the tsx CLI: no npm, no .cmd shims (spawnSync without a
+// shell cannot run Windows .cmd files, and node is not on the system PATH).
+const send = spawnSync(NODE, ["node_modules/tsx/dist/cli.mjs", "src/send-self.ts", "--text", text], {
   cwd: ANTENNE,
   encoding: "utf8",
   timeout: 120000,
-  shell: false,
 });
 if (send.status !== 0) {
   console.log("feedback-digest: telegram send failed, keeping entries unread");
