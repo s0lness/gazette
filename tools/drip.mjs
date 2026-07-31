@@ -61,6 +61,7 @@ if (picks.length === 0) {
 
 for (const entry of picks) {
   const payload = { headline: entry.headline, body: entry.body, project: entry.project };
+  if (entry.image_id) payload.image_id = entry.image_id;
   if (entry.project_descriptor) payload.project_descriptor = entry.project_descriptor;
   if (entry.project_repo) payload.project_repo = entry.project_repo;
   if (entry.project_url) payload.project_url = entry.project_url;
