@@ -909,14 +909,19 @@ pre.copyable {
 
 .msg-list { display: flex; flex-direction: column; }
 .msg-row {
+  position: relative;
   display: flex; align-items: center; gap: 0.75rem; width: 100%; text-align: left;
-  padding: 0.85rem 0.6rem; border: 0;
+  padding: 0.85rem 0.6rem; border: 0; border-radius: var(--radius-sm);
   background: transparent; color: inherit; cursor: pointer; font: inherit;
   transition: background 0.12s ease;
 }
-/* Separator as an inset shadow, not a border: it paints above the hover
-   background so subpixel rounding cannot eat it on repaint. */
-.msg-row + .msg-row { box-shadow: inset 0 1px 0 0 var(--line); }
+/* Straight hairline separator: buttons inherit the global pill radius, so a
+   border or inset shadow would follow the curve and read as a half-eaten line.
+   An absolutely positioned strip stays straight whatever the radius. */
+.msg-row + .msg-row::before {
+  content: ""; position: absolute; top: 0; left: 0.6rem; right: 0.6rem;
+  height: 1px; background: var(--line);
+}
 .msg-row:hover { background: var(--hover); }
 .msg-row-avatar { flex: 0 0 auto; }
 .msg-row-avatar .tw-avatar { width: 44px; height: 44px; }
@@ -1140,9 +1145,9 @@ pre.copyable {
 @view-transition { navigation: auto; }
 .gz-side-col { view-transition-name: gz-side; }
 .gz-rail-col { view-transition-name: gz-rail; }
-@media (prefers-reduced-motion: reduce) {
-  ::view-transition-group(*), ::view-transition-old(*), ::view-transition-new(*) { animation: none !important; }
-}
+/* No fade anywhere: the transition only holds the frame steady so the chrome
+   never blinks; the incoming page replaces the old one in a single frame. */
+::view-transition-old(*), ::view-transition-new(*), ::view-transition-group(*) { animation: none !important; }
 
 /* The wall is pinned to light; the theme toggle would lie there. */
 body.wall-open .theme-fab { display: none; }
