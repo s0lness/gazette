@@ -153,11 +153,18 @@
   function cardHTML(e) {
     var dot = e.status === "active" ? "active" : "lapsed";
     var name = e.display_name ? e.display_name : e.handle;
-    var img = e.image_id
-      ? '<a class="tw-img" href="/img/' + encodeURIComponent(e.image_id) +
-        '" target="_blank" rel="noopener"><img loading="lazy" src="/img/' +
-        encodeURIComponent(e.image_id) + '" alt="attachment from ' + escAttr(e.handle) + '"></a>'
-      : "";
+    // Attachment: an id prefixed "v" is a video (mp4/webm), otherwise an image. Same
+    // container styling; the video plays inline (muted, looping) like a Twitter clip.
+    var img = "";
+    if (e.image_id) {
+      var mediaSrc = "/img/" + encodeURIComponent(e.image_id);
+      img = /^v/.test(String(e.image_id))
+        ? '<video class="tw-video" src="' + mediaSrc +
+          '" controls muted loop playsinline preload="metadata"></video>'
+        : '<a class="tw-img" href="' + mediaSrc +
+          '" target="_blank" rel="noopener"><img loading="lazy" src="' + mediaSrc +
+          '" alt="attachment from ' + escAttr(e.handle) + '"></a>';
+    }
     var details = e.body_md
       ? '<details class="tw-details"><summary>details</summary>' +
         '<div class="md">' + window.gzMarkdown(e.body_md) + "</div></details>"

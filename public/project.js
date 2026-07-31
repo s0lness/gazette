@@ -95,6 +95,54 @@
     return '<div class="proj-links">' + parts + "</div>";
   }
 
+  // Media strip: a horizontal, scrollable row of square thumbnails (newest first,
+  // max 12) drawn from the project's dailies that carry an attachment. Images render
+  // as <img>; videos as a muted, controls-free <video> with a play-glyph overlay. A
+  // thumbnail carries data-key of its post so a click can scroll to that card and
+  // flash it. Empty (no attachments) -> "" so the header stays clean.
+  function mediaStripHTML(a) {
+    var dailies = a.dailies || [];
+    var withMedia = [];
+    for (var i = 0; i < dailies.length && withMedia.length < 12; i++) {
+      if (dailies[i] && dailies[i].image_id) withMedia.push(dailies[i]);
+    }
+    if (withMedia.length === 0) return "";
+    var tiles = withMedia
+      .map(function (d) {
+        var src = "/img/" + encodeURIComponent(d.image_id);
+        var key = a.owner.handle + "|" + d.date;
+        var inner = /^v/.test(String(d.image_id))
+          ? '<video class="proj-media-vid" src="' + src +
+            '" muted playsinline preload="metadata"></video>' +
+            '<span class="proj-media-play" aria-hidden="true"></span>'
+          : '<img class="proj-media-img" loading="lazy" src="' + src +
+            '" alt="attachment from @' + escAttr(a.owner.handle) + '">';
+        return (
+          '<button type="button" class="proj-media-tile" data-key="' + escAttr(key) +
+          '" aria-label="Jump to this post">' + inner + "</button>"
+        );
+      })
+      .join("");
+    return '<div class="proj-media">' + tiles + "</div>";
+  }
+
+  // Click on a media thumbnail: scroll its post card into view and briefly flash it
+  // with the same entry highlight new posts get (gz-new).
+  function jumpToPost(key) {
+    if (!root || !key) return;
+    var card = root.querySelector('.tweet[data-key="' + (window.CSS && CSS.escape ? CSS.escape(key) : key) + '"]');
+    if (!card) return;
+    try {
+      card.scrollIntoView({ behavior: window.gzReduceMotion() ? "auto" : "smooth", block: "center" });
+    } catch (e) {
+      card.scrollIntoView();
+    }
+    card.classList.remove("gz-new");
+    // Reflow so re-adding the class restarts the animation.
+    void card.offsetWidth;
+    card.classList.add("gz-new");
+  }
+
   function postsListHTML(a) {
     var dailies = a.dailies || [];
     if (dailies.length === 0) {
@@ -194,7 +242,8 @@
       "</p>" +
       linksRow(p) +
       statsRow(a) +
-      "</div>";
+      "</div>" +
+      mediaStripHTML(a);
 
     // Ask box, scoped to this project: two curated suggested-question chips that fire
     // on click, a textarea, an Ask button, and an output area. Same behavior as the
@@ -237,6 +286,13 @@
       });
     }
     window.gzTweet.wire(root);
+    // Media strip: clicking a thumbnail jumps to its post card and flashes it.
+    var tiles = root.querySelectorAll(".proj-media-tile");
+    for (let i = 0; i < tiles.length; i++) {
+      tiles[i].addEventListener("click", function () {
+        jumpToPost(this.getAttribute("data-key"));
+      });
+    }
     if (!first) markNew(prevKeys);
     if (window.gzSaved) window.gzSaved.ready().then(function () { window.gzSaved.mark(root); });
   }

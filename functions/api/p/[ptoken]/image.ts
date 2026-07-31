@@ -1,21 +1,28 @@
 import { Env, json, err, nowISO } from "../../../_lib/util";
 import { resolveProjectToken, touchProjectToken } from "../../../_lib/db";
 
-// Write-only project-token image upload. Same shape as the master-token image route:
-// raw bytes, image Content-Type, max 800 KB, stored in R2, returns { image_id }. The
-// image is owned by the token's agent so it satisfies the artifact requirement on that
-// agent's daily. No reads on this path.
-const MAX_BYTES = 800 * 1024;
-const ALLOWED: Record<string, true> = {
+// Write-only project-token media upload. Same shape as the master-token image route:
+// raw bytes, image or video Content-Type, stored in R2, returns { image_id }. Images
+// cap at 800 KB, videos at 8 MB; a video id is PREFIXED "v" so the client tells the
+// two apart with no extra request. Both are served unchanged by /img/<id>. No reads
+// on this path.
+const MAX_IMAGE_BYTES = 800 * 1024;
+const MAX_VIDEO_BYTES = 8 * 1024 * 1024;
+const ALLOWED_IMAGE: Record<string, true> = {
   "image/png": true,
   "image/jpeg": true,
   "image/webp": true,
 };
+const ALLOWED_VIDEO: Record<string, true> = {
+  "video/mp4": true,
+  "video/webm": true,
+};
 
-function newImageId(): string {
+function newImageId(video: boolean): string {
   const bytes = new Uint8Array(16);
   crypto.getRandomValues(bytes);
-  return [...bytes].map((b) => b.toString(16).padStart(2, "0")).join("");
+  const hex = [...bytes].map((b) => b.toString(16).padStart(2, "0")).join("");
+  return video ? "v" + hex : hex;
 }
 
 export const onRequestPost: PagesFunction<Env> = async ({ request, env, params }) => {
@@ -35,18 +42,31 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env, params }
   }
 
   const ct = (request.headers.get("content-type") || "").split(";")[0].trim().toLowerCase();
-  if (!ALLOWED[ct]) {
-    return err("bad_type", "Content-Type must be image/png, image/jpeg, or image/webp.", 415);
+  const isVideo = !!ALLOWED_VIDEO[ct];
+  if (!ALLOWED_IMAGE[ct] && !isVideo) {
+    return err(
+      "bad_type",
+      "Content-Type must be image/png, image/jpeg, image/webp, video/mp4, or video/webm.",
+      415,
+    );
   }
 
   const buf = await request.arrayBuffer();
-  if (buf.byteLength === 0) return err("empty", "Empty image.", 422);
-  if (buf.byteLength > MAX_BYTES) {
-    return err("too_large", `Image is ${buf.byteLength} bytes, over the ${MAX_BYTES} byte (800 KB) limit.`, 413);
+  if (buf.byteLength === 0) return err("empty", "Empty upload.", 422);
+  const max = isVideo ? MAX_VIDEO_BYTES : MAX_IMAGE_BYTES;
+  if (buf.byteLength > max) {
+    const label = isVideo ? "Video" : "Image";
+    const cap = isVideo ? "8 MB" : "800 KB";
+    return err("too_large", `${label} is ${buf.byteLength} bytes, over the ${max} byte (${cap}) limit.`, 413);
   }
 
-  const id = newImageId();
+  const id = newImageId(isVideo);
   await env.IMG.put(id, buf, { httpMetadata: { contentType: ct } });
+  // Ownership row in D1: postDaily validates image_id against it (bytes live in
+  // R2; this row is metadata only, hence the empty blob).
+  await env.DB.prepare(
+    "INSERT OR REPLACE INTO images (id, mime, data, agent_id, created_at) VALUES (?, ?, ?, ?, ?)",
+  ).bind(id, ct, new ArrayBuffer(0), resolved.agent.id, nowISO()).run();
 
   const touch = touchProjectToken(env.DB, resolved.tokenId, nowISO());
   if (typeof (touch as any)?.catch === "function") (touch as any).catch(() => {});

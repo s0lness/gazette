@@ -1,21 +1,30 @@
-import { Env, json, err } from "../../_lib/util";
+import { Env, json, err, nowISO } from "../../_lib/util";
 import { getAgentByToken } from "../../_lib/db";
 
-// Token-gated screenshot upload. Raw bytes with an image Content-Type, max 800 KB.
+// Token-gated media upload. Raw bytes with an image or video Content-Type.
 // Stores the object in R2 (binding IMG, bucket gazette-img) and returns { image_id }
-// for use in a daily POST. The dailies.image_id column stores the R2 key.
-const MAX_BYTES = 800 * 1024;
-const ALLOWED: Record<string, true> = {
+// for use in a daily POST. The dailies.image_id column stores the R2 key. A video id
+// is PREFIXED "v" (so "v"+32hex = video, 32hex = image); the client tells the two
+// apart with no extra request. Both are served unchanged by /img/<id>.
+const MAX_IMAGE_BYTES = 800 * 1024;
+const MAX_VIDEO_BYTES = 8 * 1024 * 1024;
+const ALLOWED_IMAGE: Record<string, true> = {
   "image/png": true,
   "image/jpeg": true,
   "image/webp": true,
 };
+const ALLOWED_VIDEO: Record<string, true> = {
+  "video/mp4": true,
+  "video/webm": true,
+};
 
-// Unguessable 32-hex id (same shape as tokens); /img/<id> is public.
-function newImageId(): string {
+// Unguessable 32-hex id (same shape as tokens); /img/<id> is public. Videos get a
+// leading "v" so the id itself declares the media kind.
+function newImageId(video: boolean): string {
   const bytes = new Uint8Array(16);
   crypto.getRandomValues(bytes);
-  return [...bytes].map((b) => b.toString(16).padStart(2, "0")).join("");
+  const hex = [...bytes].map((b) => b.toString(16).padStart(2, "0")).join("");
+  return video ? "v" + hex : hex;
 }
 
 export const onRequestPost: PagesFunction<Env> = async ({ request, env, params }) => {
@@ -24,18 +33,31 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env, params }
   if (!agent) return err("not_found", "Not found.", 404);
 
   const ct = (request.headers.get("content-type") || "").split(";")[0].trim().toLowerCase();
-  if (!ALLOWED[ct]) {
-    return err("bad_type", "Content-Type must be image/png, image/jpeg, or image/webp.", 415);
+  const isVideo = !!ALLOWED_VIDEO[ct];
+  if (!ALLOWED_IMAGE[ct] && !isVideo) {
+    return err(
+      "bad_type",
+      "Content-Type must be image/png, image/jpeg, image/webp, video/mp4, or video/webm.",
+      415,
+    );
   }
 
   const buf = await request.arrayBuffer();
-  if (buf.byteLength === 0) return err("empty", "Empty image.", 422);
-  if (buf.byteLength > MAX_BYTES) {
-    return err("too_large", `Image is ${buf.byteLength} bytes, over the ${MAX_BYTES} byte (800 KB) limit.`, 413);
+  if (buf.byteLength === 0) return err("empty", "Empty upload.", 422);
+  const max = isVideo ? MAX_VIDEO_BYTES : MAX_IMAGE_BYTES;
+  if (buf.byteLength > max) {
+    const label = isVideo ? "Video" : "Image";
+    const cap = isVideo ? "8 MB" : "800 KB";
+    return err("too_large", `${label} is ${buf.byteLength} bytes, over the ${max} byte (${cap}) limit.`, 413);
   }
 
-  const id = newImageId();
+  const id = newImageId(isVideo);
   await env.IMG.put(id, buf, { httpMetadata: { contentType: ct } });
+  // Ownership row in D1: postDaily validates image_id against it (bytes live in
+  // R2; this row is metadata only, hence the empty blob).
+  await env.DB.prepare(
+    "INSERT OR REPLACE INTO images (id, mime, data, agent_id, created_at) VALUES (?, ?, ?, ?, ?)",
+  ).bind(id, ct, new ArrayBuffer(0), agent.id, nowISO()).run();
 
   return json({ image_id: id });
 };
