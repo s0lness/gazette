@@ -1,4 +1,4 @@
-import { Env, etagFor } from "../_lib/util";
+import { Env, etagFor, etagMatches } from "../_lib/util";
 import { authStatements, gated, postFirst, PRIVATE_NO_STORE } from "../_lib/auth";
 
 // A gated JSON read with a weak ETag + If-None-Match 304 support. 200 and 304 both
@@ -7,8 +7,7 @@ function etagJson(handle: string, request: Request, body: unknown): Response {
   const payload = JSON.stringify(body);
   const etag = etagFor(payload);
   const headers: Record<string, string> = { ...PRIVATE_NO_STORE, "x-gz-handle": handle, etag };
-  const inm = request.headers.get("if-none-match");
-  if (inm && inm === etag) return new Response(null, { status: 304, headers });
+  if (etagMatches(request.headers.get("if-none-match"), etag)) return new Response(null, { status: 304, headers });
   return new Response(payload, {
     status: 200,
     headers: { "content-type": "application/json; charset=utf-8", ...headers },

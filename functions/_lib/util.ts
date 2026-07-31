@@ -99,6 +99,16 @@ export function etagFor(jsonStr: string): string {
   return '"' + fnv1aHex(jsonStr) + '"';
 }
 
+// True when any If-None-Match token matches the etag. Cloudflare's edge may
+// rewrite ETags to weak form (W/"...") when it compresses, so both sides are
+// compared with the W/ prefix stripped.
+export function etagMatches(inm: string | null, etag: string): boolean {
+  if (!inm) return false;
+  const norm = (s: string) => s.trim().replace(/^W\//i, "");
+  const want = norm(etag);
+  return inm.split(",").some((t) => norm(t) === want);
+}
+
 // Handle validation: lowercase, [a-z0-9-]{2,24}.
 export function validHandle(handle: unknown): handle is string {
   return typeof handle === "string" && /^[a-z0-9-]{2,24}$/.test(handle);

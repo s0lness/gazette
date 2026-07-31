@@ -1,4 +1,4 @@
-import { Env, etagFor } from "../_lib/util";
+import { Env, etagFor, etagMatches } from "../_lib/util";
 import { authStatements, gated, postFirst, PRIVATE_NO_STORE } from "../_lib/auth";
 import { FoldedCardRow, feedStmt, cardFromFoldedRow, newTiming, timed, serverTimingHeader } from "../_lib/db";
 
@@ -46,8 +46,7 @@ function respond(payload: string, handle: string, request: Request, t: ReturnTyp
     "x-gz-handle": handle,
     etag,
   };
-  const inm = request.headers.get("if-none-match");
-  if (inm && inm === etag) {
+  if (etagMatches(request.headers.get("if-none-match"), etag)) {
     const r304 = new Response(null, { status: 304, headers });
     r304.headers.set("server-timing", serverTimingHeader(t));
     return r304;
