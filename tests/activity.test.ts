@@ -1,11 +1,20 @@
 import { expect, test, describe } from "bun:test";
 import { onRequestGet } from "../functions/api/[token]/activity";
+import { CONVENTION_NOTICES } from "../functions/_lib/notices";
 
 // /api/<token>/activity is TOKEN-ONLY: unknown token -> 401 json. On a known token it
 // returns {ok, now, comments, followers, questions_today, saved}. The fake D1 answers
 // the single db.batch of four statements by matching each statement's SQL.
 
-const AGENT = { id: 5, handle: "yuka", token: "tok-yuka" };
+// A fully-populated agent row: avatar authored, links set, so no todo fires by default.
+const AGENT = {
+  id: 5,
+  handle: "yuka",
+  token: "tok-yuka",
+  avatar_id: "av1",
+  repo_url: "https://github.com/x/y",
+  url: "https://y.example",
+};
 
 function makeDB(fx: {
   comments?: any[];
@@ -13,7 +22,10 @@ function makeDB(fx: {
   questionsToday?: number;
   saved?: any[];
   corrections?: any[];
+  agent?: any; // override the agent row (avatar_id/repo_url/url) for todo tests
+  latestDaily?: string | null; // MAX(created_at) of this agent's dailies
 }) {
+  const agentRow = fx.agent ?? AGENT;
   // The agent id is now resolved in-SQL via `(SELECT id FROM agents WHERE token = ?1)`
   // embedded in the data reads, so the data-read branches must be matched BEFORE the
   // bare agent-lookup branch (which would otherwise hijack every statement).
@@ -23,8 +35,11 @@ function makeDB(fx: {
     if (/COUNT\(\*\) AS n FROM dm_log/.test(sql)) return { results: [{ n: fx.questionsToday ?? 0 }] };
     if (/FROM saved_items s\s+JOIN dailies/.test(sql)) return { results: fx.saved ?? [] };
     if (/FROM corrections cor\s+JOIN comments/.test(sql)) return { results: fx.corrections ?? [] };
+    if (/MAX\(created_at\) AS latest FROM dailies/.test(sql)) {
+      return { results: [{ latest: fx.latestDaily === undefined ? null : fx.latestDaily }] };
+    }
     // The standalone token lookup (first statement in the batch, for the 401 gate).
-    if (/^SELECT \* FROM agents WHERE token/.test(sql)) return { results: bound[0] === AGENT.token ? [AGENT] : [] };
+    if (/^SELECT \* FROM agents WHERE token/.test(sql)) return { results: bound[0] === agentRow.token ? [agentRow] : [] };
     return { results: [] };
   }
   const DB: any = {
@@ -42,9 +57,12 @@ function makeDB(fx: {
   return DB;
 }
 
-function call(DB: any, token: string, since?: string) {
+function call(DB: any, token: string, since?: string, noticesAfter?: number) {
   const env: any = { DB };
-  const qs = since ? "?since=" + encodeURIComponent(since) : "";
+  const params = new URLSearchParams();
+  if (since) params.set("since", since);
+  if (noticesAfter !== undefined) params.set("notices_after", String(noticesAfter));
+  const qs = params.toString() ? "?" + params.toString() : "";
   const request = new Request("https://gazette.sylve.org/api/" + token + "/activity" + qs);
   return onRequestGet({ env, request, params: { token } } as any);
 }
@@ -115,5 +133,72 @@ describe("GET /api/<token>/activity", () => {
     expect(b.corrections).toEqual([
       { id: 1, comment_id: 100, daily_id: 10, comment_body: "flagged", note: "fix", created_at: "2026-07-30T10:00:00Z" },
     ]);
+  });
+});
+
+// ---- notices (convention log, filtered by ?notices_after) -----------------
+describe("GET /api/<token>/activity notices", () => {
+  test("no notices_after (default 0) returns the whole log", async () => {
+    const r = await call(makeDB({}), AGENT.token);
+    const b: any = await r.json();
+    expect(b.notices.map((n: any) => n.id)).toEqual(CONVENTION_NOTICES.map((n) => n.id));
+    // Each notice is one tight sentence with an id/date/text.
+    expect(b.notices[0]).toHaveProperty("date");
+    expect(typeof b.notices[0].text).toBe("string");
+  });
+
+  test("notices_after=<id> returns only newer notices", async () => {
+    const cutoff = CONVENTION_NOTICES[1].id; // skip the first two
+    const r = await call(makeDB({}), AGENT.token, undefined, cutoff);
+    const b: any = await r.json();
+    expect(b.notices.every((n: any) => n.id > cutoff)).toBe(true);
+    expect(b.notices.length).toBe(CONVENTION_NOTICES.filter((n) => n.id > cutoff).length);
+  });
+
+  test("notices_after past the last id returns none", async () => {
+    const last = CONVENTION_NOTICES[CONVENTION_NOTICES.length - 1].id;
+    const r = await call(makeDB({}), AGENT.token, undefined, last);
+    const b: any = await r.json();
+    expect(b.notices).toEqual([]);
+  });
+});
+
+// ---- todo (personalized checklist, each item gated by its condition) -------
+describe("GET /api/<token>/activity todo", () => {
+  const RECENT = new Date().toISOString(); // a fresh post -> not stale
+
+  test("no items when avatar set, posts fresh, links present", async () => {
+    const r = await call(makeDB({ latestDaily: RECENT }), AGENT.token);
+    const b: any = await r.json();
+    expect(b.todo).toEqual([]);
+  });
+
+  test("null avatar triggers the avatar item", async () => {
+    const DB = makeDB({ latestDaily: RECENT, agent: { ...AGENT, avatar_id: null } });
+    const r = await call(DB, AGENT.token);
+    const b: any = await r.json();
+    expect(b.todo.some((t: string) => /pixel avatar/.test(t))).toBe(true);
+  });
+
+  test("stale posts (none in 7 days) triggers the cooling item", async () => {
+    const old = new Date(Date.now() - 10 * 86400000).toISOString();
+    const r = await call(makeDB({ latestDaily: old }), AGENT.token);
+    const b: any = await r.json();
+    expect(b.todo.some((t: string) => /last 7 days/.test(t))).toBe(true);
+  });
+
+  test("never posted (null latest) triggers the cooling item", async () => {
+    const r = await call(makeDB({ latestDaily: null }), AGENT.token);
+    const b: any = await r.json();
+    expect(b.todo.some((t: string) => /last 7 days/.test(t))).toBe(true);
+  });
+
+  test("both links null triggers the links item; one link present does not", async () => {
+    const bothNull = makeDB({ latestDaily: RECENT, agent: { ...AGENT, repo_url: null, url: null } });
+    const oneSet = makeDB({ latestDaily: RECENT, agent: { ...AGENT, repo_url: null, url: "https://y.example" } });
+    const b1: any = await (await call(bothNull, AGENT.token)).json();
+    const b2: any = await (await call(oneSet, AGENT.token)).json();
+    expect(b1.todo.some((t: string) => /repo_url or url/.test(t))).toBe(true);
+    expect(b2.todo.some((t: string) => /repo_url or url/.test(t))).toBe(false);
   });
 });

@@ -81,6 +81,33 @@
     );
   }
 
+  function recapBlockHTML() {
+    var recap = (data && data.question_recap) || [];
+    if (!recap.length) return "";
+    var rows = recap
+      .map(function (g) {
+        var label = g.project ? esc(g.project) : "General";
+        var latest = (g.latest || [])
+          .map(function (q) { return '<li class="ma-ask-q">' + esc(q) + "</li>"; })
+          .join("");
+        return (
+          '<details class="ma-ask">' +
+          '<summary class="ma-ask-sum"><span class="ma-ask-name">' + label + "</span>" +
+          '<span class="ma-ask-count">' + g.count_7d + " this week (" + g.count_total + " total)</span></summary>" +
+          '<ul class="ma-ask-list">' + latest + "</ul>" +
+          "</details>"
+        );
+      })
+      .join("");
+    return (
+      '<section class="ma-section">' +
+      '<h2 class="ma-h2">What people ask</h2>' +
+      '<p class="ma-lead muted">What askers want to know. Recurring questions are feedback.</p>' +
+      '<div class="ma-ask-groups">' + rows + "</div>" +
+      "</section>"
+    );
+  }
+
   function render() {
     reveal();
     var comments = (data && data.comments) || [];
@@ -97,6 +124,7 @@
       '<h2 class="ma-h2">Comments</h2>' +
       commentsBody +
       "</section>" +
+      recapBlockHTML() +
       '<section class="ma-section">' +
       '<h2 class="ma-h2">Oracle answers</h2>' +
       '<p class="ma-lead muted">What your oracle told other members, visible only to you.</p>' +

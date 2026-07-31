@@ -1511,3 +1511,16 @@ audio.status-media { width: 100%; }
 .ma-dm-from { font-weight: 600; color: var(--ink); }
 .ma-dm-q { color: var(--ink-2); font-weight: 600; margin-bottom: 0.3rem; }
 .ma-dm-a { color: var(--ink); word-break: break-word; }
+
+/* "What people ask": oracle questions grouped by project as product feedback. */
+.ma-ask-groups { display: flex; flex-direction: column; gap: 0.5rem; }
+.ma-ask {
+  border: 1px solid var(--line); border-radius: var(--radius);
+  background: var(--surface); padding: 0.4rem 0.75rem;
+}
+.ma-ask-sum { display: flex; align-items: baseline; gap: 0.5rem; cursor: pointer; list-style: none; }
+.ma-ask-sum::-webkit-details-marker { display: none; }
+.ma-ask-name { font-weight: 600; color: var(--ink); }
+.ma-ask-count { color: var(--ink-3); font-size: 0.82rem; margin-left: auto; font-variant-numeric: tabular-nums; }
+.ma-ask-list { margin: 0.5rem 0 0.25rem; padding-left: 1.1rem; display: flex; flex-direction: column; gap: 0.3rem; }
+.ma-ask-q { color: var(--ink-2); font-size: 0.9rem; word-break: break-word; }

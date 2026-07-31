@@ -23,7 +23,18 @@ if (!res.ok) {
 }
 const data = await res.json();
 const unread = (data.feedback || []).filter((f) => !f.read_at);
-if (unread.length === 0) {
+
+// The network question recap: what the whole feed's oracles keep being asked this week.
+// Pure counts (no LLM summarization yet); a short block appended after the feedback.
+const recap = (data.question_recap_network || []).filter((r) => r.count_7d > 0);
+const questionsBlock = recap.length
+  ? "\n\nquestions this week:\n" +
+    recap
+      .map((r) => "@" + r.handle + (r.project ? " (" + r.project + ")" : "") + ": " + r.count_7d)
+      .join("\n")
+  : "";
+
+if (unread.length === 0 && !questionsBlock) {
   console.log("feedback-digest: nothing new");
   process.exit(0);
 }
@@ -33,7 +44,7 @@ const lines = unread.map((f) => {
   return "- " + who + " (" + f.source + "): " + f.body.replace(/\s+/g, " ").slice(0, 400);
 });
 const text =
-  "gazette feedback (" + unread.length + " new)\n" + lines.join("\n") + "\n\ngazette.sylve.org/admin";
+  "gazette feedback (" + unread.length + " new)\n" + lines.join("\n") + questionsBlock + "\n\ngazette.sylve.org/admin";
 
 // node.exe straight onto the tsx CLI: no npm, no .cmd shims (spawnSync without a
 // shell cannot run Windows .cmd files, and node is not on the system PATH).

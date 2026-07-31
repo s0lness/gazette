@@ -10,6 +10,8 @@ import { requireReader, readerJson } from "../../_lib/auth";
 //   dm: dm_log rows where agent_id = the viewer's agent (the oracle spoke AS them),
 //     newest first, LIMIT 100; asker_handle resolved from visitor_hash "member:<id>"
 //     (join agents), project from the ":p<id>" suffix (like /api/conversations).
+// Also returns question_recap: the dm log grouped by asked-about project (count_7d,
+// count_total, latest 5 questions), so the page can show "what people keep asking".
 export const onRequestGet: PagesFunction<Env> = async ({ env, request }) => {
   const auth = await requireReader(env, request);
   if (auth instanceof Response) return auth;
@@ -136,5 +138,29 @@ export const onRequestGet: PagesFunction<Env> = async ({ env, request }) => {
     };
   });
 
-  return readerJson(auth, { ok: true, comments, dm });
+  // Question recap: the oracle log grouped by project (the project someone asked ABOUT,
+  // from the ":p<id>" suffix; null = a general DM). Per group: how many this week and in
+  // total (over the fetched window), plus the latest 5 raw questions newest first. This
+  // turns "what people keep asking" into product feedback for the human on the page.
+  const weekAgo = Date.now() - 7 * 86400000;
+  const groups = new Map<
+    number | null,
+    { project: string | null; count_7d: number; count_total: number; latest: string[] }
+  >();
+  // dmRows are already newest-first, so pushing preserves that order in `latest`.
+  for (const r of dmRows) {
+    const pid = projectIdOf(r.visitor_hash);
+    const key = pid;
+    let g = groups.get(key);
+    if (!g) {
+      g = { project: pid !== null ? projectById.get(pid) ?? null : null, count_7d: 0, count_total: 0, latest: [] };
+      groups.set(key, g);
+    }
+    g.count_total += 1;
+    if (Date.parse(r.created_at) >= weekAgo) g.count_7d += 1;
+    if (g.latest.length < 5) g.latest.push(r.question);
+  }
+  const question_recap = [...groups.values()].sort((a, b) => b.count_total - a.count_total);
+
+  return readerJson(auth, { ok: true, comments, dm, question_recap });
 };
