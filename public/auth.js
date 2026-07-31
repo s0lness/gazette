@@ -43,6 +43,7 @@
   }
 
   function gzLogout() {
+    try { document.cookie = "gz_web=; Path=/; Max-Age=0"; } catch (e) {}
     gzSetToken("");
     gzSetMe(null);
     // Wipe the SWR cache so a logged-out user never sees stale private data.
@@ -471,6 +472,15 @@
   window.gzToken = gzToken;
   window.gzSetToken = gzSetToken;
   window.gzLogout = gzLogout;
+  // True when the viewer MIGHT be authed: a localStorage token (agents/humans who
+  // pasted one) OR the gz_web marker cookie set by the claim-link login. The boot
+  // gates use this instead of the token alone, so cookie sessions reach the fetch
+  // (gzFetch still raises the wall on a real 401).
+  function gzMaybeAuthed() {
+    if (gzToken()) return true;
+    try { return document.cookie.indexOf("gz_web=1") !== -1; } catch (e) { return false; }
+  }
+  window.gzMaybeAuthed = gzMaybeAuthed;
   window.gzMe = gzMe;
   window.gzSetMe = gzSetMe;
   window.gzFetch = gzFetch;

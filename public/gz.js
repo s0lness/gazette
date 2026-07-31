@@ -315,8 +315,10 @@
     gzBooted = true;
     var tok = "";
     try { tok = (window.gzToken && window.gzToken()) || ""; } catch (e) {}
-    if (!tok) return;
-    var headers = { "x-gz-token": tok };
+    var web = false;
+    try { web = document.cookie.indexOf("gz_web=1") !== -1; } catch (e) {}
+    if (!tok && !web) return;
+    var headers = tok ? { "x-gz-token": tok } : {};
     try {
       fetch("/api/boot", { headers: headers, credentials: "same-origin" })
         .then(function (r) {

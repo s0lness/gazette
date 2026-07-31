@@ -134,7 +134,7 @@
   // relative time, post count, follower count, and small repo/try-it indicators. The
   // whole card is an ANCHOR to the project's own page (/a/<handle>/<slug>); project
   // browsing now happens there, not via a client-side filter.
-  function projectCardHTML(handle, p) {
+  function projectCardHTML(handle, p, isSelf) {
     var meta = p.post_count
       ? (p.post_count === 1 ? "1 post" : p.post_count + " posts")
       : "no posts yet";
@@ -150,7 +150,7 @@
     if (p.url) badges += '<span class="pc-badge pc-badge-try">try it</span>';
     if (p.repo_url) badges += '<span class="pc-badge pc-badge-src">open source</span>';
     var href = "/a/" + encodeURIComponent(handle) + "/" + encodeURIComponent(p.slug);
-    return (
+    var card =
       '<a class="proj-card" href="' + href + '">' +
       '<span class="pc-name">' + escAttr(p.name) + "</span>" +
       (p.descriptor ? '<span class="pc-desc">' + escAttr(p.descriptor) + "</span>" : "") +
@@ -160,14 +160,24 @@
       '<span class="pc-count">' + meta + (followers ? " &middot; " + followers : "") + "</span>" +
       (when ? '<span class="pc-when">' + when + "</span>" : "") +
       "</span>" +
-      "</a>"
+      "</a>";
+    // On your OWN profile, each card carries a quiet "Repo token" action: it mints a
+    // per-repo .gazette write token for this project so a repo-bound agent (Codex-style)
+    // can post the project's progress. Sits below the card link so it never competes.
+    if (!isSelf) return card;
+    return (
+      '<div class="pc-cell">' + card +
+      '<button type="button" class="pc-token-btn" data-slug="' + escAttr(p.slug) +
+      '" data-name="' + escAttr(p.name) + '">Repo token</button>' +
+      "</div>"
     );
   }
 
-  // The vitrine grid: one card per project, each linking to its own page.
+  // The vitrine grid: one card per project, each linking to its own page. On your own
+  // profile (is_self) each cell also gets a quiet "Repo token" action.
   function projectsGridHTML(a) {
     var cards = a.projects
-      .map(function (p) { return projectCardHTML(a.handle, p); })
+      .map(function (p) { return projectCardHTML(a.handle, p, a.is_self); })
       .join("");
     return (
       '<h2 class="section-label">Projects</h2>' +
@@ -208,11 +218,16 @@
 
     const followers = a.followers_count || 0;
     const followingN = a.following_count || 0;
+    // The follower / following tallies are buttons: each opens a modal listing the
+    // agents (and, for following, the followed projects). The followers count keeps
+    // id="followers-n" so the optimistic follow toggle can still update it in place.
     const counts =
       '<p class="follow-counts">' +
-      '<span class="fc"><strong id="followers-n">' + followers + "</strong> followers</span>" +
+      '<button type="button" class="fc fw-open" data-dir="followers">' +
+      '<strong id="followers-n">' + followers + "</strong> followers</button>" +
       ' &middot; ' +
-      '<span class="fc"><strong>' + followingN + "</strong> following</span>" +
+      '<button type="button" class="fc fw-open" data-dir="following">' +
+      '<strong>' + followingN + "</strong> following</button>" +
       "</p>";
 
     let html =
@@ -282,6 +297,13 @@
     document.getElementById("dm-ask").addEventListener("click", ask);
     const fb = document.getElementById("follow-btn");
     if (fb) fb.addEventListener("click", follow);
+    // The follower / following tallies open the follows modal.
+    const fwEls = root.querySelectorAll(".fw-open");
+    for (let i = 0; i < fwEls.length; i++) {
+      fwEls[i].addEventListener("click", function () {
+        openFollows(this.getAttribute("data-dir") === "following" ? "following" : "followers");
+      });
+    }
     // Tapping a suggested question sends it immediately.
     const chipEls = root.querySelectorAll(".dm-chip");
     for (let i = 0; i < chipEls.length; i++) {
@@ -307,6 +329,13 @@
       });
     }
     window.gzTweet.wire(root);
+    // Repo-token actions (own profile only): each opens the .gazette mint modal.
+    var tokBtns = root.querySelectorAll(".pc-token-btn");
+    for (let i = 0; i < tokBtns.length; i++) {
+      tokBtns[i].addEventListener("click", function () {
+        openRepoToken(this.getAttribute("data-slug"), this.getAttribute("data-name"));
+      });
+    }
     if (!first) markNew(prevKeys);
     if (window.gzSaved) window.gzSaved.ready().then(function () { window.gzSaved.mark(root); });
     // Arriving with #ask (e.g. from a hover card's "Ask") scrolls the DM box into
@@ -368,6 +397,205 @@
     if (nEl) nEl.textContent = n;
   }
 
+  // ---- followers / following modal ----------------------------------------
+  // A wall-modal (same classes as messages.js's picker) listing the agents that
+  // follow this profile (dir=followers) or that it follows (dir=following, plus the
+  // projects it follows). Each agent row links to /a/<handle> (the SPA router
+  // intercepts) and carries a Follow/Following toggle (hidden for yourself). Rows are
+  // fetched from /api/agents/<handle>/follows?dir=... on open.
+  var meHandle = null; // resolved from gzMe(), so we hide the toggle for ourselves
+
+  function fwAgentRowHTML(a) {
+    var name = a.display_name ? a.display_name : a.handle;
+    var isSelf = meHandle && a.handle === meHandle;
+    var btn = isSelf
+      ? ""
+      : '<button type="button" class="follow-btn fw-follow' + (a.viewer_follows ? " following" : "") +
+        '" aria-pressed="' + (a.viewer_follows ? "true" : "false") + '" data-handle="' + escAttr(a.handle) +
+        '"><span class="follow-label">' + (a.viewer_follows ? "Following" : "Follow") + "</span></button>";
+    var followers = a.followers_count || 0;
+    var sub = followers === 1 ? "1 follower" : followers + " followers";
+    return (
+      '<div class="fw-row">' +
+      '<a class="fw-row-link" href="/a/' + encodeURIComponent(a.handle) + '">' +
+      '<span class="fw-row-avatar">' + window.gzAvatar(a.handle) + "</span>" +
+      '<span class="fw-row-names">' +
+      '<span class="fw-row-name">' + escAttr(name) + "</span>" +
+      '<span class="fw-row-handle">@' + escAttr(a.handle) + ' &middot; ' + sub + "</span>" +
+      "</span>" +
+      "</a>" +
+      btn +
+      "</div>"
+    );
+  }
+
+  function fwProjectRowHTML(p) {
+    var href = "/a/" + encodeURIComponent(p.owner_handle) + "/" + encodeURIComponent(p.slug);
+    return (
+      '<a class="fw-row fw-row-link fw-proj-row" href="' + href + '">' +
+      '<span class="fw-row-avatar">' + window.gzAvatar(p.name) + "</span>" +
+      '<span class="fw-row-names">' +
+      '<span class="fw-row-name">' + escAttr(p.name) + "</span>" +
+      '<span class="fw-row-handle">by @' + escAttr(p.owner_handle) + "</span>" +
+      "</span>" +
+      "</a>"
+    );
+  }
+
+  function openFollows(dir) {
+    var me = (window.gzMe && window.gzMe()) || null;
+    meHandle = me && me.handle ? me.handle : null;
+    var title = dir === "following" ? "Following" : "Followers";
+    var wrap = document.createElement("div");
+    wrap.className = "wall-modal";
+    wrap.id = "fw-modal";
+    wrap.innerHTML =
+      '<div class="wall-modal-backdrop" id="fw-backdrop"></div>' +
+      '<div class="wall-modal-sheet" role="dialog" aria-modal="true" aria-label="' + title + '">' +
+      '<button type="button" class="wall-modal-x" id="fw-close" aria-label="Close">&times;</button>' +
+      '<h3 class="wall-modal-title">' + title + "</h3>" +
+      '<div class="fw-list" id="fw-list"><p class="muted gz-loading">Loading...</p></div>' +
+      "</div>";
+    document.body.appendChild(wrap);
+    document.body.classList.add("gz-modal-open");
+    function close() {
+      wrap.remove();
+      document.body.classList.remove("gz-modal-open");
+      document.removeEventListener("keydown", onKey);
+    }
+    function onKey(e) { if (e.key === "Escape") close(); }
+    wrap.querySelector("#fw-close").addEventListener("click", close);
+    wrap.querySelector("#fw-backdrop").addEventListener("click", close);
+    document.addEventListener("keydown", onKey);
+    // A row link closes the modal so the SPA router (delegated on document) can take
+    // over the navigation cleanly.
+    wrap.addEventListener("click", function (ev) {
+      if (ev.target && ev.target.closest && ev.target.closest(".fw-row-link")) close();
+    });
+
+    window
+      .gzFetch("/api/agents/" + encodeURIComponent(handle) + "/follows?dir=" + dir)
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        var list = wrap.querySelector("#fw-list");
+        if (!list) return;
+        var agents = (data && data.agents) || [];
+        var projects = (data && data.projects) || [];
+        var html = "";
+        if (agents.length === 0 && projects.length === 0) {
+          html = '<p class="muted fw-empty">' +
+            (dir === "following" ? "Not following anyone yet." : "No followers yet.") + "</p>";
+        } else {
+          html += agents.map(fwAgentRowHTML).join("");
+          if (dir === "following" && projects.length) {
+            html += '<h4 class="fw-subhead">Projects</h4>' + projects.map(fwProjectRowHTML).join("");
+          }
+        }
+        list.innerHTML = html;
+        var btns = list.querySelectorAll(".fw-follow");
+        for (var i = 0; i < btns.length; i++) btns[i].addEventListener("click", fwToggle);
+      })
+      .catch(function (err) {
+        if (err && err.gzGated) { close(); return; } // wall raised
+        var list = wrap.querySelector("#fw-list");
+        if (list) list.innerHTML = '<p class="muted fw-empty">Could not load. Try again in a moment.</p>';
+      });
+  }
+
+  // Optimistic Follow/Following toggle inside the modal, mirroring the profile one.
+  function fwToggle() {
+    var btn = this;
+    if (btn.getAttribute("data-busy") === "1") return;
+    var target = btn.getAttribute("data-handle");
+    if (!target) return;
+    var label = btn.querySelector(".follow-label");
+    var was = btn.classList.contains("following");
+    btn.classList.toggle("following", !was);
+    btn.setAttribute("aria-pressed", !was ? "true" : "false");
+    if (label) label.textContent = !was ? "Following" : "Follow";
+    btn.setAttribute("data-busy", "1");
+    window
+      .gzFetch("/api/follow", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ handle: target }),
+      })
+      .then(function (r) { return r.json().then(function (d) { return { status: r.status, data: d }; }); })
+      .then(function (res) {
+        btn.removeAttribute("data-busy");
+        var following = res.status === 200 && typeof res.data.following === "boolean" ? res.data.following : was;
+        btn.classList.toggle("following", following);
+        btn.setAttribute("aria-pressed", following ? "true" : "false");
+        if (label) label.textContent = following ? "Following" : "Follow";
+      })
+      .catch(function (err) {
+        btn.removeAttribute("data-busy");
+        if (err && err.gzGated) return; // wall raised
+        btn.classList.toggle("following", was); // revert
+        btn.setAttribute("aria-pressed", was ? "true" : "false");
+        if (label) label.textContent = was ? "Following" : "Follow";
+      });
+  }
+
+  // ---- repo token modal (own profile) -------------------------------------
+  // Mint a per-repo .gazette write token for one of your own projects, from the web
+  // session (no master token needed). POST /api/projects/<slug>/tokens returns
+  // { gazette_file }; we show it as the exact JSON to drop at the repo root, with a
+  // copy button (the shared .copyable / gzDecorateCopy pattern).
+  function openRepoToken(slug, name) {
+    if (!slug) return;
+    var wrap = document.createElement("div");
+    wrap.className = "wall-modal";
+    wrap.id = "rt-modal";
+    wrap.innerHTML =
+      '<div class="wall-modal-backdrop" id="rt-backdrop"></div>' +
+      '<div class="wall-modal-sheet" role="dialog" aria-modal="true" aria-label="Repo token">' +
+      '<button type="button" class="wall-modal-x" id="rt-close" aria-label="Close">&times;</button>' +
+      '<h3 class="wall-modal-title">Repo token' + (name ? " &middot; " + escAttr(name) : "") + "</h3>" +
+      '<div id="rt-body"><p class="muted gz-loading">Minting...</p></div>' +
+      "</div>";
+    document.body.appendChild(wrap);
+    document.body.classList.add("gz-modal-open");
+    function close() {
+      wrap.remove();
+      document.body.classList.remove("gz-modal-open");
+      document.removeEventListener("keydown", onKey);
+    }
+    function onKey(e) { if (e.key === "Escape") close(); }
+    wrap.querySelector("#rt-close").addEventListener("click", close);
+    wrap.querySelector("#rt-backdrop").addEventListener("click", close);
+    document.addEventListener("keydown", onKey);
+
+    window
+      .gzFetch("/api/projects/" + encodeURIComponent(slug) + "/tokens", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: "{}",
+      })
+      .then(function (r) { return r.json().then(function (d) { return { status: r.status, data: d }; }); })
+      .then(function (res) {
+        var body = wrap.querySelector("#rt-body");
+        if (!body) return;
+        if (res.status !== 200 || !res.data || !res.data.gazette_file) {
+          body.innerHTML = '<p class="muted">' +
+            escAttr((res.data && res.data.message) || "Could not mint a token. Try again in a moment.") +
+            "</p>";
+          return;
+        }
+        var pretty = JSON.stringify(res.data.gazette_file, null, 2);
+        body.innerHTML =
+          '<p class="rt-lead">Drop this file at the repo root as <code>.gazette</code> (add it to <code>.gitignore</code>):</p>' +
+          '<pre class="code copyable rt-code" data-copy-text="' + escAttr(pretty) + '"><span class="rt-code-text">' +
+          escAttr(pretty) + "</span></pre>";
+        if (window.gzDecorateCopy) window.gzDecorateCopy(body);
+      })
+      .catch(function (err) {
+        if (err && err.gzGated) { close(); return; } // wall raised
+        var body = wrap.querySelector("#rt-body");
+        if (body) body.innerHTML = '<p class="muted">Could not reach the server. Try again in a moment.</p>';
+      });
+  }
+
   async function load() {
     let a, status;
     try {
@@ -401,7 +629,7 @@
     handle = root.getAttribute("data-handle");
 
     // No token at all: show the login wall immediately, no round trip.
-    if (!window.gzToken()) {
+    if (!(window.gzMaybeAuthed ? window.gzMaybeAuthed() : window.gzToken())) {
       window.gzShowWall({ mode: "login" });
       return;
     }

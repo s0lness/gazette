@@ -287,7 +287,7 @@
   // the live poll. Returns nothing; unmount() tears it all down.
   function boot() {
     // No token at all: show the login wall immediately, no network round trip.
-    if (!window.gzToken()) {
+    if (!(window.gzMaybeAuthed ? window.gzMaybeAuthed() : window.gzToken())) {
       window.gzShowWall({ mode: "login" });
       return;
     }

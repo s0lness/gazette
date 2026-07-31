@@ -310,7 +310,7 @@
     if (document.body.getAttribute("data-gz-nav") === "1") return;
     var me = (window.gzMe && window.gzMe()) || null;
     var handle = me && me.handle;
-    var authed = window.gzToken && window.gzToken() && handle;
+    var authed = (window.gzMaybeAuthed ? window.gzMaybeAuthed() : (window.gzToken && window.gzToken())) && handle;
     if (!authed) return; // logged out: no sidebar, the wall stays full-width
     var main = document.querySelector("main.page");
     if (!main) return;

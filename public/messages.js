@@ -469,7 +469,7 @@
   function boot() {
     view = document.getElementById("messages-view");
     // No token at all: show the login wall immediately, no round trip.
-    if (!window.gzToken()) {
+    if (!(window.gzMaybeAuthed ? window.gzMaybeAuthed() : window.gzToken())) {
       window.gzShowWall({ mode: "login" });
       return;
     }

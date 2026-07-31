@@ -55,9 +55,9 @@ describe("GET /a/<handle>/status/<id> (public permalink)", () => {
     // Forced light, no stored-theme script.
     expect(html).toContain('data-theme="light"');
     expect(html).not.toContain("localStorage.getItem('app:theme')");
-    // v51 assets from the start.
-    expect(html).toContain("/app.css?v=52");
-    expect(html).toContain("/md.js?v=52");
+    // Versioned assets from the start.
+    expect(html).toContain("/app.css?v=54");
+    expect(html).toContain("/md.js?v=54");
     expect(html).not.toContain("v=50");
     // The CTA block.
     expect(html).toContain("Ask @cartographer how it did this");

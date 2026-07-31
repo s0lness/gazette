@@ -773,9 +773,32 @@ body.wall-open main.page { max-width: 70rem; }
 /* Compact follow button in the rail. */
 .gz-sug-follow { flex: 0 0 auto; padding: 0.45rem 1rem; font-size: 0.8rem; min-height: 38px; }
 
-/* "N followers . M following" under the header. */
+/* "N followers . M following" under the header. The tallies are buttons that open
+   the follows modal; they read as plain text until hovered. */
 .follow-counts { color: var(--ink-3); font-size: 0.86rem; margin: 0.3rem 0 0.2rem; font-variant-numeric: tabular-nums; }
 .follow-counts strong { font-weight: 700; color: var(--ink); }
+.follow-counts .fw-open {
+  border: 0; background: transparent; padding: 0; margin: 0; font: inherit; cursor: pointer;
+  color: inherit; border-radius: var(--radius-sm); transition: color 0.12s ease;
+}
+.follow-counts .fw-open:hover { color: var(--accent); }
+.follow-counts .fw-open:hover strong { color: var(--accent); }
+
+/* ---- Followers / following modal (reuses .wall-modal from auth.js) --------- */
+.fw-list { display: flex; flex-direction: column; max-height: 60vh; overflow-y: auto; margin-top: 0.5rem; }
+.fw-row { display: flex; align-items: center; gap: 0.65rem; padding: 0.5rem 0.2rem; }
+.fw-row-link { display: flex; align-items: center; gap: 0.65rem; flex: 1 1 auto; min-width: 0; color: inherit; }
+.fw-row-link:hover .fw-row-name { color: var(--accent); }
+.fw-row-avatar .tw-avatar { width: 38px; height: 38px; }
+.fw-row-names { display: flex; flex-direction: column; min-width: 0; line-height: 1.25; }
+.fw-row-name { font-size: 0.92rem; font-weight: 700; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fw-row-handle { font-size: 0.8rem; color: var(--ink-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fw-row .follow-btn { align-self: center; min-height: 34px; padding: 0.4rem 0.9rem; font-size: 0.8rem; }
+.fw-subhead {
+  font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em;
+  color: var(--muted); font-weight: 700; margin: 0.9rem 0 0.3rem;
+}
+.fw-empty { margin: 0.75rem 0; }
 
 /* ---- Profile vitrine: the projects grid ----------------------------------
    Shown only when the agent owns >= 1 project. Each project is a clean surface
@@ -823,6 +846,26 @@ body.wall-open main.page { max-width: 70rem; }
   font-size: 0.78rem; color: var(--ink-3); font-variant-numeric: tabular-nums;
 }
 .pc-when { margin-left: auto; }
+
+/* Own-profile cell: the card plus a quiet "Repo token" action below it. The cell is a
+   flex column so the card still stretches to fill the grid row height. */
+.pc-cell { display: flex; flex-direction: column; gap: 0.3rem; }
+.pc-cell .proj-card { flex: 1 1 auto; }
+.pc-token-btn {
+  align-self: flex-end; border: 0; background: transparent; padding: 0.1rem 0.2rem;
+  font: inherit; font-size: 0.76rem; color: var(--ink-3); cursor: pointer;
+  border-radius: var(--radius-sm); transition: color 0.12s ease;
+}
+.pc-token-btn:hover { color: var(--accent); }
+
+/* ---- Repo token modal (reuses .wall-modal + .copyable/.gz-copy) ----------- */
+.rt-lead { margin: 0.4rem 0 0.7rem; font-size: 0.88rem; line-height: 1.45; color: var(--text-2); }
+.rt-lead code {
+  font-size: 0.85em; padding: 0.05rem 0.3rem; border-radius: var(--radius-sm);
+  background: var(--hover); color: var(--ink);
+}
+pre.rt-code { font-size: 0.82rem; margin: 0; white-space: pre; overflow-x: auto; }
+.rt-code-text { display: block; }
 
 /* ---- Project PAGE (distinct from the agent vitrine) ----------------------
    /a/<handle>/<slug>. A larger project name, its descriptor, "by @owner", the

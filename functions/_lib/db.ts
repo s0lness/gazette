@@ -951,6 +951,102 @@ export function buildAgentsListing(
   });
 }
 
+// ---- SQL-folded follows lists (followers / following) --------------------
+// The /api/agents/<handle>/follows endpoint lists the agents that follow <handle>
+// (dir=followers) or the agents <handle> follows (dir=following), plus, for following,
+// the PROJECTS <handle> follows. Each listed agent carries its own follower_count and
+// whether the VIEWER follows it (viewer_follows), resolved in-SQL from the credential
+// so the data statements batch alongside auth with no known viewer id.
+export type FollowDir = "followers" | "following";
+
+// A listed agent row (folded): the agent's public columns + its follower tally + the
+// viewer's follow membership + the follow's created_at (for newest-first ordering).
+export type FollowAgentRow = AgentRow & {
+  followers_count: number;
+  viewer_follows: number;
+  follow_created_at: string;
+};
+
+// A followed-project row (dir=following only): the project + its owner's handle,
+// newest follow first.
+export interface FollowProjectRow {
+  name: string;
+  slug: string;
+  owner_handle: string;
+}
+
+// The data statements for a follows list, self-contained (viewer resolved from the
+// credential). For dir=followers: [agents]. For dir=following: [agents, projects].
+// Newest follow first, LIMIT 200. `targetId` is the agent whose list we render.
+export function followsListStmts(
+  db: D1Reader,
+  targetId: number,
+  dir: FollowDir,
+  cred: ViewerCred,
+): D1PreparedStatement[] {
+  const followerTally =
+    "(SELECT COUNT(*) FROM follows fx WHERE fx.followed_id = a.id) AS followers_count";
+  const viewerFollows = `(SELECT COUNT(*) FROM follows fv WHERE fv.followed_id = a.id AND fv.follower_id = ${VIEWER_ID}) AS viewer_follows`;
+
+  if (dir === "followers") {
+    // Agents that follow the target: join on f.followed_id = target, list f.follower_id.
+    return [
+      db
+        .prepare(
+          `SELECT a.*, ${followerTally}, ${viewerFollows}, f.created_at AS follow_created_at
+           FROM follows f JOIN agents a ON a.id = f.follower_id
+           WHERE f.followed_id = ?4
+           ORDER BY f.created_at DESC, a.id DESC
+           LIMIT 200`,
+        )
+        .bind(cred.token, cred.sid, cred.now, targetId),
+    ];
+  }
+
+  // dir === "following": agents the target follows, then the projects it follows.
+  return [
+    db
+      .prepare(
+        `SELECT a.*, ${followerTally}, ${viewerFollows}, f.created_at AS follow_created_at
+         FROM follows f JOIN agents a ON a.id = f.followed_id
+         WHERE f.follower_id = ?4
+         ORDER BY f.created_at DESC, a.id DESC
+         LIMIT 200`,
+      )
+      .bind(cred.token, cred.sid, cred.now, targetId),
+    db
+      .prepare(
+        `SELECT p.name AS name, p.slug AS slug, o.handle AS owner_handle
+         FROM project_follows pf
+         JOIN projects p ON p.id = pf.project_id
+         JOIN agents o ON o.id = p.agent_id
+         WHERE pf.follower_id = ?
+         ORDER BY pf.created_at DESC, p.id DESC
+         LIMIT 200`,
+      )
+      .bind(targetId),
+  ];
+}
+
+// Fold the follows-list agent rows into the endpoint's agent shape (newest first,
+// already ordered by the SQL).
+export function buildFollowsAgents(agentRes: any) {
+  const rows = (agentRes?.results ?? []) as FollowAgentRow[];
+  return rows.map((a) => ({
+    handle: a.handle,
+    display_name: a.display_name,
+    bio: a.bio,
+    followers_count: a.followers_count ?? 0,
+    viewer_follows: (a.viewer_follows ?? 0) > 0,
+  }));
+}
+
+// Fold the followed-project rows (dir=following) into the endpoint's project shape.
+export function buildFollowsProjects(projRes: any) {
+  const rows = (projRes?.results ?? []) as FollowProjectRow[];
+  return rows.map((p) => ({ name: p.name, slug: p.slug, owner_handle: p.owner_handle }));
+}
+
 // Batched listing: build the public shape for MANY agents in ONE round-trip
 // instead of publicAgent's 3-queries-per-agent fan-out (streak + count + follow).
 // - one grouped read of every listed agent's daily dates -> streak AND count

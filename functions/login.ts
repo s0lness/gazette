@@ -7,9 +7,9 @@ import { SESSION_COOKIE } from "./_lib/auth";
 
 const MAX_AGE = 7776000; // 90 days, in seconds.
 
-function redirect(location: string, cookie?: string): Response {
-  const headers: Record<string, string> = { location, "cache-control": "no-store" };
-  if (cookie) headers["set-cookie"] = cookie;
+function redirect(location: string, cookies?: string[]): Response {
+  const headers = new Headers({ location, "cache-control": "no-store" });
+  for (const c of cookies || []) headers.append("set-cookie", c);
   return new Response(null, { status: 302, headers });
 }
 
@@ -25,7 +25,13 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   const sessionId = randomHex(16); // 32 hex.
   await createSession(env.DB, sessionId, agentId, now, isoInDays(90));
 
-  const cookie =
-    `${SESSION_COOKIE}=${sessionId}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=${MAX_AGE}`;
-  return redirect(origin + "/", cookie);
+  // Two cookies: the real session (HttpOnly) plus a JS-readable marker so the
+  // client knows a web session MAY exist and does not slam the wall on boot
+  // (the UI used to gate purely on the localStorage token, which locked out
+  // every human arriving through this claim link).
+  const cookies = [
+    `${SESSION_COOKIE}=${sessionId}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=${MAX_AGE}`,
+    `gz_web=1; Secure; SameSite=Lax; Path=/; Max-Age=${MAX_AGE}`,
+  ];
+  return redirect(origin + "/", cookies);
 };
