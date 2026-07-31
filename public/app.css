@@ -805,31 +805,62 @@ body.wall-open main.page { max-width: 70rem; }
 .tw-demo-label { color: var(--ink-2, var(--ink)); }
 .tw-demo-frame { display: block; width: 100%; height: 100%; border: 0; }
 
-/* Action row: like heart + count, reply count, copy-link. Pill hover states. */
-.tw-actions { display: flex; align-items: center; gap: 0.4rem; margin: 0.2rem 0 0; color: var(--ink-3); }
+/* Action row: four consistent icons (reply + count, like + count, bookmark,
+   share), left-grouped and evenly spaced like an X action row. Pill hover states. */
+.tw-actions { display: flex; align-items: center; gap: 0.35rem; margin: 0.2rem 0 0; color: var(--ink-3); }
 .tw-like-btn, .tw-comment-btn, .tw-share-btn, .tw-bookmark-btn {
-  display: inline-flex; align-items: center; gap: 0.4rem;
-  padding: 0.45rem 0.7rem; border: 0; border-radius: var(--radius-pill); background: transparent;
+  display: inline-flex; align-items: center; gap: 0.35rem;
+  padding: 0.45rem 0.6rem; border: 0; border-radius: var(--radius-pill); background: transparent;
   color: inherit; cursor: pointer;
   font: inherit; font-size: 0.83rem; font-weight: 600; line-height: 1; min-height: 40px;
   transition: color 0.12s ease, background 0.12s ease;
 }
 .tw-comment-btn:hover, .tw-share-btn:hover { color: var(--accent); background: var(--accent-soft); }
 
+/* All four glyphs: same 18px box, same muted stroke, consistent joins. */
+.tw-comment, .tw-share, .tw-check, .tw-bookmark, .tw-heart {
+  display: block; width: 18px; height: 18px; fill: none; stroke: currentColor;
+  stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round;
+}
+
 /* Bookmark: outline by default, fills with the ink accent when saved. */
-.tw-bookmark { display: block; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .tw-bookmark-btn:hover { color: var(--accent); background: var(--accent-soft); }
 .tw-bookmark-btn.saved { color: var(--accent); }
 .tw-bookmark-btn.saved .tw-bookmark { fill: var(--accent); stroke: var(--accent); }
-.tw-share-btn { margin-left: auto; }
-.tw-share-btn.copied { color: var(--accent); }
+.tw-share-btn.copied { color: var(--positive, var(--accent)); }
 .tw-reply-label, .tw-like-count { font-variant-numeric: tabular-nums; }
 
 /* The like heart: outline by default, fills with the WARM like red when liked. */
-.tw-heart { display: block; fill: none; stroke: currentColor; stroke-width: 1.8; }
 .tw-like-btn:hover { color: var(--like); background: color-mix(in srgb, var(--like) 12%, transparent); }
 .tw-like-btn.liked { color: var(--like); }
 .tw-like-btn.liked .tw-heart { fill: var(--like); stroke: var(--like); }
+
+/* "Being discussed" strip: a compact, lighter-than-a-card list of the posts with the
+   most recent reply activity, surfaced once at the top of the Home feed. */
+.gz-discuss { margin-top: 1rem; }
+.gz-discuss-title {
+  margin: 0 0 0.5rem; font-size: 0.78rem; font-weight: 700; letter-spacing: 0.04em;
+  text-transform: uppercase; color: var(--ink-3);
+}
+.gz-discuss-list {
+  display: flex; flex-direction: column;
+  border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface);
+  overflow: hidden;
+}
+.gz-discuss-row {
+  display: flex; align-items: center; gap: 0.7rem; min-width: 0;
+  padding: 0.7rem 0.9rem; text-decoration: none; color: inherit;
+  border-top: 1px solid var(--line); transition: background 0.12s ease;
+}
+.gz-discuss-row:first-child { border-top: 0; }
+.gz-discuss-row:hover { background: var(--hover); }
+.gz-discuss-avatar { width: 30px; height: 30px; flex: 0 0 auto; }
+.gz-discuss-main { display: flex; flex-direction: column; gap: 0.15rem; min-width: 0; }
+.gz-discuss-headline {
+  font-size: 0.9rem; font-weight: 600; color: var(--ink);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.gz-discuss-meta { font-size: 0.78rem; color: var(--ink-3); }
 
 /* Profile header: larger avatar next to the name + tagline, follow button trailing. */
 .profile-head { display: flex; align-items: center; gap: 0.9rem; margin-bottom: 0.2rem; }
@@ -1364,8 +1395,8 @@ pre.copyable {
   .tw-like-btn, .tw-comment-btn, .tw-share-btn, .tw-bookmark-btn {
     min-height: 44px; padding-top: 0; padding-bottom: 0;
   }
-  .tw-like-btn, .tw-bookmark-btn { min-width: 44px; justify-content: center; }
-  .tw-comment-btn, .tw-share-btn { min-height: 44px; }
+  .tw-bookmark-btn, .tw-share-btn { min-width: 44px; justify-content: center; }
+  .tw-like-btn, .tw-comment-btn { min-height: 44px; }
 
   /* Chat fills the viewport below the top bar so the composer hugs the keyboard.
      The page's own bottom padding is dropped here so the composer reaches the edge. */

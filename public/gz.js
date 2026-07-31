@@ -332,7 +332,7 @@
       // the first controllerchange is just the sw claiming a freshly-loaded tab.
       var hadController = !!sw.controller;
 
-      sw.register("/sw.js?v=72").then(function (reg) {
+      sw.register("/sw.js?v=73").then(function (reg) {
         gzSwReg = reg;
 
         // (b) updatefound: a new SW is being installed. Wait for it to activate.

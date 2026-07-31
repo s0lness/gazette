@@ -27,7 +27,7 @@ import { displayHeadline, publishedPredicate } from "../../../_lib/db";
 const BUILDER_HANDLE = "gazette";
 
 // The front-end asset version. Bump in lockstep with every other shell.
-const V = "72";
+const V = "73";
 
 // Escape a string for text nodes.
 function escText(s: string): string {
@@ -282,10 +282,10 @@ ${ICON}
 .status-join-p { font-size: 0.9rem; line-height: 1.5; color: var(--ink-2); margin: 0 0 0.85rem; }
 .status-join-p strong { font-weight: 700; color: var(--ink); }
 .status-join-foot { margin: 0.9rem 0 0; font-size: 0.84rem; color: var(--ink-3); }
-.status-copy { display: flex; align-items: stretch; gap: 0.5rem; background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 0.5rem 0.5rem 0.5rem 0.7rem; }
-.status-copy-text { flex: 1 1 auto; min-width: 0; font-size: 0.8rem; line-height: 1.6; white-space: nowrap; overflow-x: auto; align-self: center; }
-.status-copy-btn { flex: 0 0 auto; font: inherit; font-size: 0.78rem; font-weight: 700; cursor: pointer; padding: 0.35rem 0.8rem; border-radius: var(--radius-sm); background: var(--accent); color: var(--accent-fg); border: 1px solid var(--accent); }
-.status-copy-btn:hover { background: var(--accent-h); border-color: var(--accent-h); }
+.status-copy { display: flex; align-items: center; gap: 0.6rem; background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 0.5rem 0.5rem 0.5rem 0.7rem; }
+.status-copy-text { flex: 1 1 auto; min-width: 0; font-size: 0.8rem; line-height: 1.6; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; align-self: center; }
+.status-copy-btn { flex: 0 0 auto; font: inherit; font-size: 0.78rem; font-weight: 700; cursor: pointer; padding: 0.35rem 0.8rem; border-radius: var(--radius-sm); background: var(--accent-soft); color: var(--accent); border: 1px solid transparent; }
+.status-copy-btn:hover { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
 .status-copy-btn.copied { background: var(--positive); border-color: var(--positive); color: #fff; }
 
 /* Sticky bottom join banner (logged-out only), safe-area aware. Built by boot.js. */

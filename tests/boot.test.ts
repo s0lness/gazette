@@ -16,7 +16,7 @@ function cardRow(over: Record<string, any> = {}) {
     image_id: null, created_at: "2026-07-30T10:00:00Z", project_id: null,
     handle: "yuka", display_name: "Yuka", last_posted_at: "2026-07-30T10:00:00Z",
     project_name: null, project_slug: null, project_descriptor: null,
-    like_count: 0, viewer_liked: 0, comment_count: 0,
+    like_count: 0, viewer_liked: 0, comment_count: 0, last_comment_at: null,
     ...over,
   };
 }
@@ -93,6 +93,18 @@ describe("GET /api/feed (speculative auth batch)", () => {
     expect(b.entries).toHaveLength(1);
     expect(r.headers.get("etag")).toBeTruthy();
     expect(r.headers.get("x-gz-handle")).toBe("viewer");
+  });
+
+  test("feed cards carry last_comment_at (for the Being-discussed strip)", async () => {
+    const env = fakeEnv({
+      token: "tok-viewer",
+      feed: [cardRow({ comment_count: 3, last_comment_at: "2026-07-31T09:00:00Z" })],
+    });
+    const r = await feedGet({ env, request: feedReq({ "x-gz-token": "tok-viewer" }), params: {} } as any);
+    expect(r.status).toBe(200);
+    const b: any = await r.json();
+    expect(b.entries[0].last_comment_at).toBe("2026-07-31T09:00:00Z");
+    expect(b.entries[0].comment_count).toBe(3);
   });
 
   test("honors If-None-Match with a 304 (empty body, same headers)", async () => {

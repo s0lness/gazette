@@ -3,8 +3,9 @@
 // header (display_name + muted @handle + middot + ticking relative time + a
 // small status dot), the headline as a link to the post's public permalink (the
 // full body lives there, one click away, NOT on the card), an optional image, a
-// slim action row (a single like heart + count, reply count, copy-link), and the
-// reply thread + box. Likes and comments are optimistic and reconcile on the next poll.
+// slim action row (four consistent icons: reply + count, like heart + count,
+// bookmark, share-link), and the reply thread + box. Likes and comments are
+// optimistic and reconcile on the next poll.
 //
 // Exposes: window.gzTweet.cardHTML(e), window.gzTweet.wire(container),
 // window.gzAvatar(handle), window.gzBuilderHandle, and helpers.
@@ -109,6 +110,26 @@
     '<path d="M6 3.5h12a1 1 0 0 1 1 1V21l-7-4-7 4V4.5a1 1 0 0 1 1-1z"/>' +
     "</svg>";
 
+  // Inline comment/speech-bubble glyph (matches nav.js's rounded-rect + tail style).
+  var COMMENT_SVG =
+    '<svg class="tw-comment" viewBox="0 0 24 24" width="17" height="17" aria-hidden="true">' +
+    '<path d="M4 5.5h16a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H9l-4 3.5V16.5H4a1 1 0 0 1-1-1v-9a1 1 0 0 1 1-1z"/>' +
+    "</svg>";
+
+  // Inline share/link glyph (two linked chain rings, drawn from scratch).
+  var SHARE_SVG =
+    '<svg class="tw-share" viewBox="0 0 24 24" width="17" height="17" aria-hidden="true">' +
+    '<path d="M9.5 14.5l5-5"/>' +
+    '<path d="M8 11l-2 2a3.2 3.2 0 0 0 4.5 4.5l2-2"/>' +
+    '<path d="M16 13l2-2a3.2 3.2 0 0 0-4.5-4.5l-2 2"/>' +
+    "</svg>";
+
+  // Inline check glyph shown briefly after a successful copy.
+  var CHECK_SVG =
+    '<svg class="tw-check" viewBox="0 0 24 24" width="17" height="17" aria-hidden="true">' +
+    '<path d="M5 12.5l4.5 4.5L19 7"/>' +
+    "</svg>";
+
   // Shared saved-ids set, lazily fetched once and reused across feed/profile.
   // window.gzSaved.has(id) / .ready() lets card renderers mark bookmarks on load.
   var savedIds = null; // Set of daily ids once loaded, null until first fetch
@@ -147,11 +168,11 @@
     }
   }
 
-  // The slim action row: a like (heart + count), a reply affordance (comment count,
-  // toggles the thread), and a quiet copy-link action.
+  // The slim action row: four consistent icon actions, left-grouped and evenly
+  // spaced (reply icon + count, like heart + count, bookmark, share). Counts sit
+  // right of their icon; a 0 count renders empty so a fresh card is icon-only.
   function actionsHTML(e) {
     var cc = e.comment_count || 0;
-    var label = cc ? (cc === 1 ? "1 reply" : cc + " replies") : "reply";
     var likes = e.likes || 0;
     var liked = !!e.liked;
     // Bookmark reflects the shared saved-set (or a saved flag on the entry, e.g. the
@@ -159,14 +180,15 @@
     var saved = e.saved != null ? !!e.saved : gzSavedHas(e.id);
     return (
       '<div class="tw-actions">' +
+      '<button type="button" class="tw-comment-btn" title="reply" aria-label="reply">' +
+      COMMENT_SVG +
+      '<span class="tw-reply-label">' + (cc ? cc : "") + "</span>" +
+      "</button>" +
       '<button type="button" class="tw-like-btn' + (liked ? " liked" : "") +
       '" aria-pressed="' + (liked ? "true" : "false") +
       '" title="like" aria-label="like">' +
       HEART_SVG +
       '<span class="tw-like-count">' + (likes ? likes : "") + "</span>" +
-      "</button>" +
-      '<button type="button" class="tw-comment-btn">' +
-      '<span class="tw-reply-label">' + escText(label) + "</span>" +
       "</button>" +
       '<button type="button" class="tw-bookmark-btn' + (saved ? " saved" : "") +
       '" aria-pressed="' + (saved ? "true" : "false") +
@@ -175,7 +197,9 @@
       "</button>" +
       '<button type="button" class="tw-share-btn" data-handle="' + escAttr(e.handle) +
       '" data-id="' + escAttr(e.id) +
-      '" data-label="copy link">copy link</button>' +
+      '" title="Copy link" aria-label="Copy link">' +
+      SHARE_SVG +
+      "</button>" +
       "</div>"
     );
   }
@@ -331,14 +355,14 @@
     return el && el.classList && el.classList.contains("tweet") ? el : null;
   }
 
-  // Update the reply-action label to reflect the current comment count.
+  // Update the reply-action count to reflect the current comment count. The count
+  // sits next to the comment icon; 0 renders empty so the button is icon-only.
   function bumpReplyLabel(card, delta) {
     var label = card.querySelector(".tw-comment-btn .tw-reply-label");
     if (!label) return;
-    var cur = /^(\d+)/.exec(label.textContent || "");
-    var n = cur ? parseInt(cur[1], 10) : 0;
-    n = Math.max(0, n + delta);
-    label.textContent = n ? (n === 1 ? "1 reply" : n + " replies") : "reply";
+    var cur = parseInt((label.textContent || "0").replace(/[^0-9]/g, ""), 10) || 0;
+    var n = Math.max(0, cur + delta);
+    label.textContent = n ? n : "";
   }
 
   // Optimistic like toggle. Flips the button + count immediately, POSTs, and
@@ -580,11 +604,17 @@
     var url = id
       ? location.origin + "/a/" + encodeURIComponent(handle) + "/status/" + encodeURIComponent(id) + "?ref=share"
       : location.origin + "/a/" + encodeURIComponent(handle);
-    var prev = btn.getAttribute("data-label") || "copy link";
+    // Swap the share glyph for a brief check + "Copied" tooltip, then revert.
     var done = function () {
-      btn.textContent = "copied";
+      if (btn.getAttribute("data-copied") === "1") return;
+      btn.setAttribute("data-copied", "1");
+      btn.innerHTML = CHECK_SVG;
       btn.classList.add("copied");
-      setTimeout(function () { btn.textContent = prev; btn.classList.remove("copied"); }, 1500);
+      setTimeout(function () {
+        btn.innerHTML = SHARE_SVG;
+        btn.classList.remove("copied");
+        btn.removeAttribute("data-copied");
+      }, 1500);
     };
     try {
       if (navigator.clipboard && navigator.clipboard.writeText) {

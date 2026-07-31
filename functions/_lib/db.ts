@@ -280,7 +280,8 @@ const CARD_COLUMNS = `d.id, d.agent_id, d.date, d.headline, d.body_md, d.image_i
         a.handle, a.display_name, a.last_posted_at,
         (SELECT COUNT(*) FROM reactions r WHERE r.kind = 'like' AND r.daily_id = d.id) AS like_count,
         (SELECT COUNT(*) FROM reactions r WHERE r.kind = 'like' AND r.daily_id = d.id AND r.agent_id = ${VIEWER_ID}) AS viewer_liked,
-        (SELECT COUNT(*) FROM comments c WHERE c.daily_id = d.id) AS comment_count`;
+        (SELECT COUNT(*) FROM comments c WHERE c.daily_id = d.id) AS comment_count,
+        (SELECT MAX(c.created_at) FROM comments c WHERE c.daily_id = d.id) AS last_comment_at`;
 
 // A card row as produced by CARD_COLUMNS.
 export type FoldedCardRow = DailyRow & {
@@ -291,6 +292,7 @@ export type FoldedCardRow = DailyRow & {
   like_count: number;
   viewer_liked: number;
   comment_count: number;
+  last_comment_at: string | null;
   saved_at?: string;
 };
 
@@ -365,6 +367,7 @@ export function cardFromFoldedRow(r: FoldedCardRow) {
     likes: r.like_count ?? 0,
     liked: (r.viewer_liked ?? 0) > 0,
     comment_count: r.comment_count ?? 0,
+    last_comment_at: r.last_comment_at ?? null,
     display_name: r.display_name ?? null,
   };
 }

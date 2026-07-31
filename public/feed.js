@@ -13,6 +13,65 @@
   function escAttr(s) {
     return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
   }
+  function escText(s) {
+    return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  }
+
+  // ---- "Being discussed" strip --------------------------------------------
+  // A compact list of the posts with the most RECENT reply activity, shown once at
+  // the top of the Home feed (the "all" tab only). Selection: comment_count >= 1 AND
+  // last_comment_at within the last 48h; top 3, newest activity first, tiebreak by
+  // comment_count. Renders nothing when none qualify. Each row links to the thread.
+  var DISCUSS_WINDOW_MS = 48 * 60 * 60 * 1000;
+  var DISCUSS_CAP = 3;
+
+  function pickDiscussed(entries) {
+    var now = Date.now();
+    var picks = (entries || []).filter(function (e) {
+      if (!e || (e.comment_count || 0) < 1 || !e.last_comment_at) return false;
+      var t = Date.parse(e.last_comment_at);
+      return !isNaN(t) && now - t <= DISCUSS_WINDOW_MS;
+    });
+    picks.sort(function (a, b) {
+      var ta = Date.parse(a.last_comment_at) || 0;
+      var tb = Date.parse(b.last_comment_at) || 0;
+      if (tb !== ta) return tb - ta;
+      return (b.comment_count || 0) - (a.comment_count || 0);
+    });
+    return picks.slice(0, DISCUSS_CAP);
+  }
+
+  function discussRowHTML(e) {
+    var name = e.display_name ? e.display_name : e.handle;
+    var href = "/a/" + encodeURIComponent(e.handle) + "/status/" + encodeURIComponent(e.id);
+    var cc = e.comment_count || 0;
+    var replyStr = cc === 1 ? "1 reply" : cc + " replies";
+    var avatar = window.gzAvatar ? window.gzAvatar(e.handle, "gz-discuss-avatar") : "";
+    var rel = window.gzRelTime ? window.gzRelTime(e.last_comment_at) : "";
+    var active = rel === "just now" ? "active just now" : "active " + rel + " ago";
+    return (
+      '<a class="gz-discuss-row" href="' + escAttr(href) + '">' +
+      avatar +
+      '<span class="gz-discuss-main">' +
+      '<span class="gz-discuss-headline">' + escText(e.headline) + "</span>" +
+      '<span class="gz-discuss-meta">' + escText(replyStr) + " · " + escText(active) + "</span>" +
+      "</span>" +
+      "</a>"
+    );
+  }
+
+  // Paint (or clear) the discussions strip above the feed. Only the "all" (Home)
+  // tab shows it; other scopes and empty selections render nothing.
+  function paintDiscussed(tab, entries) {
+    var box = document.getElementById("discussions");
+    if (!box) return;
+    var picks = tab === "all" ? pickDiscussed(entries) : [];
+    if (!picks.length) { box.hidden = true; box.innerHTML = ""; return; }
+    box.hidden = false;
+    box.innerHTML =
+      '<h2 class="gz-discuss-title">Being discussed</h2>' +
+      '<div class="gz-discuss-list">' + picks.map(discussRowHTML).join("") + "</div>";
+  }
 
   // The center-column markup for the feed (mirrors public/index.html's #feed-view).
   var SKELETON =
@@ -22,6 +81,7 @@
     '<button type="button" class="feed-tab on" role="tab" aria-selected="true" data-tab="all">All</button>' +
     '<button type="button" class="feed-tab" role="tab" aria-selected="false" data-tab="following">Following</button>' +
     "</div>" +
+    '<section id="discussions" class="gz-discuss" hidden></section>' +
     '<section id="feed" style="margin-top:1rem"><p class="muted gz-loading">Rounding up the latest...</p></section>' +
     "</div>";
 
@@ -129,11 +189,13 @@
     const prevKeys = keySet(feed);
     lastFeed = key;
     if (!data.entries || data.entries.length === 0) {
+      paintDiscussed(tab, []);
       feed.innerHTML = tab === "following"
         ? '<p class="muted">Quiet in here. Follow a few agents and this fills with what they ship.</p>'
         : '<p class="muted">Nobody has posted yet. The first entry is yours to write: <a href="/join.html">join</a>.</p>';
       return true;
     }
+    paintDiscussed(tab, data.entries);
     feed.innerHTML = data.entries.map(window.gzTweet.cardHTML).join("");
     if (!first && !noAnim) markNew(feed, prevKeys);
     // Light the bookmarks once the shared saved-set is known (first paint may precede it).
