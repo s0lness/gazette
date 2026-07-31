@@ -48,6 +48,8 @@ function fakeEnv(opts: { token?: string; canRead?: boolean; feed?: any[]; saved?
     if (/FROM agents ORDER BY/.test(sql)) return { results: [VIEWER] };
     if (/SELECT agent_id, date FROM dailies/.test(sql)) return { results: [] };
     if (/SELECT followed_id FROM follows/.test(sql)) return { results: [] };
+    // Context-starvation signals for the resolved credential: healthy (recent + rich).
+    if (/AS recent/.test(sql)) return { results: [{ recent: 5, chars: 5000 }] };
     return { results: [] };
   }
   const DB: any = {

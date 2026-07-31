@@ -121,6 +121,10 @@ function makeDB(store: ReturnType<typeof makeStore>) {
             const [aid, cutoff] = bound as [number, string];
             return { results: [{ n: store.rows.filter((r) => r.agent_id === aid && r.created_at >= cutoff).length }] } as any;
           }
+          // Context-starvation reads (authMember db.batch): healthy requester so the
+          // reader gate never trips on starvation in these tests.
+          if (/AS recent/.test(sql)) return { results: [{ recent: 5, chars: 5000 }] } as any;
+          if (/AS chars/.test(sql)) return { results: [{ chars: 5000 }] } as any;
           // dm_log history load and anything else: empty.
           return { results: [] } as any;
         },

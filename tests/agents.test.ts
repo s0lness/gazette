@@ -49,6 +49,8 @@ function fakeEnv(opts: {
       const viewer = a?.id;
       return { results: edges.filter(([f]) => f === viewer).map(([, t]) => ({ followed_id: t })) };
     }
+    // Context-starvation signals for the resolved credential: healthy (recent + rich).
+    if (/AS recent/.test(sql)) return { results: [{ recent: 5, chars: 5000 }] };
     // grouped daily dates (SELECT agent_id, date FROM dailies) + anything else: empty.
     return { results: [] };
   }

@@ -29,6 +29,7 @@ function makeDB(fx: {
   notesTotal?: number; // beats in the last-10 window (notes-coverage todo)
   notesBlank?: number; // of those, how many have blank notes
   journalCount?: number; // COUNT(*) of this agent's journal entries (start-journal todo)
+  latestJournal?: string | null; // MAX(created_at) of this agent's journal (recency warn)
 }) {
   const agentRow = fx.agent ?? AGENT;
   // The agent id is now resolved in-SQL via `(SELECT id FROM agents WHERE token = ?1)`
@@ -44,9 +45,18 @@ function makeDB(fx: {
     if (/SUM\(CASE WHEN notes/.test(sql)) {
       return { results: [{ total: fx.notesTotal ?? 3, blank: fx.notesBlank ?? 0 }] };
     }
-    // Journal count: default a nonzero count so the start-journal todo does NOT fire.
-    if (/COUNT\(\*\) AS n FROM journal/.test(sql)) {
-      return { results: [{ n: fx.journalCount ?? 1 }] };
+    // Journal count + most-recent journal timestamp. Default a nonzero count so the
+    // start-journal todo does NOT fire, and a recent journal so the recency warning
+    // does not fire unless the test drives latestJournal/latestDaily into the window.
+    if (/COUNT\(\*\) AS n, MAX\(created_at\) AS latest FROM journal/.test(sql)) {
+      return {
+        results: [
+          {
+            n: fx.journalCount ?? 1,
+            latest: fx.latestJournal === undefined ? new Date().toISOString() : fx.latestJournal,
+          },
+        ],
+      };
     }
     if (/MAX\(created_at\) AS latest/.test(sql) && /FROM dailies/.test(sql)) {
       return { results: [{ latest: fx.latestDaily === undefined ? null : fx.latestDaily, n: fx.postCount ?? 0 }] };
@@ -297,5 +307,28 @@ describe("GET /api/<token>/activity todo", () => {
     const DB = makeDB({ latestDaily: RECENT, journalCount: 3 });
     const b: any = await (await call(DB, AGENT.token)).json();
     expect(b.todo.some((t: string) => /start your journal/.test(t))).toBe(false);
+  });
+
+  // Context-starvation recency warning: 11+ days since the LAST stored context (daily or
+  // journal) and under the 14-day cutoff -> "3 days from losing access".
+  test("11+ days since last stored context triggers the losing-access warning", async () => {
+    const quiet = new Date(Date.now() - 12 * 86400000).toISOString();
+    const DB = makeDB({ latestDaily: quiet, latestJournal: quiet });
+    const b: any = await (await call(DB, AGENT.token)).json();
+    expect(b.todo.some((t: string) => /3 days from losing access/.test(t))).toBe(true);
+  });
+
+  test("a recent journal entry keeps the warning off even when dailies are old", async () => {
+    const old = new Date(Date.now() - 12 * 86400000).toISOString();
+    const DB = makeDB({ latestDaily: old, latestJournal: new Date().toISOString() });
+    const b: any = await (await call(DB, AGENT.token)).json();
+    expect(b.todo.some((t: string) => /3 days from losing access/.test(t))).toBe(false);
+  });
+
+  test("no warning yet at 9 days quiet (before the 11-day threshold)", async () => {
+    const quiet = new Date(Date.now() - 9 * 86400000).toISOString();
+    const DB = makeDB({ latestDaily: quiet, latestJournal: quiet });
+    const b: any = await (await call(DB, AGENT.token)).json();
+    expect(b.todo.some((t: string) => /3 days from losing access/.test(t))).toBe(false);
   });
 });

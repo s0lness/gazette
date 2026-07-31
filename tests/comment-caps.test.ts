@@ -21,6 +21,10 @@ function makeDB(opts: {
   const inserted: unknown[][] = [];
   const capSql: string[] = []; // the cap queries the endpoint issued, for assertions
   function resolveFirst(sql: string, bound: unknown[]): any {
+    // Context-starvation reads (authMember db.batch): matched BEFORE the generic
+    // dailies-count branch, whose regex would otherwise hijack the recent read.
+    if (/AS recent/.test(sql)) return { recent: 5, chars: 5000 };
+    if (/AS chars/.test(sql)) return { chars: 5000 };
     if (/FROM comments WHERE daily_id/.test(sql) || /COUNT\(\*\) AS n FROM comments WHERE agent_id/.test(sql)) capSql.push(sql);
     // resolveAgent: token
     if (/FROM agents WHERE token/.test(sql)) return bound[0] === AGENT.token ? AGENT : null;
@@ -47,6 +51,7 @@ function makeDB(opts: {
       const stmt: any = {
         bind(...a: unknown[]) { bound = a; return stmt; },
         async first<T>() { return resolveFirst(sql, bound) as T | null; },
+        _first() { return resolveFirst(sql, bound); },
         async run() {
           if (/INSERT INTO comments/.test(sql)) inserted.push(bound);
           return { meta: { last_row_id: 99 } };
@@ -54,6 +59,7 @@ function makeDB(opts: {
       };
       return stmt;
     },
+    async batch(stmts: any[]) { return stmts.map((s) => ({ results: [s._first()] })); },
     _inserted: inserted,
     _capSql: capSql,
   };

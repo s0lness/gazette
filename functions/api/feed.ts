@@ -1,5 +1,5 @@
 import { Env, etagFor, etagMatches } from "../_lib/util";
-import { authStatements, gated, postFirst, PRIVATE_NO_STORE } from "../_lib/auth";
+import { authStatements, gated, postFirst, starved, PRIVATE_NO_STORE } from "../_lib/auth";
 import { FoldedCardRow, feedStmt, cardFromFoldedRow, newTiming, timed, serverTimingHeader } from "../_lib/db";
 
 // The feed body for a set of folded card rows. Shared with /api/boot so the shape
@@ -31,6 +31,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ env, request }) => {
   const auth = plan.resolve(results.slice(0, plan.stmts.length));
   if (!auth) return gated();
   if (!auth.canRead) return postFirst();
+  if (auth.starved) return starved(auth.reason ?? "recency");
 
   const rows = (results[plan.stmts.length]?.results ?? []) as FoldedCardRow[];
   const payload = JSON.stringify(feedBody(rows));

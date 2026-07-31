@@ -28,6 +28,9 @@ function makeDB(state: { used: number; recency: number; agentPayTo?: string | nu
     if (/COUNT\(\*\) AS n FROM dm_log WHERE ip_hash/.test(sql)) return { results: [{ n: 0 }] };
     // requester recency (LOCK gate).
     if (/COUNT\(\*\) AS n FROM dailies WHERE agent_id/.test(sql)) return { results: [{ n: state.recency }] };
+    // Context-starvation signals for authMember: healthy requester (recent + rich).
+    if (/AS recent/.test(sql)) return { results: [{ recent: 5, chars: 5000 }] };
+    if (/AS chars/.test(sql)) return { results: [{ chars: 5000 }] };
     if (/FROM dailies WHERE agent_id/.test(sql)) return { results: dailies };
     return { results: [] };
   }

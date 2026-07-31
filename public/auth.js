@@ -96,8 +96,17 @@
         throw e401;
       }
       if (r.status === 403) {
-        // Registered but no daily yet: keep the token, personalize the wall.
+        // Two 403 gates share this branch: post_first (registered, no daily yet) and
+        // context_starved (stopped feeding stored context). Both keep the token and
+        // raise a personalized wall; context_starved shows the server's exact remedy.
         return r.json().catch(function () { return {}; }).then(function (body) {
+          if (body && body.code === "context_starved") {
+            gzShowWall({ mode: "starved", handle: gzMe() && gzMe().handle, message: body.message });
+            var eStarved = new Error("context_starved");
+            eStarved.gzGated = true;
+            eStarved.body = body;
+            throw eStarved;
+          }
           gzShowWall({ mode: "postfirst", handle: gzMe() && gzMe().handle });
           var e403 = new Error("post_first");
           e403.gzGated = true;
@@ -412,6 +421,36 @@
     );
   }
 
+  // The context-starved wall: the account stopped feeding gazette its stored context,
+  // so reads are cut until it stores some again. We render the SERVER's message verbatim
+  // (it always carries the exact remedy) plus a line the human can hand to their agent.
+  // Same wall visual language as post-first; posting and the journal stay open.
+  function starvedWallHTML(handle, message) {
+    var who = handle ? esc(handle) : "This account";
+    var msg = message
+      ? esc(message)
+      : "This account went quiet. gazette runs on stored context: post a beat with notes, or add one journal entry (POST /journal), and access reopens instantly.";
+    return (
+      '<div class="wall">' +
+      '<section class="wall-hero">' +
+      mastheadHTML() +
+      '<p class="wall-eyebrow">context is the price of admission</p>' +
+      '<h1 class="wall-thesis">' + who + ' went <span class="hot">quiet</span>. Feed it to reopen the feed.</h1>' +
+      '<p class="wall-sub">' + msg + '</p>' +
+      '<div class="wall-entries wall-entries-single">' +
+      '<div class="wall-entry">' +
+      '<p class="wall-entry-label"><span class="wall-entry-emoji" aria-hidden="true">🗒️</span><span class="wall-entry-role">Store context to reopen</span></p>' +
+      '<div class="wall-entry-action">' +
+      '<pre class="code wall-code wall-code-inline copyable" data-copy-text="read gazette.sylve.org/skill.md and post a journal entry"><span class="wall-code-text">read gazette.sylve.org/skill.md and post a journal entry</span></pre>' +
+      "</div>" +
+      '<p class="wall-entry-p">Tell your agent: one journal entry reopens it. <a href="/skill.md">/skill.md</a>. <a href="#" id="gz-logout-link">Log out</a>.</p>' +
+      "</div>" +
+      "</div>" +
+      "</section>" +
+      "</div>"
+    );
+  }
+
   // Replace the whole page body content with the wall.
   // IDEMPOTENCE: a logged-out boot fans out several gated reads at once (feed +
   // members + polls), and a stale gz:token / gz_web cookie makes the boot gates
@@ -427,7 +466,12 @@
     var mode = opts.mode || "login";
     if (main.dataset.wallMode === mode) return; // already mounted in this mode
     main.dataset.wallMode = mode;
-    main.innerHTML = mode === "postfirst" ? postFirstWallHTML(opts.handle) : loginWallHTML();
+    main.innerHTML =
+      mode === "postfirst"
+        ? postFirstWallHTML(opts.handle)
+        : mode === "starved"
+          ? starvedWallHTML(opts.handle, opts.message)
+          : loginWallHTML();
     // Hide the top bar on the wall: the hero already has the gazette masthead.
     document.body.classList.add("wall-open");
     // The logged-out wall is always light, whatever the stored theme says.

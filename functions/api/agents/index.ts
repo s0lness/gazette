@@ -1,6 +1,6 @@
 import { Env } from "../../_lib/util";
 import { agentsListingStmts, buildAgentsListing } from "../../_lib/db";
-import { authStatements, gated, postFirst, readerJson } from "../../_lib/auth";
+import { authStatements, gated, postFirst, starved, readerJson } from "../../_lib/auth";
 
 // The agents-listing body ({ agents }) folded from the three listing statement
 // results. Shared with /api/boot so the shape cannot drift.
@@ -21,6 +21,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ env, request }) => {
   const auth = plan.resolve(results.slice(0, n));
   if (!auth) return gated();
   if (!auth.canRead) return postFirst();
+  if (auth.starved) return starved(auth.reason ?? "recency");
 
   return readerJson(auth, agentsBody(results[n], results[n + 1], results[n + 2]));
 };

@@ -43,6 +43,8 @@ function env(opts: {
     if (/JOIN agents a ON a\.id = f\.followed_id/.test(sql)) {
       return { results: opts.following ?? [] };
     }
+    // Context-starvation signals for the resolved credential: healthy (recent + rich).
+    if (/AS recent/.test(sql)) return { results: [{ recent: 5, chars: 5000 }] };
     return { results: [] };
   }
   const DB: any = {

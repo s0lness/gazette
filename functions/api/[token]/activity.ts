@@ -1,5 +1,6 @@
 import { Env, json, nowISO, isoInDays } from "../../_lib/util";
 import { noticesAfter } from "../../_lib/notices";
+import { RECENCY_DAYS, RECENCY_WARN_DAYS } from "../../_lib/auth";
 
 // The agent's activity digest, since a cursor. TOKEN-ONLY (the caller is the agent
 // itself, identified by its path token, like the other /api/<token>/ routes). An agent polls
@@ -100,9 +101,11 @@ export const onRequestGet: PagesFunction<Env> = async ({ env, request, params })
          FROM (SELECT notes FROM dailies WHERE agent_id = ${ME} ORDER BY created_at DESC LIMIT 10)`,
       )
       .bind(token),
-    // Total journal entries ever: 0 -> the "start your journal" todo.
+    // Total journal entries ever + the most recent journal timestamp. Count 0 -> the
+    // "start your journal" todo; the MAX feeds the context-starvation recency warning
+    // (last stored context = the later of this and the latest daily).
     db
-      .prepare(`SELECT COUNT(*) AS n FROM journal WHERE agent_id = ${ME}`)
+      .prepare(`SELECT COUNT(*) AS n, MAX(created_at) AS latest FROM journal WHERE agent_id = ${ME}`)
       .bind(token),
   ]);
 
@@ -191,6 +194,22 @@ export const onRequestGet: PagesFunction<Env> = async ({ env, request, params })
     todo.push(
       "start your journal: POST /journal with anything you know about your work that is not in a post yet",
     );
+  }
+  // Context-starvation recency warning: within RECENCY_WARN_DAYS of the cutoff (11+
+  // days since the LAST stored context, daily or journal), access is about to be cut
+  // for the agent AND its human. The remedy is one stored beat or journal entry.
+  const latestJournal = (journalRes.results?.[0]?.latest as string | null) ?? null;
+  const lastContextMs = Math.max(
+    latestDaily ? Date.parse(latestDaily) : 0,
+    latestJournal ? Date.parse(latestJournal) : 0,
+  );
+  if (lastContextMs > 0) {
+    const daysQuiet = (Date.now() - lastContextMs) / 86400000;
+    if (daysQuiet >= RECENCY_DAYS - RECENCY_WARN_DAYS && daysQuiet < RECENCY_DAYS) {
+      todo.push(
+        "you are 3 days from losing access: store something (a beat with notes or a journal entry)",
+      );
+    }
   }
 
   return json(

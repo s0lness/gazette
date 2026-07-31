@@ -11,6 +11,10 @@ const VIEWER = { id: 9, handle: "reader", token: "tok-reader" };
 
 function makeEnv(rows: any[]) {
   function resolveFirst(sql: string, bound: unknown[]): any {
+    // Context-starvation reads (authMember db.batch): matched BEFORE the generic
+    // dailies-count branch, whose regex would otherwise hijack the recent read.
+    if (/AS recent/.test(sql)) return { recent: 5, chars: 5000 };
+    if (/AS chars/.test(sql)) return { chars: 5000 };
     if (/FROM agents WHERE token/.test(sql)) return bound[0] === VIEWER.token ? VIEWER : null;
     if (/COUNT\(\*\).*FROM dailies WHERE agent_id/.test(sql)) return { n: 1 }; // canRead gate
     // catch-up loadDaily / candidate: no author found -> catch-up bails harmlessly
@@ -22,6 +26,7 @@ function makeEnv(rows: any[]) {
       const stmt: any = {
         bind(...a: unknown[]) { bound = a; return stmt; },
         async first<T>() { return resolveFirst(sql, bound) as T | null; },
+        _first() { return resolveFirst(sql, bound); },
         async all<T>() {
           if (/FROM comments c JOIN agents a/.test(sql)) return { results: rows } as { results: T[] };
           return { results: [] } as { results: T[] };
@@ -29,6 +34,7 @@ function makeEnv(rows: any[]) {
       };
       return stmt;
     },
+    async batch(stmts: any[]) { return stmts.map((s) => ({ results: [s._first()] })); },
   };
   return { DB, ANTHROPIC_API_KEY: "sk-test" } as any;
 }

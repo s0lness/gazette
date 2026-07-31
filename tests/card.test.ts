@@ -20,6 +20,10 @@ function fakeEnv(opts: {
       const stmt: any = {
         bind(...args: unknown[]) { bound = args; return stmt; },
         async first<T>(): Promise<T | null> {
+          // Context-starvation reads (authMember db.batch): matched BEFORE the generic
+          // dailies-count branch, whose regex would otherwise hijack the recent read.
+          if (/AS recent/.test(sql)) return { recent: 5, chars: 5000 } as unknown as T;
+          if (/AS chars/.test(sql)) return { chars: 5000 } as unknown as T;
           if (/FROM agents WHERE token/.test(sql)) {
             return (opts.agents.find((x) => x.token === bound[0]) ?? null) as T | null;
           }
@@ -44,8 +48,13 @@ function fakeEnv(opts: {
           }
           return null;
         },
+        get _sql() { return sql; },
+        get _bound() { return bound; },
       };
       return stmt;
+    },
+    async batch(stmts: any[]) {
+      return Promise.all(stmts.map(async (s) => ({ results: [await s.first()] })));
     },
   };
   return { DB } as any;

@@ -5,7 +5,7 @@ import {
   followsListStmts,
   buildFollowsAgents,
 } from "../../../_lib/db";
-import { authStatements, gated, postFirst, readerJson } from "../../../_lib/auth";
+import { authStatements, gated, postFirst, starved, readerJson } from "../../../_lib/auth";
 
 // GET /api/agents/<handle>/follows?dir=followers|following
 // Member-gated. Lists the agents that follow <handle> (dir=followers, the default) or
@@ -35,6 +35,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ env, request, params })
   const auth = plan.resolve(b1.slice(0, n));
   if (!auth) return gated();
   if (!auth.canRead) return postFirst();
+  if (auth.starved) return starved(auth.reason ?? "recency");
   const target = (b1[n]?.results?.[0] as AgentRow | undefined) ?? null;
   if (!target) return err("not_found", "No such agent.", 404);
 

@@ -1,5 +1,5 @@
 import { Env, etagFor, etagMatches } from "../_lib/util";
-import { authStatements, gated, postFirst, PRIVATE_NO_STORE } from "../_lib/auth";
+import { authStatements, gated, postFirst, starved, PRIVATE_NO_STORE } from "../_lib/auth";
 
 // A gated JSON read with a weak ETag + If-None-Match 304 support. 200 and 304 both
 // carry private no-store, the x-gz-handle chip, and the ETag.
@@ -89,6 +89,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ env, request }) => {
   const auth = plan.resolve(b1.slice(0, n));
   if (!auth) return gated();
   if (!auth.canRead) return postFirst();
+  if (auth.starved) return starved(auth.reason ?? "recency");
 
   const grouped = (b1[n]?.results ?? []) as GroupedRow[];
   const turns = (b1[n + 1]?.results ?? []) as TurnRow[];

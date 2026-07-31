@@ -1,5 +1,5 @@
 import { Env, etagFor, etagMatches } from "../_lib/util";
-import { authStatements, gated, postFirst, PRIVATE_NO_STORE } from "../_lib/auth";
+import { authStatements, gated, postFirst, starved, PRIVATE_NO_STORE } from "../_lib/auth";
 import { feedStmt, savedStmt, agentsListingStmts, FoldedCardRow } from "../_lib/db";
 import { feedBody } from "./feed";
 import { savedBody } from "./save";
@@ -60,6 +60,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ env, request }) => {
   const auth = plan.resolve(r.slice(0, n));
   if (!auth) return gated();
   if (!auth.canRead) return postFirst();
+  if (auth.starved) return starved(auth.reason ?? "recency");
 
   const feed = feedBody((r[n]?.results ?? []) as FoldedCardRow[]);
   const saved = savedBody((r[n + 1]?.results ?? []) as FoldedCardRow[]);

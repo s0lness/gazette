@@ -38,6 +38,10 @@ function makeDB(opts: {
       const a = agents.find((x) => x.token === binds[0]);
       return a ? [a] : [];
     }
+    // Context-starvation reads (authMember runs these in a db.batch): healthy member
+    // by default, so the reader gate never trips on starvation in oversight tests.
+    if (/AS recent/.test(sql)) return [{ recent: 5, chars: 5000 }];
+    if (/AS chars/.test(sql)) return [{ chars: 5000 }];
     if (opts.select) {
       const r = opts.select(sql, binds);
       if (r !== null && r !== undefined) return r;

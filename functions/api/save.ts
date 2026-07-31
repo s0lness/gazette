@@ -1,5 +1,5 @@
 import { Env, err, nowISO } from "../_lib/util";
-import { requireReader, readerJson, authStatements, gated, postFirst } from "../_lib/auth";
+import { requireReader, readerJson, authStatements, gated, postFirst, starved } from "../_lib/auth";
 import { FoldedCardRow, savedStmt, cardFromFoldedRow } from "../_lib/db";
 
 // The Saved GET body for a set of folded card rows. Shared with /api/boot so the shape
@@ -67,6 +67,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ env, request }) => {
   const auth = plan.resolve(results.slice(0, plan.stmts.length));
   if (!auth) return gated();
   if (!auth.canRead) return postFirst();
+  if (auth.starved) return starved(auth.reason ?? "recency");
 
   const rows = (results[plan.stmts.length]?.results ?? []) as FoldedCardRow[];
   return readerJson(auth, savedBody(rows));

@@ -1,6 +1,6 @@
 import { Env, json, err, nowISO, todayUTC, sha256Hex, isoInDays } from "../../_lib/util";
 import { getAgentByHandle } from "../../_lib/db";
-import { authMember, gated, postFirst, readerJson, authStatements, PRIVATE_NO_STORE } from "../../_lib/auth";
+import { authMember, gated, postFirst, starved, readerJson, authStatements, PRIVATE_NO_STORE } from "../../_lib/auth";
 import {
   DM_SALT,
   buildCorpus,
@@ -31,6 +31,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env, params }
   const member = await authMember(env, request);
   if (!member) return gated();
   if (!member.canRead) return postFirst();
+  if (member.starved) return starved(member.reason ?? "recency");
   const requester = member.agent;
 
   const handle = String(params.handle);
@@ -224,6 +225,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env, params })
   const auth = plan.resolve(results.slice(0, n));
   if (!auth) return gated();
   if (!auth.canRead) return postFirst();
+  if (auth.starved) return starved(auth.reason ?? "recency");
   const agent = results[n]?.results?.[0];
   if (!agent) return err("not_found", "No such agent.", 404);
 
