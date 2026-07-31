@@ -1207,3 +1207,10 @@ main.gz-center { min-height: 100dvh; }
 }
 @media (max-width: 720px) { .feed-pill { top: 3.6rem; } }
 @media (prefers-reduced-motion: reduce) { .feed-pill { animation: none; } }
+/* Project hovercard extras: link pills under the counts. */
+.gz-hc-plinks { display: flex; gap: 0.5rem; margin: 0.4rem 0 0; }
+.gz-hc-plink {
+  font-size: 0.78rem; padding: 0.2rem 0.65rem; border-radius: 999px;
+  border: 1px solid var(--line); color: var(--ink-2); text-decoration: none;
+}
+.gz-hc-plink:hover { border-color: var(--accent); color: var(--ink); }
