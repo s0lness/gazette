@@ -683,7 +683,7 @@ body.wall-open main.page { max-width: 70rem; }
 
 /* Action row: like heart + count, reply count, copy-link. Pill hover states. */
 .tw-actions { display: flex; align-items: center; gap: 0.4rem; margin: 0.2rem 0 0; color: var(--ink-3); }
-.tw-like-btn, .tw-comment-btn, .tw-share-btn {
+.tw-like-btn, .tw-comment-btn, .tw-share-btn, .tw-bookmark-btn {
   display: inline-flex; align-items: center; gap: 0.4rem;
   padding: 0.45rem 0.7rem; border: 0; border-radius: var(--radius-pill); background: transparent;
   color: inherit; cursor: pointer;
@@ -691,6 +691,12 @@ body.wall-open main.page { max-width: 70rem; }
   transition: color 0.12s ease, background 0.12s ease;
 }
 .tw-comment-btn:hover, .tw-share-btn:hover { color: var(--accent); background: var(--accent-soft); }
+
+/* Bookmark: outline by default, fills with the ink accent when saved. */
+.tw-bookmark { display: block; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.tw-bookmark-btn:hover { color: var(--accent); background: var(--accent-soft); }
+.tw-bookmark-btn.saved { color: var(--accent); }
+.tw-bookmark-btn.saved .tw-bookmark { fill: var(--accent); stroke: var(--accent); }
 .tw-share-btn { margin-left: auto; }
 .tw-share-btn.copied { color: var(--accent); }
 .tw-reply-label, .tw-like-count { font-variant-numeric: tabular-nums; }
@@ -885,6 +891,142 @@ pre.copyable {
 .gz-copy.copied { color: var(--positive); border-color: var(--positive); }
 
 /* ==========================================================================
+   Messages (DM conversations) + Saved
+   ========================================================================== */
+
+/* ---- Conversation list --------------------------------------------------- */
+.msg-list-head { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; margin-bottom: 0.75rem; }
+.msg-list-head .page-title { margin: 0; }
+.msg-new-btn {
+  flex: 0 0 auto; padding: 0.5rem 1.1rem; min-height: 40px;
+  border: 1.5px solid var(--ink); border-radius: var(--radius-pill);
+  background: var(--ink); color: var(--surface);
+  font: inherit; font-size: 0.86rem; font-weight: 700; line-height: 1; cursor: pointer;
+  transition: opacity 0.12s ease;
+}
+.msg-new-btn:hover { opacity: 0.88; }
+
+.msg-list { display: flex; flex-direction: column; }
+.msg-row {
+  display: flex; align-items: center; gap: 0.75rem; width: 100%; text-align: left;
+  padding: 0.85rem 0.6rem; border: 0; border-top: 1px solid var(--line);
+  background: transparent; color: inherit; cursor: pointer; font: inherit;
+  transition: background 0.12s ease;
+}
+.msg-row:first-child { border-top: 0; }
+.msg-row:hover { background: var(--hover); }
+.msg-row-avatar { flex: 0 0 auto; }
+.msg-row-avatar .tw-avatar { width: 44px; height: 44px; }
+.msg-row-body { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 0.15rem; }
+.msg-row-top { display: flex; align-items: baseline; gap: 0.5rem; }
+.msg-row-title { font-size: 0.95rem; font-weight: 700; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.msg-row-proj { font-weight: 400; color: var(--accent); font-size: 0.88rem; }
+.msg-row-when { margin-left: auto; flex: 0 0 auto; color: var(--ink-3); font-size: 0.8rem; font-variant-numeric: tabular-nums; }
+.msg-row-preview { font-size: 0.88rem; color: var(--ink-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.msg-empty, .msg-empty-chat { margin: 1.25rem 0; }
+
+/* ---- Picker rows (modal reuses .wall-modal from auth.js) ------------------ */
+.msg-pick-list { display: flex; flex-direction: column; max-height: 60vh; overflow-y: auto; margin-top: 0.5rem; }
+.msg-pick-row {
+  display: flex; align-items: center; gap: 0.65rem; width: 100%; text-align: left;
+  padding: 0.6rem 0.4rem; border: 0; border-radius: var(--radius-sm);
+  background: transparent; color: inherit; cursor: pointer; font: inherit;
+  transition: background 0.12s ease;
+}
+.msg-pick-row:hover { background: var(--hover); }
+.msg-pick-avatar .tw-avatar { width: 38px; height: 38px; }
+.msg-pick-names { display: flex; flex-direction: column; min-width: 0; line-height: 1.25; }
+.msg-pick-name { font-size: 0.92rem; font-weight: 700; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.msg-pick-handle { font-size: 0.8rem; color: var(--ink-3); }
+.msg-pick-empty { margin: 0.75rem 0; }
+
+/* ---- Chat view ----------------------------------------------------------- */
+/* The chat is a column: a sticky header, a scrolling thread, and a composer pinned
+   at the bottom. On the phone the composer sits above the keyboard with safe-area
+   padding, and the whole thing fills the viewport below the top bar. */
+#messages-view:has(.msg-chat-head) { display: flex; flex-direction: column; }
+.msg-chat-head {
+  display: flex; align-items: center; gap: 0.65rem;
+  padding: 0.4rem 0 0.75rem; margin-bottom: 0.25rem;
+  border-bottom: 1px solid var(--line);
+  position: sticky; top: 0; z-index: 5; background: var(--bg);
+}
+.msg-back { flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; color: var(--ink-2); border-radius: 50%; width: 38px; height: 38px; }
+.msg-back:hover { color: var(--accent); background: var(--hover); }
+.msg-head-avatar { flex: 0 0 auto; }
+.msg-head-avatar .tw-avatar { width: 38px; height: 38px; }
+.msg-head-title { font-size: 1.05rem; font-weight: 700; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.msg-head-proj { font-weight: 400; color: var(--accent); font-size: 0.92rem; }
+
+.msg-thread {
+  flex: 1 1 auto; min-height: 40vh; overflow-y: auto;
+  display: flex; flex-direction: column; gap: 0.5rem;
+  padding: 1rem 0.15rem;
+}
+.msg-pair { display: flex; flex-direction: column; gap: 0.35rem; }
+.msg-b { display: flex; flex-direction: column; max-width: 82%; }
+.msg-b-me { align-self: flex-end; align-items: flex-end; }
+.msg-b-them { align-self: flex-start; align-items: flex-start; }
+.msg-bubble {
+  padding: 0.6rem 0.85rem; border-radius: 1.1rem;
+  font-size: 0.95rem; line-height: 1.5; word-break: break-word; overflow-wrap: anywhere;
+}
+.msg-b-me .msg-bubble {
+  background: var(--accent-soft); color: var(--ink);
+  border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--line));
+  border-bottom-right-radius: 0.35rem;
+}
+.msg-b-them .msg-bubble {
+  background: var(--surface); color: var(--ink);
+  border: 1px solid var(--line);
+  border-bottom-left-radius: 0.35rem;
+}
+.msg-b-them .msg-bubble.md > :first-child { margin-top: 0; }
+.msg-b-them .msg-bubble.md > :last-child { margin-bottom: 0; }
+.msg-b-when { font-size: 0.72rem; color: var(--ink-3); margin: 0.1rem 0.2rem 0; font-variant-numeric: tabular-nums; }
+
+/* Quiet system line (quota / error), centered. */
+.msg-system { align-self: center; text-align: center; color: var(--ink-3); font-size: 0.82rem; margin: 0.35rem 0; max-width: 90%; }
+
+/* Typing placeholder: three dots that pulse in sequence. */
+.msg-typing { display: inline-flex; align-items: center; gap: 0.28rem; }
+.msg-typing span { width: 0.4rem; height: 0.4rem; border-radius: 50%; background: var(--ink-3); animation: msg-typing 1.1s ease-in-out infinite; }
+.msg-typing span:nth-child(2) { animation-delay: 0.18s; }
+.msg-typing span:nth-child(3) { animation-delay: 0.36s; }
+@keyframes msg-typing { 0%, 60%, 100% { opacity: 0.35; transform: translateY(0); } 30% { opacity: 1; transform: translateY(-2px); } }
+
+/* Composer pinned at the bottom of the column. */
+.msg-compose {
+  flex: 0 0 auto;
+  padding: 0.6rem 0 calc(0.6rem + env(safe-area-inset-bottom, 0px));
+  border-top: 1px solid var(--line); background: var(--bg);
+  position: sticky; bottom: 0; z-index: 5;
+}
+.msg-compose-row { display: flex; align-items: flex-end; gap: 0.5rem; }
+.msg-input {
+  flex: 1 1 auto; min-width: 0; resize: none;
+  min-height: 2.6rem; max-height: 160px; padding: 0.6rem 0.85rem;
+  border-radius: 1.2rem; border: 1px solid var(--line); background: var(--surface);
+  font: inherit; font-size: 0.95rem; line-height: 1.4;
+}
+.msg-input:disabled { opacity: 0.55; cursor: not-allowed; }
+.msg-send-btn {
+  flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center;
+  width: 2.6rem; height: 2.6rem; padding: 0;
+  border: 0; border-radius: 50%; cursor: pointer;
+  background: var(--accent); color: var(--accent-fg);
+  transition: opacity 0.12s ease;
+}
+.msg-send-btn:hover:not(:disabled) { background: var(--accent-h); }
+.msg-send-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.msg-send-btn svg { display: block; }
+.msg-hint { margin: 0.4rem 0.2rem 0; font-size: 0.78rem; color: var(--ink-3); text-align: right; }
+
+@media (prefers-reduced-motion: reduce) {
+  .msg-typing span { animation: none; opacity: 0.6; }
+}
+
+/* ==========================================================================
    Mobile (<= 640px). Guiding rule: SUBTRACT. Single column, no horizontal
    overflow, 44px touch targets, tighter type + spacing, safe-area insets.
    ========================================================================== */
@@ -928,7 +1070,16 @@ pre.copyable {
   .wall-entry-label { margin-bottom: 0.7rem; }
   .wall-entry-emoji { font-size: 1.1rem; }
 
-  .tw-like-btn, .tw-comment-btn, .tw-share-btn { min-height: 44px; }
+  .tw-like-btn, .tw-comment-btn, .tw-share-btn, .tw-bookmark-btn { min-height: 44px; }
+
+  /* Chat fills the viewport below the top bar so the composer hugs the keyboard.
+     The page's own bottom padding is dropped here so the composer reaches the edge. */
+  #messages-view:has(.msg-chat-head) { min-height: calc(100dvh - 3.5rem); }
+  .msg-thread { min-height: 0; }
+  .msg-send-btn, .msg-input { min-height: 44px; }
+  .msg-b { max-width: 88%; }
+  .msg-new-btn { min-height: 44px; }
+  .msg-row { padding: 0.85rem 0.4rem; }
   .follow-btn { min-height: 44px; padding: 0.6rem 1.2rem; }
   .feed-tab { min-height: 44px; padding: 0.6rem 1.2rem; }
   .tw-actions { gap: 0.5rem; }

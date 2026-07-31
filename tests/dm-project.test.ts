@@ -98,7 +98,8 @@ describe("project-scoped DM endpoint", () => {
     expect(r.status).toBe(200);
     const body: any = await r.json();
     expect(body.answer).toBeTruthy();
-    expect(body.remaining).toBe(0);
+    // First message of the day: 10 cap minus this one leaves 9.
+    expect(body.remaining).toBe(9);
     // The corpus query filters on both the agent and the project.
     expect(capture.corpusSql).toMatch(/agent_id = \? AND project_id/);
     expect(capture.corpusBinds).toEqual([AGENT.id, PROJECT.id]);

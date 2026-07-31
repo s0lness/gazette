@@ -48,6 +48,50 @@
     '<path d="M12 20.5l-1.35-1.2C6 15.1 3 12.4 3 9.1 3 6.5 5 4.5 7.5 4.5c1.5 0 2.95.7 3.85 1.8.9-1.1 2.35-1.8 3.85-1.8C18.65 4.5 20.65 6.5 20.65 9.1c0 3.3-3 6-6.65 10.2L12 20.5z"/>' +
     "</svg>";
 
+  // Inline bookmark glyph. Outline by default; fills with the ink accent when saved.
+  var BOOKMARK_SVG =
+    '<svg class="tw-bookmark" viewBox="0 0 24 24" width="17" height="17" aria-hidden="true">' +
+    '<path d="M6 3.5h12a1 1 0 0 1 1 1V21l-7-4-7 4V4.5a1 1 0 0 1 1-1z"/>' +
+    "</svg>";
+
+  // Shared saved-ids set, lazily fetched once and reused across feed/profile/project.
+  // window.gzSaved.has(id) / .ready() lets card renderers mark bookmarks on load.
+  var savedIds = null; // Set of daily ids once loaded, null until first fetch
+  var savedPromise = null;
+  function gzSavedHas(id) {
+    return !!(savedIds && savedIds.has(Number(id)));
+  }
+  function gzSavedReady() {
+    if (savedPromise) return savedPromise;
+    savedPromise = window
+      .gzFetch("/api/save")
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        savedIds = new Set((data && data.ids ? data.ids : []).map(Number));
+        return savedIds;
+      })
+      .catch(function () {
+        if (!savedIds) savedIds = new Set();
+        return savedIds;
+      });
+    return savedPromise;
+  }
+  function gzSavedSet(id, on) {
+    if (!savedIds) savedIds = new Set();
+    if (on) savedIds.add(Number(id)); else savedIds.delete(Number(id));
+  }
+  // Sync already-rendered bookmark buttons in a container to the saved-set. Called
+  // after gzSaved.ready() resolves so the first paint (which may precede the fetch)
+  // gets its bookmarks lit without a full repaint.
+  function gzSavedMark(container) {
+    if (!container || !savedIds) return;
+    var cards = container.querySelectorAll(".tweet[data-id]");
+    for (var i = 0; i < cards.length; i++) {
+      var btn = cards[i].querySelector(".tw-bookmark-btn");
+      if (btn) setSave(btn, savedIds.has(Number(cards[i].getAttribute("data-id"))));
+    }
+  }
+
   // The slim action row: a like (heart + count), a reply affordance (comment count,
   // toggles the thread), and a quiet copy-link action.
   function actionsHTML(e) {
@@ -55,6 +99,9 @@
     var label = cc ? (cc === 1 ? "1 reply" : cc + " replies") : "reply";
     var likes = e.likes || 0;
     var liked = !!e.liked;
+    // Bookmark reflects the shared saved-set (or a saved flag on the entry, e.g. the
+    // Saved page renders cards already marked). Toggling POSTs /api/save.
+    var saved = e.saved != null ? !!e.saved : gzSavedHas(e.id);
     return (
       '<div class="tw-actions">' +
       '<button type="button" class="tw-like-btn' + (liked ? " liked" : "") +
@@ -65,6 +112,11 @@
       "</button>" +
       '<button type="button" class="tw-comment-btn">' +
       '<span class="tw-reply-label">' + escText(label) + "</span>" +
+      "</button>" +
+      '<button type="button" class="tw-bookmark-btn' + (saved ? " saved" : "") +
+      '" aria-pressed="' + (saved ? "true" : "false") +
+      '" title="Send to my agent" aria-label="Send to my agent">' +
+      BOOKMARK_SVG +
       "</button>" +
       '<button type="button" class="tw-share-btn" data-handle="' + escAttr(e.handle) +
       '" data-label="copy link">copy link</button>' +
@@ -210,6 +262,57 @@
     countEl.textContent = count ? count : "";
   }
 
+  // Optimistic bookmark toggle. Flips the button immediately, POSTs /api/save, and
+  // reconciles from the server `saved` flag. Reverts on failure. Keeps the shared
+  // saved-set in sync so other cards / the Saved page agree. On the Saved page,
+  // unsaving removes the card (handled there via the tw-unsaved event).
+  function toggleSave(card) {
+    var btn = card.querySelector(".tw-bookmark-btn");
+    if (!btn || btn.getAttribute("data-busy") === "1") return;
+    var id = card.getAttribute("data-id");
+    var wasSaved = btn.classList.contains("saved");
+    var next = !wasSaved;
+    setSave(btn, next);
+    gzSavedSet(id, next);
+    btn.setAttribute("data-busy", "1");
+    window
+      .gzFetch("/api/save", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ daily_id: Number(id), action: next ? "save" : "unsave" }),
+      })
+      .then(function (r) { return r.json().then(function (d) { return { status: r.status, data: d }; }); })
+      .then(function (res) {
+        btn.removeAttribute("data-busy");
+        if (res.status === 200 && typeof res.data.saved === "boolean") {
+          setSave(btn, res.data.saved);
+          gzSavedSet(id, res.data.saved);
+          if (!res.data.saved) emitUnsaved(card);
+        } else {
+          setSave(btn, wasSaved); // revert
+          gzSavedSet(id, wasSaved);
+        }
+      })
+      .catch(function (err) {
+        btn.removeAttribute("data-busy");
+        if (err && err.gzGated) return;
+        setSave(btn, wasSaved); // revert
+        gzSavedSet(id, wasSaved);
+      });
+  }
+
+  function setSave(btn, saved) {
+    btn.classList.toggle("saved", saved);
+    btn.setAttribute("aria-pressed", saved ? "true" : "false");
+  }
+
+  // Let a host page (the Saved list) drop a card when it is unsaved.
+  function emitUnsaved(card) {
+    try {
+      card.dispatchEvent(new CustomEvent("tw-unsaved", { bubbles: true, detail: { id: card.getAttribute("data-id") } }));
+    } catch (e) {}
+  }
+
   function toggleComments(card) {
     var box = card.querySelector(".tw-comments");
     if (!box) return;
@@ -323,6 +426,8 @@
       if (like && card.contains(like)) { toggleLike(card); return; }
       var cbtn = ev.target.closest ? ev.target.closest(".tw-comment-btn") : null;
       if (cbtn && card.contains(cbtn)) { toggleComments(card); return; }
+      var bm = ev.target.closest ? ev.target.closest(".tw-bookmark-btn") : null;
+      if (bm && card.contains(bm)) { toggleSave(card); return; }
       var share = ev.target.closest ? ev.target.closest(".tw-share-btn") : null;
       if (share && card.contains(share)) { copyLink(share); return; }
       var send = ev.target.closest ? ev.target.closest(".tw-reply-send") : null;
@@ -356,4 +461,7 @@
 
   window.gzAvatar = avatarHTML;
   window.gzTweet = { cardHTML: cardHTML, wire: wire, busy: busy, cardKey: cardKey };
+  // Shared saved-set: pages call gzSaved.ready() once, then render cards; gzSaved.has(id)
+  // reports the current state; gzSaved.set keeps it in sync after a toggle.
+  window.gzSaved = { ready: gzSavedReady, has: gzSavedHas, set: gzSavedSet, mark: gzSavedMark };
 })();

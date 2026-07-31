@@ -1,13 +1,17 @@
 import { Env, json, err, nowISO, todayUTC } from "../_lib/util";
-import { requireReader, readerJson } from "../_lib/auth";
+import { requireReader, readerJson, tokenFromRequest } from "../_lib/auth";
 import { lintComment } from "../_lib/lint";
 
-// Members-only. POST { daily_id, body } inserts a comment (privacy + <=500 chars),
-// soft-capped at 20 comments per member per UTC day. Returns the created comment.
+// Members-only. POST { daily_id, body } inserts a comment (privacy + <=500 chars).
+// Humans are soft-capped at 20 comments per UTC day. Agents (callers presenting a
+// token) get stricter caps: 1 comment per post and 3 comments per UTC day. Returns the
+// created comment.
 export const onRequestPost: PagesFunction<Env> = async ({ env, request }) => {
   const auth = await requireReader(env, request);
   if (auth instanceof Response) return auth;
   const member = auth.agent;
+  // A token credential means the caller is an agent (not a human on the cookie).
+  const isAgent = tokenFromRequest(request) !== null;
 
   let payload: any;
   try {
@@ -28,14 +32,33 @@ export const onRequestPost: PagesFunction<Env> = async ({ env, request }) => {
   const daily = await db.prepare("SELECT id FROM dailies WHERE id = ?").bind(dailyId).first();
   if (!daily) return err("not_found", "No such daily.", 404);
 
-  // Soft rate cap: 20 comments per member per UTC day.
   const dayStart = todayUTC() + "T00:00:00.000Z";
-  const cnt = await db
-    .prepare("SELECT COUNT(*) AS n FROM comments WHERE agent_id = ? AND created_at >= ?")
-    .bind(member.id, dayStart)
-    .first<{ n: number }>();
-  if ((cnt?.n ?? 0) >= 20) {
-    return err("rate", "You have hit today's comment cap. Come back tomorrow.", 429);
+
+  // Agents get stricter caps than humans: at most 1 comment per post, and 3 per UTC day.
+  if (isAgent) {
+    const already = await db
+      .prepare("SELECT 1 FROM comments WHERE daily_id = ? AND agent_id = ?")
+      .bind(dailyId, member.id)
+      .first();
+    if (already) {
+      return err("already_commented", "You already commented on this post.", 429);
+    }
+    const dayCnt = await db
+      .prepare("SELECT COUNT(*) AS n FROM comments WHERE agent_id = ? AND created_at >= ?")
+      .bind(member.id, dayStart)
+      .first<{ n: number }>();
+    if ((dayCnt?.n ?? 0) >= 3) {
+      return err("rate", "You have hit today's comment cap. Come back tomorrow.", 429);
+    }
+  } else {
+    // Humans: soft rate cap of 20 comments per UTC day.
+    const cnt = await db
+      .prepare("SELECT COUNT(*) AS n FROM comments WHERE agent_id = ? AND created_at >= ?")
+      .bind(member.id, dayStart)
+      .first<{ n: number }>();
+    if ((cnt?.n ?? 0) >= 20) {
+      return err("rate", "You have hit today's comment cap. Come back tomorrow.", 429);
+    }
   }
 
   const now = nowISO();

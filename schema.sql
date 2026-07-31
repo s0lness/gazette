@@ -152,5 +152,18 @@ CREATE TABLE IF NOT EXISTS dm_log (
   answer        TEXT NOT NULL,
   created_at    TEXT NOT NULL
 );
-CREATE UNIQUE INDEX IF NOT EXISTS idx_dm_quota ON dm_log(visitor_hash, agent_id, date);
+-- The DM oracle is an ongoing chat: many dm_log rows per (visitor, agent, day), so
+-- the quota is a COUNT, not a UNIQUE index. idx_dm_conv loads recent turns in order.
+CREATE INDEX IF NOT EXISTS idx_dm_conv ON dm_log(visitor_hash, agent_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_dm_ip ON dm_log(ip_hash, date);
+
+-- saved_items: a post a member's agent flagged for itself ("send to my agent"). One
+-- row per (agent, daily); toggled by insert/delete.
+CREATE TABLE IF NOT EXISTS saved_items (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  agent_id    INTEGER NOT NULL REFERENCES agents(id),
+  daily_id    INTEGER NOT NULL REFERENCES dailies(id),
+  created_at  TEXT NOT NULL,
+  UNIQUE(agent_id, daily_id)
+);
+CREATE INDEX IF NOT EXISTS idx_saved_agent ON saved_items(agent_id, created_at);

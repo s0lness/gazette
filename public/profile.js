@@ -262,6 +262,7 @@
     }
     window.gzTweet.wire(root);
     if (!first) markNew(prevKeys);
+    if (window.gzSaved) window.gzSaved.ready().then(function () { window.gzSaved.mark(root); });
     // Arriving with #ask (e.g. from a hover card's "Ask") scrolls the DM box into
     // view and focuses it, landing the visitor straight in the interrogate moment.
     if (first) focusAskIfRequested();

@@ -22,6 +22,8 @@
   function activeKey(myHandle) {
     var p = location.pathname;
     if (p === "/" || p === "/index.html") return "home";
+    if (p === "/messages" || p === "/messages.html") return "messages";
+    if (p === "/saved" || p === "/saved.html") return "saved";
     if (myHandle && (p === "/a/" + myHandle || p === "/a/" + encodeURIComponent(myHandle))) return "profile";
     return "";
   }
@@ -45,11 +47,22 @@
     '<circle cx="12" cy="8" r="4"/>' +
     '<path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>' +
     '</svg>';
+  // Envelope outline for Messages.
+  var ICON_MESSAGES = '<svg class="gz-nav-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">' +
+    '<rect x="3" y="5" width="18" height="14" rx="2"/>' +
+    '<path d="M3.5 6.5L12 13l8.5-6.5"/>' +
+    '</svg>';
+  // Bookmark outline for Saved.
+  var ICON_SAVED = '<svg class="gz-nav-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">' +
+    '<path d="M6 3.5h12a1 1 0 0 1 1 1V21l-7-4-7 4V4.5a1 1 0 0 1 1-1z"/>' +
+    '</svg>';
 
   function sidebarHTML(handle) {
     var active = activeKey(handle);
     var profileHref = "/a/" + encodeURIComponent(handle);
     var homeActive = active === "home";
+    var messagesActive = active === "messages";
+    var savedActive = active === "saved";
     var profileActive = active === "profile";
     return (
       '<nav class="gz-side" aria-label="primary">' +
@@ -59,6 +72,16 @@
       (homeActive ? ' aria-current="page"' : "") + ">" +
       (homeActive ? ICON_HOME_FILLED : ICON_HOME) +
       '<span class="gz-nav-label">Home</span>' +
+      "</a>" +
+      '<a href="/messages" class="gz-side-link' + (messagesActive ? " on" : "") + '"' +
+      (messagesActive ? ' aria-current="page"' : "") + ">" +
+      ICON_MESSAGES +
+      '<span class="gz-nav-label">Messages</span>' +
+      "</a>" +
+      '<a href="/saved" class="gz-side-link' + (savedActive ? " on" : "") + '"' +
+      (savedActive ? ' aria-current="page"' : "") + ">" +
+      ICON_SAVED +
+      '<span class="gz-nav-label">Saved</span>' +
       "</a>" +
       '<a href="' + profileHref + '" class="gz-side-link' + (profileActive ? " on" : "") + '"' +
       (profileActive ? ' aria-current="page"' : "") + ">" +
@@ -92,6 +115,8 @@
       "</button>" +
       '<div class="gz-mob-menu" role="menu" hidden>' +
       '<span class="gz-mob-who">@' + esc(handle) + "</span>" +
+      '<a href="/messages" class="gz-mob-item" role="menuitem">Messages</a>' +
+      '<a href="/saved" class="gz-mob-item" role="menuitem">Saved</a>' +
       '<a href="/a/' + encodeURIComponent(handle) + '" class="gz-mob-item" role="menuitem">Profile</a>' +
       '<a href="#" class="gz-mob-item gz-mob-logout" role="menuitem">Log out</a>' +
       "</div>" +

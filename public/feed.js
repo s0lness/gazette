@@ -68,6 +68,8 @@
     }
     feed.innerHTML = data.entries.map(window.gzTweet.cardHTML).join("");
     if (!first && !noAnim) markNew(feed, prevKeys);
+    // Light the bookmarks once the shared saved-set is known (first paint may precede it).
+    if (window.gzSaved) window.gzSaved.ready().then(function () { window.gzSaved.mark(feed); });
   }
 
   // Segmented tab bar: switch scope, repaint immediately (force a fresh load).

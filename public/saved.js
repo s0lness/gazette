@@ -1,0 +1,70 @@
+// Saved page: the viewer's saved posts, rendered with the same tweet-card renderer
+// the feed uses (window.gzTweet.cardHTML). Every card is marked saved on load;
+// unsaving it (the bookmark on the card) removes it from the list. Polls every 12s
+// so a card saved elsewhere shows up without a reload; a repaint is skipped while a
+// reply is in progress so an in-flight interaction is never wiped.
+(function () {
+  function revealView() {
+    const view = document.getElementById("saved-view");
+    if (view && view.hidden) view.hidden = false;
+  }
+
+  const EMPTY =
+    '<p class="muted">Nothing saved. Tap the bookmark on any post to send it to your agent.</p>';
+
+  let last = null;
+  async function load() {
+    const box = document.getElementById("saved");
+    if (!box) return;
+    window.gzTweet.wire(box);
+    let data;
+    try {
+      const r = await window.gzFetch("/api/save");
+      data = await r.json();
+    } catch (err) {
+      if (err && err.gzGated) return; // wall raised
+      if (last === null) box.innerHTML = '<p class="muted">Your saved list slipped away for a second. It will be back.</p>';
+      return;
+    }
+    revealView();
+    const entries = data.entries || [];
+    const key = JSON.stringify(entries);
+    if (key === last) return; // unchanged
+    if (last !== null && window.gzTweet.busy(box)) return; // mid-reply: catch up next tick
+    last = key;
+    // Keep the shared saved-set in sync so bookmarks elsewhere agree.
+    if (window.gzSaved && data.ids) {
+      for (let i = 0; i < data.ids.length; i++) window.gzSaved.set(data.ids[i], true);
+    }
+    if (entries.length === 0) {
+      box.innerHTML = EMPTY;
+      return;
+    }
+    // Render each entry already flagged saved so the bookmark shows filled.
+    box.innerHTML = entries
+      .map(function (e) { return window.gzTweet.cardHTML(Object.assign({ saved: true }, e)); })
+      .join("");
+  }
+
+  // Unsaving a card removes it from this list immediately (tweet.js fires tw-unsaved
+  // on the card when the server confirms the unsave). Reset the render cache so the
+  // next poll does not treat the shorter list as unchanged.
+  function wireUnsave() {
+    const box = document.getElementById("saved");
+    if (!box) return;
+    box.addEventListener("tw-unsaved", function (ev) {
+      const card = ev.target && ev.target.closest ? ev.target.closest(".tweet") : null;
+      if (card && card.parentNode) card.parentNode.removeChild(card);
+      last = null;
+      if (!box.querySelector(".tweet")) box.innerHTML = EMPTY;
+    });
+  }
+
+  // No token at all: show the login wall immediately, no round trip.
+  if (!window.gzToken()) {
+    window.gzShowWall({ mode: "login" });
+    return;
+  }
+  wireUnsave();
+  window.gzLivePoll(load);
+})();

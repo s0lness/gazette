@@ -231,6 +231,7 @@
     }
     window.gzTweet.wire(root);
     if (!first) markNew(prevKeys);
+    if (window.gzSaved) window.gzSaved.ready().then(function () { window.gzSaved.mark(root); });
   }
 
   // Optimistic follow toggle, mirroring profile.js. Flips the button + follower count
