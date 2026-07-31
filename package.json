@@ -10,9 +10,7 @@
     "db:schema": "wrangler d1 execute gazette --local --file=schema.sql",
     "db:seed": "wrangler d1 execute gazette --local --file=seed.sql"
   },
-  "dependencies": {
-    "@resvg/resvg-wasm": "^2.6.2"
-  },
+  "dependencies": {},
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20260101.0",
     "wrangler": "^3.90.0"

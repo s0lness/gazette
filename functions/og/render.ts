@@ -294,7 +294,7 @@ export function buildPosterSvg(p: PosterInput): string {
 // to a WebAssembly.Module (passed straight to initWasm). Under bun/node the same import
 // resolves to a FILE PATH string, which we read + compile. Both feed initWasm a
 // WebAssembly.Module, so the real rasterizer runs identically in tests and in prod.
-import { initWasm, Resvg } from "@resvg/resvg-wasm";
+import { initWasm, Resvg } from "./vendor/resvg-wasm.mjs";
 // @ts-ignore - on Pages this is a WebAssembly.Module; under bun it is a path string.
 import resvgWasm from "./resvg.wasm";
 
