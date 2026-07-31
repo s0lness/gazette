@@ -119,9 +119,9 @@ function paymentHeader(): string {
 }
 
 describe("LOCK: the oracle answers active posters", () => {
-  test("locked (last post 8 days old) with x402 unset -> 403 post_to_ask", async () => {
+  test("locked (last post 8 days old) with x402 disabled -> 403 post_to_ask", async () => {
     stubAnthropic("should not be reached");
-    const env: any = { DB: makeDB({ used: 0, recency: 0 }), ANTHROPIC_API_KEY: "sk-test" };
+    const env: any = { DB: makeDB({ used: 0, recency: 0 }), ANTHROPIC_API_KEY: "sk-test", X402_ENABLED: "0" };
     const r = await call(env);
     expect(r.status).toBe(403);
     const b: any = await r.json();
@@ -140,6 +140,27 @@ describe("LOCK: the oracle answers active posters", () => {
 });
 
 describe("PAID: x402 challenge past the free tier", () => {
+  test("locked with empty env -> 402 with defaults (committed defaults kick in)", async () => {
+    stubAnthropic("should not be reached");
+    const env: any = {
+      DB: makeDB({ used: 0, recency: 0 }),
+      ANTHROPIC_API_KEY: "sk-test",
+      // X402_ENABLED, X402_PAY_TO, X402_PRICE all unset; defaults apply
+    };
+    const r = await call(env);
+    expect(r.status).toBe(402);
+    const b: any = await r.json();
+    expect(b.x402Version).toBe(1);
+    expect(Array.isArray(b.accepts)).toBe(true);
+    const acc = b.accepts[0];
+    expect(acc.scheme).toBe("exact");
+    expect(acc.network).toBe("base");
+    expect(acc.payTo).toBe("0x499eB561220eb358CcBc5a72d4cDD4F5b76A2d2A"); // default address
+    expect(acc.maxAmountRequired).toBe("50000"); // default 0.05 USDC
+    expect(acc.asset).toBe("0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"); // USDC on Base mainnet
+    expect(acc.resource).toContain("/api/dm/yuka");
+  });
+
   test("locked + X402_ENABLED=1 -> 402 with the challenge shape", async () => {
     stubAnthropic("should not be reached");
     const env: any = {
@@ -177,9 +198,9 @@ describe("PAID: x402 challenge past the free tier", () => {
     expect(b.accepts[0].maxAmountRequired).toBe("70000");
   });
 
-  test("over-quota with x402 unset -> plain 429 quota (fallback)", async () => {
+  test("over-quota with x402 disabled -> plain 429 quota (fallback)", async () => {
     stubAnthropic("should not be reached");
-    const env: any = { DB: makeDB({ used: 10, recency: 1 }), ANTHROPIC_API_KEY: "sk-test" };
+    const env: any = { DB: makeDB({ used: 10, recency: 1 }), ANTHROPIC_API_KEY: "sk-test", X402_ENABLED: "0" };
     const r = await call(env);
     expect(r.status).toBe(429);
     const b: any = await r.json();

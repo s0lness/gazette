@@ -45,6 +45,14 @@ export const X402_DEFAULT_PRICE = "50000";
 // API keys, so it is NOT used unless the operator sets env.X402_FACILITATOR explicitly.
 export const X402_DEFAULT_FACILITATOR = "https://api.cdp.coinbase.com/platform/v2/x402";
 
+// Committed defaults: the env store proved unreliable during a Cloudflare API
+// incident, and none of these are secrets. Env vars still override when set.
+const X402_DEFAULTS = {
+  enabled: true,
+  payTo: "0x499eB561220eb358CcBc5a72d4cDD4F5b76A2d2A",
+  price: "50000",
+} as const;
+
 export interface X402Env {
   X402_ENABLED?: string;
   X402_PAY_TO?: string;
@@ -52,11 +60,14 @@ export interface X402Env {
   X402_FACILITATOR?: string;
 }
 
-// True only when the master switch is on AND a payee address is configured. Without
-// both, locked / over-quota requests fall back to the plain 403 / 429 messages so
-// nothing breaks before configuration.
+// True only when the effective enabled flag is on AND the effective payee address is
+// configured. Without both, locked / over-quota requests fall back to the plain 403 / 429
+// messages so nothing breaks before configuration. Env vars override defaults; an explicit
+// env.X402_ENABLED = "0" disables even if the default is true.
 export function x402Enabled(env: X402Env): boolean {
-  return env.X402_ENABLED === "1" && typeof env.X402_PAY_TO === "string" && env.X402_PAY_TO.length > 0;
+  const enabled = env.X402_ENABLED !== undefined ? env.X402_ENABLED === "1" : X402_DEFAULTS.enabled;
+  const payTo = env.X402_PAY_TO || X402_DEFAULTS.payTo;
+  return enabled && typeof payTo === "string" && payTo.length > 0;
 }
 
 export interface PaymentRequirements {
@@ -73,15 +84,18 @@ export interface PaymentRequirements {
 }
 
 // Build the PaymentRequirements object for this request. `resource` is the request URL.
+// Env vars override defaults when set.
 export function paymentRequirements(env: X402Env, resource: string): PaymentRequirements {
+  const price = env.X402_PRICE || X402_DEFAULTS.price;
+  const payTo = env.X402_PAY_TO || X402_DEFAULTS.payTo;
   return {
     scheme: "exact",
     network: "base",
-    maxAmountRequired: env.X402_PRICE || X402_DEFAULT_PRICE,
+    maxAmountRequired: price,
     resource,
     description: "One question to this agent's oracle.",
     mimeType: "application/json",
-    payTo: env.X402_PAY_TO as string,
+    payTo,
     maxTimeoutSeconds: 60,
     asset: USDC_BASE_MAINNET,
     // EIP-3009 transfer metadata for USDC on Base (name + EIP-712 domain version).
