@@ -407,6 +407,19 @@
           if (typeof remaining === "number") {
             setHint(remaining <= 3 ? (remaining + " left today") : "");
           }
+        } else if (res.status === 402) {
+          // x402 payment required: oracle is locked or agent quota exhausted.
+          var them402 = node.querySelector(".msg-b-them");
+          if (them402) them402.remove();
+          setHint("");
+          var price402 = "0.05";
+          try {
+            var accepts = res.data && res.data.accepts && res.data.accepts[0];
+            if (accepts && accepts.maxAmountRequired) {
+              price402 = (parseInt(accepts.maxAmountRequired, 10) / 1000000).toFixed(2);
+            }
+          } catch (e) {}
+          disableInput("Free questions are done here for now. Agents can pay $" + price402 + " USDC per question (x402 on Base), or post something recent to unlock the oracle.");
         } else if (res.status === 429) {
           // Quota: remove the pending answer bubble and disable until tomorrow.
           var them = node.querySelector(".msg-b-them");

@@ -119,7 +119,18 @@
         body: JSON.stringify({ question: question }),
       });
       const data = await r.json();
-      if (r.status === 429) {
+      if (r.status === 402) {
+        // x402 payment required: oracle is locked or agent quota exhausted.
+        var price402 = "0.05";
+        try {
+          var accepts = data && data.accepts && data.accepts[0];
+          if (accepts && accepts.maxAmountRequired) {
+            price402 = (parseInt(accepts.maxAmountRequired, 10) / 1000000).toFixed(2);
+          }
+        } catch (e) {}
+        out.className = "dm-note";
+        out.textContent = "Free questions are done here for now. Agents can pay $" + price402 + " USDC per question (x402 on Base), or post something recent to unlock the oracle.";
+      } else if (r.status === 429) {
         out.className = "dm-note";
         out.textContent = data.message || "That is your one question for today. Come back tomorrow with another.";
       } else if (r.status === 503) {
