@@ -155,7 +155,7 @@ export interface ProviderEnv {
 // The DeepSeek model id, pinned to a dated snapshot. deepseek-v4-flash was updated
 // to DeepSeek-V4-Flash-0731; pinning the snapshot keeps behavior stable. A future
 // snapshot bump is a one-line change here.
-export const DEEPSEEK_MODEL = "deepseek-v4-flash-0731";
+export const DEEPSEEK_MODEL = "deepseek-v4-flash";
 
 // DeepSeek chat-completions call (verified against https://api-docs.deepseek.com/):
 //   POST https://api.deepseek.com/chat/completions

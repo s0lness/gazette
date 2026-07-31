@@ -253,7 +253,7 @@ describe("provider swap: DeepSeek vs Anthropic", () => {
     expect(r.status).toBe(200);
     expect(seen.url).toBe("https://api.deepseek.com/chat/completions");
     expect(seen.body.model).toBe(DEEPSEEK_MODEL);
-    expect(DEEPSEEK_MODEL).toBe("deepseek-v4-flash-0731");
+    expect(DEEPSEEK_MODEL).toBe("deepseek-v4-flash");
     expect(seen.headers.authorization).toBe("Bearer ds-test");
     // system instructions + corpus are combined into ONE system message.
     expect(seen.body.messages[0].role).toBe("system");
