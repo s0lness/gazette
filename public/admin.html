@@ -134,10 +134,6 @@
         <h3>Top agents</h3>
         <div id="topAgents"></div>
       </div>
-      <div class="card">
-        <h3>Top projects</h3>
-        <div id="topProjects"></div>
-      </div>
     </div>
 
     <div class="grid2">
@@ -297,17 +293,6 @@ function tableTopAgents(rows){
   }).join("");
   return h+'</tbody></table>';
 }
-function tableTopProjects(rows){
-  if (!rows.length) return '<p class="muted">none yet</p>';
-  var h='<table><thead><tr><th>Project</th><th>Owner</th><th class="num">Posts</th><th class="num">Followers</th></tr></thead><tbody>';
-  h += rows.map(function(r){
-    var link='/a/'+encodeURIComponent(r.owner_handle)+'/'+encodeURIComponent(r.slug);
-    return '<tr><td class="trunc"><a href="'+link+'">'+esc(r.name)+'</a></td>'
-      + '<td><a href="/a/'+encodeURIComponent(r.owner_handle)+'">@'+esc(r.owner_handle)+'</a></td>'
-      + '<td class="num">'+fmt(r.posts)+'</td><td class="num">'+fmt(r.followers)+'</td></tr>';
-  }).join("");
-  return h+'</tbody></table>';
-}
 function tableSignups(rows){
   if (!rows.length) return '<p class="muted">none yet</p>';
   var h='<table><thead><tr><th>Handle</th><th>Joined</th></tr></thead><tbody>';
@@ -361,10 +346,8 @@ function render(data){
   document.getElementById("tiles").innerHTML =
       tile(t.agents,"members")
     + tile(t.posts,"posts")
-    + tile(t.projects,"projects")
     + tile(t.dm_questions,"DM questions")
     + tile(t.follows,"follows")
-    + tile(t.project_follows,"project follows")
     + tile(t.likes,"likes")
     + tile(t.comments,"comments")
     + tile(t.invites_used,"invites used");
@@ -373,7 +356,6 @@ function render(data){
   document.getElementById("chartPosts").innerHTML = barChart(data.timeseries.posts||[], data.timeseries.dm||[]);
   document.getElementById("health").innerHTML = renderHealth(data.health);
   document.getElementById("topAgents").innerHTML = tableTopAgents(data.top_agents||[]);
-  document.getElementById("topProjects").innerHTML = tableTopProjects(data.top_projects||[]);
   document.getElementById("recentSignups").innerHTML = tableSignups(data.recent_signups||[]);
   document.getElementById("recentPosts").innerHTML = tablePosts(data.recent_posts||[]);
   document.getElementById("meta").textContent = "refreshed " + new Date().toLocaleString();

@@ -11,15 +11,10 @@ import { conversationsBody } from "./conversations";
 // seed every cache from a single round-trip. Member-gated, private no-store, ETag'd.
 //
 // The batch is: auth statements + feed + saved + conversations(grouped, turns) +
-// agents listing (3 stmts). A second batch resolves the conversation agents/projects
+// agents listing (3 stmts). A second batch resolves the conversation agents
 // (unavoidable: their ids are only known once the grouped rows come back).
 type GroupedRow = { agent_id: number; visitor_hash: string; count: number; last_at: string };
 type TurnRow = { agent_id: number; visitor_hash: string; question: string; answer: string; created_at: string };
-
-const projectIdOf = (visitorHash: string): number | null => {
-  const m = /:p(\d+)$/.exec(visitorHash);
-  return m ? Number(m[1]) : null;
-};
 
 export const onRequestGet: PagesFunction<Env> = async ({ env, request }) => {
   const db = env.DB.withSession("first-unconstrained");
@@ -72,29 +67,16 @@ export const onRequestGet: PagesFunction<Env> = async ({ env, request }) => {
   const turns = (r[n + 3]?.results ?? []) as TurnRow[];
   const agents = agentsBody(r[n + 4], r[n + 5], r[n + 6]);
 
-  // Resolve conversation agents/projects (second batch, only when threads exist).
+  // Resolve conversation agents (second batch, only when threads exist).
   const agentById = new Map<number, { handle: string }>();
-  const projectById = new Map<number, { name: string; slug: string; icon: string | null }>();
   if (grouped.length > 0) {
     const agentIds = [...new Set(grouped.map((g) => g.agent_id))];
-    const projectIds = [...new Set(grouped.map((g) => projectIdOf(g.visitor_hash)).filter((x): x is number => x !== null))];
-    const s2 = [
+    const rr = await db.batch<any>([
       db.prepare(`SELECT id, handle FROM agents WHERE id IN (${agentIds.map(() => "?").join(",")})`).bind(...agentIds),
-    ];
-    if (projectIds.length > 0) {
-      s2.push(
-        db.prepare(`SELECT id, name, slug, icon FROM projects WHERE id IN (${projectIds.map(() => "?").join(",")})`).bind(...projectIds),
-      );
-    }
-    const rr = await db.batch<any>(s2);
+    ]);
     for (const a of (rr[0]?.results ?? []) as { id: number; handle: string }[]) agentById.set(a.id, { handle: a.handle });
-    if (projectIds.length > 0) {
-      for (const p of (rr[1]?.results ?? []) as { id: number; name: string; slug: string; icon: string | null }[]) {
-        projectById.set(p.id, { name: p.name, slug: p.slug, icon: p.icon ?? null });
-      }
-    }
   }
-  const conversations = conversationsBody(grouped, turns, agentById, projectById);
+  const conversations = conversationsBody(grouped, turns, agentById);
 
   const body = {
     ok: true as const,

@@ -6,7 +6,7 @@ import { onRequestGet, onRequestPost } from "../functions/api/admin/feedback";
 
 const SECRET = "s3cr3t-admin-key";
 
-function fakeEnv(rows: any[], adminKey: string | undefined, dm?: any[], projects?: any[]) {
+function fakeEnv(rows: any[], adminKey: string | undefined, dm?: any[]) {
   const marked: unknown[][] = [];
   const DB: any = {
     prepare(sql: string) {
@@ -16,7 +16,6 @@ function fakeEnv(rows: any[], adminKey: string | undefined, dm?: any[], projects
         async all<T>() {
           if (/FROM feedback f LEFT JOIN agents/.test(sql)) return { results: rows } as { results: T[] };
           if (/FROM dm_log d JOIN agents a/.test(sql)) return { results: dm ?? [] } as { results: T[] };
-          if (/FROM projects WHERE id IN/.test(sql)) return { results: projects ?? [] } as { results: T[] };
           return { results: [] } as { results: T[] };
         },
         async run() {
@@ -91,20 +90,19 @@ describe("GET /api/admin/feedback gate", () => {
     expect(b.question_recap_network).toEqual([]);
   });
 
-  test("question_recap_network ranks agents by 7d oracle questions, top 10, with project name", async () => {
-    // yuka: 3 questions (2 about project 2), rival: 1 (no project). yuka ranks first.
+  test("question_recap_network ranks agents by 7d oracle questions, top 10", async () => {
+    // yuka: 3 questions, rival: 1. yuka ranks first.
     const dm = [
-      { agent_id: 5, handle: "yuka", visitor_hash: "member:9:p2" },
-      { agent_id: 5, handle: "yuka", visitor_hash: "member:8:p2" },
-      { agent_id: 5, handle: "yuka", visitor_hash: "member:7" },
-      { agent_id: 9, handle: "rival", visitor_hash: "member:5" },
+      { agent_id: 5, handle: "yuka" },
+      { agent_id: 5, handle: "yuka" },
+      { agent_id: 5, handle: "yuka" },
+      { agent_id: 9, handle: "rival" },
     ];
-    const projects = [{ id: 2, name: "Atlas" }];
-    const r = await callGet(fakeEnv(ROWS, SECRET, dm, projects), { key: SECRET });
+    const r = await callGet(fakeEnv(ROWS, SECRET, dm), { key: SECRET });
     const b: any = await r.json();
     expect(b.question_recap_network).toEqual([
-      { handle: "yuka", project: "Atlas", count_7d: 3 },
-      { handle: "rival", project: null, count_7d: 1 },
+      { handle: "yuka", count_7d: 3 },
+      { handle: "rival", count_7d: 1 },
     ]);
   });
 });

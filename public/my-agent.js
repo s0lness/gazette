@@ -70,10 +70,9 @@
   function dmRowHTML(m) {
     var when = m.created_at ? window.gzTime(m.created_at) : "";
     var from = m.asker_handle ? "@" + esc(m.asker_handle) : "someone";
-    var proj = m.project ? ' <span class="ma-chip">' + esc(m.project) + "</span>" : "";
     return (
       '<div class="ma-dm">' +
-      '<div class="ma-dm-head"><span class="ma-dm-from">' + from + proj + "</span>" +
+      '<div class="ma-dm-head"><span class="ma-dm-from">' + from + "</span>" +
       (when ? '<span class="ma-when">' + when + "</span>" : "") + "</div>" +
       '<div class="ma-dm-q">' + esc(m.question || "") + "</div>" +
       '<div class="ma-dm-a md">' + window.gzMarkdown(m.answer || "") + "</div>" +
@@ -86,7 +85,7 @@
     if (!recap.length) return "";
     var rows = recap
       .map(function (g) {
-        var label = g.project ? esc(g.project) : "General";
+        var label = "Questions";
         var latest = (g.latest || [])
           .map(function (q) { return '<li class="ma-ask-q">' + esc(q) + "</li>"; })
           .join("");

@@ -86,8 +86,8 @@ describe("GET /api/<token>/activity", () => {
       followers: [{ handle: "newbie", created_at: "2026-07-30T08:00:00Z" }],
       questionsToday: 4,
       saved: [
-        { daily_id: 20, handle: "other", headline: "a neat trick", date: "2026-07-29", body_md: "## Shipped\nstuff", saved_at: "2026-07-30T07:00:00Z", project_name: "Yuka", project_slug: "yuka" },
-        { daily_id: 21, handle: "solo", headline: "no project", date: "2026-07-29", body_md: "body", saved_at: "2026-07-30T07:30:00Z", project_name: null, project_slug: null },
+        { daily_id: 20, handle: "other", headline: "a neat trick", date: "2026-07-29", body_md: "## Shipped\nstuff", saved_at: "2026-07-30T07:00:00Z" },
+        { daily_id: 21, handle: "solo", headline: "another", date: "2026-07-29", body_md: "body", saved_at: "2026-07-30T07:30:00Z" },
       ],
     });
     const r = await call(DB, AGENT.token, "2026-07-01T00:00:00Z");
@@ -104,10 +104,10 @@ describe("GET /api/<token>/activity", () => {
     expect(b.saved).toHaveLength(2);
     expect(b.saved[0]).toEqual({
       daily_id: 20, handle: "other", headline: "a neat trick", date: "2026-07-29",
-      body_md: "## Shipped\nstuff", project: { name: "Yuka", slug: "yuka" }, saved_at: "2026-07-30T07:00:00Z",
+      body_md: "## Shipped\nstuff", saved_at: "2026-07-30T07:00:00Z",
     });
-    // A saved daily with no project yields project: null.
-    expect(b.saved[1].project).toBe(null);
+    // Saved rows carry no project field anymore.
+    expect(b.saved[1].project).toBeUndefined();
     // corrections defaults to [] when none are flagged.
     expect(b.corrections).toEqual([]);
   });

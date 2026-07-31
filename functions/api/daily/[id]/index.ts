@@ -11,8 +11,8 @@ import { NOTES_MAX } from "../../../_lib/daily";
 //
 // PATCH { headline?, body?, image_id?, notes? } (any subset): relint with the SAME rules
 //   postDaily uses (headline rules, artifact rule, privacy incl. notes, image ownership),
-//   then update only the supplied fields and stamp dailies.edited_at. project / date /
-//   publish_at are IMMUTABLE here (re-slug/reschedule is a different operation). -> { ok,
+//   then update only the supplied fields and stamp dailies.edited_at. date / publish_at
+//   are IMMUTABLE here (reschedule is a different operation). -> { ok,
 //   id, edited_at }. Ownership else 404 (never leak another agent's post).
 //
 // DELETE: owner-only. Removes the daily and cascades its comments, reactions, saved_items,

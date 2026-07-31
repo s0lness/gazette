@@ -105,10 +105,10 @@ describe("GET /api/me/agent-activity", () => {
           ];
         }
         if (/FROM dm_log\s+WHERE agent_id/.test(sql)) {
+          // A legacy ":p2" suffix on the hash is ignored; asker still resolves to 9.
           return [{ visitor_hash: "member:9:p2", question: "how?", answer: "like this", created_at: "2026-07-30T08:00:00Z" }];
         }
         if (/FROM agents WHERE id IN/.test(sql)) return [{ id: 9, handle: "rival" }];
-        if (/FROM projects WHERE id IN/.test(sql)) return [{ id: 2, name: "Atlas" }];
         return null;
       },
     });
@@ -124,12 +124,13 @@ describe("GET /api/me/agent-activity", () => {
     expect(b.comments[0].correction).toEqual({ note: "be nicer", created_at: "2026-07-30T10:00:00Z" });
     expect(b.comments[1].correction).toBe(null);
     expect(b.comments[1].edited_at).toBe("2026-07-29T12:00:00Z");
-    // dm: asker resolved from "member:9", project from ":p2".
+    // dm: asker resolved from "member:9". No project field anymore.
     expect(b.dm).toHaveLength(1);
-    expect(b.dm[0]).toMatchObject({ asker_handle: "rival", project: "Atlas", question: "how?", answer: "like this" });
+    expect(b.dm[0]).toMatchObject({ asker_handle: "rival", question: "how?", answer: "like this" });
+    expect(b.dm[0].project).toBeUndefined();
   });
 
-  test("question_recap groups the dm log by project with 7d + total counts", async () => {
+  test("question_recap rolls up the whole dm log with 7d + total counts", async () => {
     const now = Date.now();
     const iso = (msAgo: number) => new Date(now - msAgo).toISOString();
     const { DB } = makeDB({
@@ -140,32 +141,26 @@ describe("GET /api/me/agent-activity", () => {
       select: (sql) => {
         if (/FROM dm_log\s+WHERE agent_id/.test(sql)) {
           return [
-            // project 2 (Atlas): 2 this week + 1 older = 3 total
-            { visitor_hash: "member:9:p2", question: "atlas q3 (newest)", answer: "a", created_at: iso(1 * 3600000) },
-            { visitor_hash: "member:8:p2", question: "atlas q2", answer: "a", created_at: iso(2 * 86400000) },
-            { visitor_hash: "member:7:p2", question: "atlas q1 (old)", answer: "a", created_at: iso(10 * 86400000) },
-            // no project suffix -> General group: 1 this week
-            { visitor_hash: "member:9", question: "general q", answer: "a", created_at: iso(3 * 3600000) },
+            // 3 this week + 1 older = 4 total.
+            { visitor_hash: "member:9", question: "q4 (newest)", answer: "a", created_at: iso(1 * 3600000) },
+            { visitor_hash: "member:8", question: "q3", answer: "a", created_at: iso(2 * 86400000) },
+            { visitor_hash: "member:9", question: "q2", answer: "a", created_at: iso(3 * 3600000) },
+            { visitor_hash: "member:7", question: "q1 (old)", answer: "a", created_at: iso(10 * 86400000) },
           ];
         }
         if (/FROM agents WHERE id IN/.test(sql)) return [{ id: 9, handle: "rival" }, { id: 8, handle: "peer" }, { id: 7, handle: "old" }];
-        if (/FROM projects WHERE id IN/.test(sql)) return [{ id: 2, name: "Atlas" }];
         return null;
       },
     });
     const r = await agentActivityGet({ env: { DB }, request: req("https://g/api/me/agent-activity", "GET", undefined, OWNER_HDR) } as any);
     const b: any = await r.json();
     expect(Array.isArray(b.question_recap)).toBe(true);
-    // Atlas first (higher total), then General.
-    const atlas = b.question_recap.find((g: any) => g.project === "Atlas");
-    const general = b.question_recap.find((g: any) => g.project === null);
-    expect(atlas).toMatchObject({ project: "Atlas", count_7d: 2, count_total: 3 });
-    expect(general).toMatchObject({ project: null, count_7d: 1, count_total: 1 });
+    expect(b.question_recap).toHaveLength(1);
+    const g = b.question_recap[0];
+    expect(g).toMatchObject({ count_7d: 3, count_total: 4 });
     // latest is newest-first, capped at 5.
-    expect(atlas.latest[0]).toBe("atlas q3 (newest)");
-    expect(atlas.latest.length).toBeLessThanOrEqual(5);
-    // Sorted by count_total desc.
-    expect(b.question_recap[0].project).toBe("Atlas");
+    expect(g.latest[0]).toBe("q4 (newest)");
+    expect(g.latest.length).toBeLessThanOrEqual(5);
   });
 
   test("401 gated without a credential", async () => {

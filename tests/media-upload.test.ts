@@ -1,15 +1,12 @@
 import { expect, test, describe } from "bun:test";
 import { onRequestPost as masterImage } from "../functions/api/[token]/image";
-import { onRequestPost as projectImage } from "../functions/api/p/[ptoken]/image";
 
-// Media upload (image + video) on BOTH the master-token route and the write-only
-// project-token route. A fake D1 answers the agent/token lookups; a fake R2 (IMG)
-// records what was stored so the test can assert the content-type + key shape. Video
-// ids are PREFIXED "v"; images stay 32 hex.
+// Media upload (image + video) on the master-token route. A fake D1 answers the
+// agent/token lookups; a fake R2 (IMG) records what was stored so the test can assert
+// the content-type + key shape. Video ids are PREFIXED "v"; images stay 32 hex.
 
 const MASTER = "tok-master";
 const AGENT = { id: 2, handle: "yuka", display_name: "Yuka", bio: null, token: MASTER, created_at: "x", last_posted_at: null };
-const GZP = "gzp_0123456789abcdef0123456789abcdef";
 
 function makeEnv() {
   const puts: Array<{ key: string; contentType: string; bytes: number }> = [];
@@ -21,17 +18,6 @@ function makeEnv() {
         async first<T>(): Promise<T | null> {
           if (/SELECT \* FROM agents WHERE token/.test(sql)) return (bound[0] === MASTER ? AGENT : null) as T | null;
           if (/SELECT \* FROM agents WHERE id/.test(sql)) return (bound[0] === AGENT.id ? AGENT : null) as T | null;
-          if (/FROM project_tokens pt JOIN projects p/.test(sql)) {
-            if (bound[0] !== GZP) return null;
-            return {
-              token_id: 1,
-              revoked_at: null,
-              project_id: 5,
-              project_name: "Yuka",
-              project_slug: "yuka",
-              agent_id: AGENT.id,
-            } as T;
-          }
           return null;
         },
         async all<T>(): Promise<{ results: T[] }> { return { results: [] } as any; },
@@ -191,53 +177,6 @@ describe("master-token media upload POST /api/<token>/image", () => {
       const b: any = await r.json();
       expect(b.code).toBe("demo_not_selfcontained");
     }
-  });
-});
-
-describe("project-token media upload POST /api/p/<gzp>/image", () => {
-  test("accepts a video/mp4 and returns a v-prefixed id", async () => {
-    const { env, puts } = makeEnv();
-    const r = await projectImage({ env, request: req(`https://x/api/p/${GZP}/image`, "video/mp4", 1000), params: { ptoken: GZP } } as any);
-    expect(r.status).toBe(200);
-    const b: any = await r.json();
-    expect(b.image_id).toMatch(/^v[0-9a-f]{32}$/);
-    expect(puts[0].contentType).toBe("video/mp4");
-  });
-
-  test("rejects an oversized video with 413", async () => {
-    const { env } = makeEnv();
-    const r = await projectImage({ env, request: req(`https://x/api/p/${GZP}/image`, "video/webm", 8 * 1024 * 1024 + 1), params: { ptoken: GZP } } as any);
-    expect(r.status).toBe(413);
-  });
-
-  test("rejects a wrong type with 415", async () => {
-    const { env } = makeEnv();
-    const r = await projectImage({ env, request: req(`https://x/api/p/${GZP}/image`, "application/pdf", 100), params: { ptoken: GZP } } as any);
-    expect(r.status).toBe(415);
-  });
-
-  test("accepts a GIF (image kind), audio (a prefix), and a demo (d prefix)", async () => {
-    const { env: e1 } = makeEnv();
-    const gif = await projectImage({ env: e1, request: req(`https://x/api/p/${GZP}/image`, "image/gif", 1000), params: { ptoken: GZP } } as any);
-    expect(gif.status).toBe(200);
-    expect((await gif.json() as any).image_id).toMatch(/^[0-9a-f]{32}$/);
-
-    const { env: e2 } = makeEnv();
-    const aud = await projectImage({ env: e2, request: req(`https://x/api/p/${GZP}/image`, "audio/wav", 1000), params: { ptoken: GZP } } as any);
-    expect(aud.status).toBe(200);
-    expect((await aud.json() as any).image_id).toMatch(/^a[0-9a-f]{32}$/);
-
-    const { env: e3 } = makeEnv();
-    const demo = await projectImage({ env: e3, request: new Request(`https://x/api/p/${GZP}/image`, { method: "POST", headers: { "content-type": "text/html" }, body: new TextEncoder().encode("<h1>hi</h1>") }), params: { ptoken: GZP } } as any);
-    expect(demo.status).toBe(200);
-    expect((await demo.json() as any).image_id).toMatch(/^d[0-9a-f]{32}$/);
-  });
-
-  test("rejects a demo referencing document.cookie with 422", async () => {
-    const { env } = makeEnv();
-    const r = await projectImage({ env, request: new Request(`https://x/api/p/${GZP}/image`, { method: "POST", headers: { "content-type": "text/html" }, body: new TextEncoder().encode("<script>document.cookie</script>") }), params: { ptoken: GZP } } as any);
-    expect(r.status).toBe(422);
-    expect((await r.json() as any).code).toBe("demo_not_selfcontained");
   });
 });
 

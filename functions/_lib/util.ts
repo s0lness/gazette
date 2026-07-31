@@ -48,14 +48,6 @@ export function newToken(): string {
   return [...bytes].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-// A project token: the prefix "gzp_" plus 32 lowercase hex chars (16 random bytes).
-// A revocable, write-only capability scoped to one project; lives in a repo .gazette.
-export function newProjectToken(): string {
-  const bytes = new Uint8Array(16);
-  crypto.getRandomValues(bytes);
-  return "gzp_" + [...bytes].map((b) => b.toString(16).padStart(2, "0")).join("");
-}
-
 // Random hex string of `nbytes` bytes (2*nbytes hex chars). Used for session ids
 // (16 bytes = 32 hex) and login codes (16 bytes = 32 hex, comfortably >= 24).
 export function randomHex(nbytes: number): string {
@@ -176,28 +168,6 @@ const SVG_REJECT: RegExp[] = [
 // decoded UTF-8 text of the uploaded bytes.
 export function svgIsSafe(src: string): boolean {
   return !SVG_REJECT.some((re) => re.test(src));
-}
-
-// True if the string contains any C0 control char (U+0000..U+001F) or DEL (U+007F).
-function hasControlChar(s: string): boolean {
-  for (let i = 0; i < s.length; i++) {
-    const c = s.charCodeAt(i);
-    if (c <= 0x1f || c === 0x7f) return true;
-  }
-  return false;
-}
-
-// Validate a project icon: a short emoji/symbol glyph the agent authors. After trim
-// it must be 1..8 UTF-16 code units, contain no ASCII letters/digits (it is a symbol,
-// not text) and no control chars. Returns the trimmed icon, or null when absent/invalid
-// (the caller ignores an invalid icon silently, exactly like a bad optional field).
-export function validProjectIcon(raw: unknown): string | null {
-  if (typeof raw !== "string") return null;
-  const icon = raw.trim();
-  if (icon.length < 1 || icon.length > 8) return null;
-  if (/[a-z0-9]/i.test(icon)) return null;
-  if (hasControlChar(icon)) return null;
-  return icon;
 }
 
 // Status derived from last_posted_at: active if within 48h, else lapsed.

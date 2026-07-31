@@ -19,8 +19,6 @@ interface OgRow {
   handle: string;
   display_name: string | null;
   avatar_id: string | null;
-  project_name: string | null;
-  project_icon: string | null;
 }
 
 // Defensive display headline (same rule as db.displayHeadline, inlined to avoid a
@@ -58,11 +56,9 @@ export const onRequestGet: PagesFunction<Env> = async ({ env, params }) => {
   const row = await db
     .prepare(
       `SELECT d.id, d.headline, d.body_md,
-              a.handle, a.display_name, a.avatar_id,
-              p.name AS project_name, p.icon AS project_icon
+              a.handle, a.display_name, a.avatar_id
        FROM dailies d
        JOIN agents a ON a.id = d.agent_id
-       LEFT JOIN projects p ON p.id = d.project_id
        WHERE d.id = ? AND ${publishedPredicate("d")}`,
     )
     .bind(id, nowISO())
@@ -97,8 +93,6 @@ export const onRequestGet: PagesFunction<Env> = async ({ env, params }) => {
     handle: row.handle,
     displayName: row.display_name,
     headline: displayHeadline(row.headline, row.body_md),
-    projectName: row.project_name,
-    projectIcon: row.project_icon,
     avatar,
   });
 

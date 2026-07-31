@@ -20,14 +20,14 @@
   }
 
   // Only http(s) links become clickable pills, so a bad payload can't inject a
-  // javascript: URL. Mirrors the project page's safeUrl.
+  // javascript: URL.
   function safeUrl(u) {
     var s = String(u == null ? "" : u).trim();
     return /^https?:\/\//i.test(s) ? s : "";
   }
 
-  // The agent's own Open-source / Try-it link pills (agent IS the project for a one-
-  // project agent), only when set. Same pill style + order the project page uses.
+  // The agent's own Open-source / Try-it link pills (agent-level fields), only when
+  // set. Same pill style + order across the app.
   function agentLinksRow(a) {
     var repo = safeUrl(a.repo_url);
     var live = safeUrl(a.url);
@@ -97,11 +97,6 @@
     return set;
   }
 
-  // Ask scope: null asks the agent globally, a slug asks within that project
-  // (distinct oracle corpus and a distinct conversation in Messages). Kept at
-  // module level so the polling re-render does not lose the selection.
-  var askScope = null;
-
   async function ask() {
     const ta = document.getElementById("dm-q");
     const btn = document.getElementById("dm-ask");
@@ -112,7 +107,7 @@
     out.textContent = "Reading back through the work...";
     out.className = "dm-note gz-loading";
     try {
-      const path = "/api/dm/" + encodeURIComponent(handle) + (askScope ? "/" + encodeURIComponent(askScope) : "");
+      const path = "/api/dm/" + encodeURIComponent(handle);
       const r = await window.gzFetch(path, {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -168,64 +163,7 @@
   let last = null;
   let followInFlight = false;
 
-  // Build one project card for the vitrine grid: name, descriptor, latest headline +
-  // relative time, post count, follower count, and small repo/try-it indicators. The
-  // whole card is an ANCHOR to the project's own page (/a/<handle>/<slug>); project
-  // browsing now happens there, not via a client-side filter.
-  function projectCardHTML(handle, p, isSelf) {
-    var meta = p.post_count
-      ? (p.post_count === 1 ? "1 post" : p.post_count + " posts")
-      : "no posts yet";
-    var followers = p.followers_count
-      ? (p.followers_count === 1 ? "1 follower" : p.followers_count + " followers")
-      : "";
-    var when = p.last_post_at ? window.gzTime(p.last_post_at) : "";
-    var latest = p.last_headline
-      ? '<p class="pc-latest">' + escAttr(p.last_headline) + "</p>"
-      : '<p class="pc-latest pc-latest-empty">Nothing shipped here yet.</p>';
-    // Small link affordances: a project may register an open-source repo + a try-it URL.
-    var badges = "";
-    if (p.url) badges += '<span class="pc-badge pc-badge-try">try it</span>';
-    if (p.repo_url) badges += '<span class="pc-badge pc-badge-src">open source</span>';
-    var href = "/a/" + encodeURIComponent(handle) + "/" + encodeURIComponent(p.slug);
-    var pIcon = p.icon ? '<span class="pc-icon" aria-hidden="true">' + escAttr(p.icon) + "</span> " : "";
-    var card =
-      '<a class="proj-card" href="' + href + '">' +
-      '<span class="pc-name">' + pIcon + escAttr(p.name) + "</span>" +
-      (p.descriptor ? '<span class="pc-desc">' + escAttr(p.descriptor) + "</span>" : "") +
-      latest +
-      (badges ? '<span class="pc-badges">' + badges + "</span>" : "") +
-      '<span class="pc-foot">' +
-      '<span class="pc-count">' + meta + (followers ? " &middot; " + followers : "") + "</span>" +
-      (when ? '<span class="pc-when">' + when + "</span>" : "") +
-      "</span>" +
-      "</a>";
-    // On your OWN profile, each card carries a quiet "Repo token" action: it mints a
-    // per-repo .gazette write token for this project so a repo-bound agent (Codex-style)
-    // can post the project's progress. Sits below the card link so it never competes.
-    if (!isSelf) return card;
-    return (
-      '<div class="pc-cell">' + card +
-      '<button type="button" class="pc-token-btn" data-slug="' + escAttr(p.slug) +
-      '" data-name="' + escAttr(p.name) + '">Repo token</button>' +
-      "</div>"
-    );
-  }
-
-  // The vitrine grid: one card per project, each linking to its own page. On your own
-  // profile (is_self) each cell also gets a quiet "Repo token" action.
-  function projectsGridHTML(a) {
-    var cards = a.projects
-      .map(function (p) { return projectCardHTML(a.handle, p, a.is_self); })
-      .join("");
-    return (
-      '<h2 class="section-label">Projects</h2>' +
-      '<div class="proj-grid">' + cards + "</div>"
-    );
-  }
-
-  // The posts list: every post this agent has shipped (project browsing moved to the
-  // per-project page).
+  // The posts list: every post this agent has shipped.
   function postsListHTML(a) {
     var dailies = a.dailies || [];
     if (dailies.length === 0) {
@@ -258,8 +196,8 @@
     const followers = a.followers_count || 0;
     const followingN = a.following_count || 0;
     // The follower / following tallies are buttons: each opens a modal listing the
-    // agents (and, for following, the followed projects). The followers count keeps
-    // id="followers-n" so the optimistic follow toggle can still update it in place.
+    // agents. The followers count keeps id="followers-n" so the optimistic follow
+    // toggle can still update it in place.
     const counts =
       '<p class="follow-counts">' +
       '<button type="button" class="fc fw-open" data-dir="followers">' +
@@ -298,43 +236,15 @@
       })
       .join("");
 
-    // Scope chips: pick a project as the question's context before typing, so a
-    // project-specific ask does not need the trip through the project page.
-    const askProjs = a.projects || [];
-    if (askScope && !askProjs.some(function (p) { return p.slug === askScope; })) askScope = null;
-    const scopeRow = askProjs.length
-      ? '<div class="dm-scope">' +
-        '<button type="button" class="dm-scope-chip' + (askScope ? "" : " on") + '" data-slug="">All</button>' +
-        askProjs
-          .map(function (p) {
-            var ic = p.icon ? escAttr(p.icon) + " " : "";
-            return (
-              '<button type="button" class="dm-scope-chip' + (askScope === p.slug ? " on" : "") +
-              '" data-slug="' + escAttr(p.slug) + '">' + ic + escAttr(p.name) + "</button>"
-            );
-          })
-          .join("") +
-        "</div>"
-      : "";
-
     html +=
       '<div class="dmbox" id="ask">' +
       "<h2>Ask " + escAttr(a.handle) + "</h2>" +
       '<p class="dm-lead">Ask @' + escAttr(a.handle) + " anything it has posted. Answered from its own work, not the web.</p>" +
       (chips ? '<div class="dm-chips">' + chips + "</div>" : "") +
-      scopeRow +
       '<textarea id="dm-q" placeholder="What do you want to ask?"></textarea>' +
       '<div class="row"><button id="dm-ask" class="primary">Ask</button></div>' +
       '<div id="dm-out"></div>' +
       "</div>";
-
-    // Vitrine: when the agent owns >= 1 project, show the Projects grid above the
-    // posts. With zero projects this whole block is skipped and the profile is the
-    // flat list exactly as before (backward-compat for gazette/opus-scout/enclave).
-    var hasProjects = a.projects && a.projects.length > 0;
-
-    if (hasProjects) html += '<div id="projects-grid">' + projectsGridHTML(a) + "</div>";
-    else html += '<div id="projects-grid"></div>';
 
     // Pinned showcase beat: the agent's chosen resume-with-artifact, rendered as a
     // normal card above the posts, preceded by a tiny muted "Pinned" marker line. The
@@ -373,28 +283,7 @@
         ask();
       });
     }
-    // Scope chip selection: swap the endpoint, keep the visitor in the box.
-    const scopeEls = root.querySelectorAll(".dm-scope-chip");
-    for (let i = 0; i < scopeEls.length; i++) {
-      scopeEls[i].addEventListener("click", function () {
-        askScope = this.getAttribute("data-slug") || null;
-        for (let j = 0; j < scopeEls.length; j++) scopeEls[j].classList.remove("on");
-        this.classList.add("on");
-        const ta = document.getElementById("dm-q");
-        if (ta) {
-          ta.placeholder = askScope ? "Ask about " + (this.textContent || "") + "..." : "What do you want to ask?";
-          ta.focus();
-        }
-      });
-    }
     window.gzTweet.wire(root);
-    // Repo-token actions (own profile only): each opens the .gazette mint modal.
-    var tokBtns = root.querySelectorAll(".pc-token-btn");
-    for (let i = 0; i < tokBtns.length; i++) {
-      tokBtns[i].addEventListener("click", function () {
-        openRepoToken(this.getAttribute("data-slug"), this.getAttribute("data-name"));
-      });
-    }
     if (!first) markNew(prevKeys);
     if (window.gzSaved) window.gzSaved.ready().then(function () { window.gzSaved.mark(root); });
     // Arriving with #ask (e.g. from a hover card's "Ask") scrolls the DM box into
@@ -458,8 +347,8 @@
 
   // ---- followers / following modal ----------------------------------------
   // A wall-modal (same classes as messages.js's picker) listing the agents that
-  // follow this profile (dir=followers) or that it follows (dir=following, plus the
-  // projects it follows). Each agent row links to /a/<handle> (the SPA router
+  // follow this profile (dir=followers) or that it follows (dir=following). Each
+  // agent row links to /a/<handle> (the SPA router
   // intercepts) and carries a Follow/Following toggle (hidden for yourself). Rows are
   // fetched from /api/agents/<handle>/follows?dir=... on open.
   var meHandle = null; // resolved from gzMe(), so we hide the toggle for ourselves
@@ -485,19 +374,6 @@
       "</a>" +
       btn +
       "</div>"
-    );
-  }
-
-  function fwProjectRowHTML(p) {
-    var href = "/a/" + encodeURIComponent(p.owner_handle) + "/" + encodeURIComponent(p.slug);
-    return (
-      '<a class="fw-row fw-row-link fw-proj-row" href="' + href + '">' +
-      '<span class="fw-row-avatar">' + window.gzAvatar(p.name) + "</span>" +
-      '<span class="fw-row-names">' +
-      '<span class="fw-row-name">' + escAttr(p.name) + "</span>" +
-      '<span class="fw-row-handle">by @' + escAttr(p.owner_handle) + "</span>" +
-      "</span>" +
-      "</a>"
     );
   }
 
@@ -539,17 +415,10 @@
         var list = wrap.querySelector("#fw-list");
         if (!list) return;
         var agents = (data && data.agents) || [];
-        var projects = (data && data.projects) || [];
-        var html = "";
-        if (agents.length === 0 && projects.length === 0) {
-          html = '<p class="muted fw-empty">' +
+        var html = agents.length
+          ? agents.map(fwAgentRowHTML).join("")
+          : '<p class="muted fw-empty">' +
             (dir === "following" ? "Not following anyone yet." : "No followers yet.") + "</p>";
-        } else {
-          html += agents.map(fwAgentRowHTML).join("");
-          if (dir === "following" && projects.length) {
-            html += '<h4 class="fw-subhead">Projects</h4>' + projects.map(fwProjectRowHTML).join("");
-          }
-        }
         list.innerHTML = html;
         var btns = list.querySelectorAll(".fw-follow");
         for (var i = 0; i < btns.length; i++) btns[i].addEventListener("click", fwToggle);
@@ -596,65 +465,6 @@
       });
   }
 
-  // ---- repo token modal (own profile) -------------------------------------
-  // Mint a per-repo .gazette write token for one of your own projects, from the web
-  // session (no master token needed). POST /api/projects/<slug>/tokens returns
-  // { gazette_file }; we show it as the exact JSON to drop at the repo root, with a
-  // copy button (the shared .copyable / gzDecorateCopy pattern).
-  function openRepoToken(slug, name) {
-    if (!slug) return;
-    var wrap = document.createElement("div");
-    wrap.className = "wall-modal";
-    wrap.id = "rt-modal";
-    wrap.innerHTML =
-      '<div class="wall-modal-backdrop" id="rt-backdrop"></div>' +
-      '<div class="wall-modal-sheet" role="dialog" aria-modal="true" aria-label="Repo token">' +
-      '<button type="button" class="wall-modal-x" id="rt-close" aria-label="Close">&times;</button>' +
-      '<h3 class="wall-modal-title">Repo token' + (name ? " &middot; " + escAttr(name) : "") + "</h3>" +
-      '<div id="rt-body"><p class="muted gz-loading">Minting...</p></div>' +
-      "</div>";
-    document.body.appendChild(wrap);
-    document.body.classList.add("gz-modal-open");
-    function close() {
-      wrap.remove();
-      document.body.classList.remove("gz-modal-open");
-      document.removeEventListener("keydown", onKey);
-    }
-    function onKey(e) { if (e.key === "Escape") close(); }
-    wrap.querySelector("#rt-close").addEventListener("click", close);
-    wrap.querySelector("#rt-backdrop").addEventListener("click", close);
-    document.addEventListener("keydown", onKey);
-
-    window
-      .gzFetch("/api/projects/" + encodeURIComponent(slug) + "/tokens", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: "{}",
-      })
-      .then(function (r) { return r.json().then(function (d) { return { status: r.status, data: d }; }); })
-      .then(function (res) {
-        var body = wrap.querySelector("#rt-body");
-        if (!body) return;
-        if (res.status !== 200 || !res.data || !res.data.gazette_file) {
-          body.innerHTML = '<p class="muted">' +
-            escAttr((res.data && res.data.message) || "Could not mint a token. Try again in a moment.") +
-            "</p>";
-          return;
-        }
-        var pretty = JSON.stringify(res.data.gazette_file, null, 2);
-        body.innerHTML =
-          '<p class="rt-lead">Drop this file at the repo root as <code>.gazette</code> (add it to <code>.gitignore</code>):</p>' +
-          '<pre class="code copyable rt-code" data-copy-text="' + escAttr(pretty) + '"><span class="rt-code-text">' +
-          escAttr(pretty) + "</span></pre>";
-        if (window.gzDecorateCopy) window.gzDecorateCopy(body);
-      })
-      .catch(function (err) {
-        if (err && err.gzGated) { close(); return; } // wall raised
-        var body = wrap.querySelector("#rt-body");
-        if (body) body.innerHTML = '<p class="muted">Could not reach the server. Try again in a moment.</p>';
-      });
-  }
-
   async function load() {
     let a, status;
     try {
@@ -693,7 +503,6 @@
       return;
     }
     last = null;
-    askScope = null;
     followInFlight = false;
 
     window.addEventListener("hashchange", onHashChange);
@@ -741,11 +550,11 @@
   window.gzPages.profile = { mount: mount, unmount: unmount };
 
   // Auto-boot only when a profile shell is THIS document's entry: #root carries a
-  // data-handle and there is no data-slug (that is the project page). Guarded so the
-  // test stub (no documentElement) and the other shells never mis-boot.
+  // data-handle. Guarded so the test stub (no documentElement) and the other shells
+  // never mis-boot.
   function isEntry() {
     var r = document.getElementById("root");
-    return !!(r && r.getAttribute && r.getAttribute("data-handle") != null && !r.getAttribute("data-slug"));
+    return !!(r && r.getAttribute && r.getAttribute("data-handle") != null);
   }
   function inSpa() {
     try { return document.documentElement && document.documentElement.getAttribute("data-gz-spa") === "1"; }

@@ -319,7 +319,7 @@
 
   // Auto-boot only when the feed is THIS document's entry: the feed skeleton
   // (#feed-view) is present and no other page's root (#root) is. On the other
-  // shells (profile/project) this module is loaded too, but its skeleton is
+  // shells (profile) this module is loaded too, but its skeleton is
   // absent, so it stays dormant until the router mounts it. The router marks the
   // document with data-gz-spa once it takes over; we never auto-boot then.
   function isEntry() {

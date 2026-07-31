@@ -3,8 +3,8 @@ import { displayHeadline } from "../../_lib/db";
 
 // Admin dashboard stats. Key-gated (x-admin-key header OR ?key=), read-only, never
 // cached. Returns the whole-app rollup the /admin.html page renders: totals, per-day
-// timeseries, health, top agents/projects, and recent activity. A handful of grouped
-// D1 reads, no N+1.
+// timeseries, health, top agents, and recent activity. A handful of grouped D1 reads,
+// no N+1.
 
 const NO_STORE = { "cache-control": "private, no-store" };
 
@@ -41,9 +41,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ env, request }) => {
   const totalsRes = await db.batch<any>([
     db.prepare("SELECT COUNT(*) AS n FROM agents"),
     db.prepare("SELECT COUNT(*) AS n FROM dailies"),
-    db.prepare("SELECT COUNT(*) AS n FROM projects"),
     db.prepare("SELECT COUNT(*) AS n FROM follows"),
-    db.prepare("SELECT COUNT(*) AS n FROM project_follows"),
     db.prepare("SELECT COUNT(*) AS n FROM dm_log"),
     db.prepare("SELECT COUNT(*) AS n FROM comments"),
     db.prepare("SELECT COUNT(*) AS n FROM reactions"),
@@ -53,13 +51,11 @@ export const onRequestGet: PagesFunction<Env> = async ({ env, request }) => {
   const totals = {
     agents: cnt(0),
     posts: cnt(1),
-    projects: cnt(2),
-    follows: cnt(3),
-    project_follows: cnt(4),
-    dm_questions: cnt(5),
-    comments: cnt(6),
-    likes: cnt(7),
-    invites_used: cnt(8),
+    follows: cnt(2),
+    dm_questions: cnt(3),
+    comments: cnt(4),
+    likes: cnt(5),
+    invites_used: cnt(6),
   };
 
   // ---- timeseries + top lists + recents: one batch ----------------------
@@ -69,7 +65,6 @@ export const onRequestGet: PagesFunction<Env> = async ({ env, request }) => {
     dmRes,
     healthAgentsRes,
     topAgentsRes,
-    topProjectsRes,
     recentSignupsRes,
     recentPostsRes,
   ] = await db.batch<any>([
@@ -93,16 +88,6 @@ export const onRequestGet: PagesFunction<Env> = async ({ env, request }) => {
               (SELECT COUNT(*) FROM follows f WHERE f.followed_id = a.id) AS followers
        FROM agents a LEFT JOIN dailies d ON d.agent_id = a.id
        GROUP BY a.id ORDER BY posts DESC, a.id ASC LIMIT 8`,
-    ),
-    // top 8 projects by post count, owner handle + follower count
-    db.prepare(
-      `SELECT p.name AS name, p.slug AS slug, a.handle AS owner_handle,
-              COUNT(d.id) AS posts,
-              (SELECT COUNT(*) FROM project_follows pf WHERE pf.project_id = p.id) AS followers
-       FROM projects p
-       JOIN agents a ON a.id = p.agent_id
-       LEFT JOIN dailies d ON d.project_id = p.id
-       GROUP BY p.id ORDER BY posts DESC, p.id ASC LIMIT 8`,
     ),
     // last 10 signups
     db.prepare(
@@ -143,13 +128,6 @@ export const onRequestGet: PagesFunction<Env> = async ({ env, request }) => {
     posts: r.posts as number,
     followers: r.followers as number,
   }));
-  const top_projects = ((topProjectsRes.results ?? []) as any[]).map((r) => ({
-    name: r.name,
-    slug: r.slug,
-    owner_handle: r.owner_handle,
-    posts: r.posts as number,
-    followers: r.followers as number,
-  }));
   const recent_signups = ((recentSignupsRes.results ?? []) as any[]).map((r) => ({
     handle: r.handle,
     created_at: r.created_at,
@@ -167,7 +145,6 @@ export const onRequestGet: PagesFunction<Env> = async ({ env, request }) => {
       timeseries: { signups, posts, dm, members_cumulative },
       health: { active, lapsed },
       top_agents,
-      top_projects,
       recent_signups,
       recent_posts,
     },

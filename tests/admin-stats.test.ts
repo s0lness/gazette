@@ -2,10 +2,9 @@ import { expect, test, describe } from "bun:test";
 import { onRequestGet } from "../functions/api/admin/stats";
 
 // Fake D1 for /api/admin/stats. The handler runs exactly two batches:
-//   1. nine scalar COUNT statements (totals)
-//   2. eight statements: signups/day, posts/day, dm/day, a small agents read
-//      (last_posted_at) for health, top agents, top projects, recent signups,
-//      recent posts.
+//   1. seven scalar COUNT statements (totals)
+//   2. seven statements: signups/day, posts/day, dm/day, a small agents read
+//      (last_posted_at) for health, top agents, recent signups, recent posts.
 // The fake answers each statement by matching the SQL it carries, in the order
 // the batch was built (each prepared statement resolves itself).
 
@@ -16,7 +15,6 @@ type Fixture = {
   dm?: { d: string; n: number }[];
   healthAgents?: { last_posted_at: string | null }[];
   topAgents?: any[];
-  topProjects?: any[];
   recentSignups?: any[];
   recentPosts?: any[];
 };
@@ -25,9 +23,7 @@ function resolveAll(sql: string, fx: Fixture): { results: any[] } {
   // scalar COUNTs (totals batch)
   if (/^\s*SELECT COUNT\(\*\) AS n FROM agents\s*$/.test(sql)) return { results: [{ n: fx.totals?.agents ?? 0 }] };
   if (/COUNT\(\*\) AS n FROM dailies\s*$/.test(sql)) return { results: [{ n: fx.totals?.dailies ?? 0 }] };
-  if (/COUNT\(\*\) AS n FROM projects\s*$/.test(sql)) return { results: [{ n: fx.totals?.projects ?? 0 }] };
   if (/COUNT\(\*\) AS n FROM follows\s*$/.test(sql)) return { results: [{ n: fx.totals?.follows ?? 0 }] };
-  if (/COUNT\(\*\) AS n FROM project_follows\s*$/.test(sql)) return { results: [{ n: fx.totals?.project_follows ?? 0 }] };
   if (/COUNT\(\*\) AS n FROM dm_log\s*$/.test(sql)) return { results: [{ n: fx.totals?.dm_questions ?? 0 }] };
   if (/COUNT\(\*\) AS n FROM comments\s*$/.test(sql)) return { results: [{ n: fx.totals?.comments ?? 0 }] };
   if (/COUNT\(\*\) AS n FROM reactions\s*$/.test(sql)) return { results: [{ n: fx.totals?.likes ?? 0 }] };
@@ -39,7 +35,6 @@ function resolveAll(sql: string, fx: Fixture): { results: any[] } {
   if (/FROM dm_log GROUP BY d/.test(sql)) return { results: fx.dm ?? [] };
   if (/SELECT last_posted_at FROM agents/.test(sql)) return { results: fx.healthAgents ?? [] };
   if (/FROM agents a LEFT JOIN dailies/.test(sql)) return { results: fx.topAgents ?? [] };
-  if (/FROM projects p/.test(sql)) return { results: fx.topProjects ?? [] };
   if (/FROM agents ORDER BY created_at DESC/.test(sql)) return { results: fx.recentSignups ?? [] };
   if (/FROM dailies d JOIN agents a/.test(sql)) return { results: fx.recentPosts ?? [] };
   return { results: [] };
@@ -118,8 +113,8 @@ describe("GET /api/admin/stats aggregations", () => {
   test("totals map every count and timeseries group by day", async () => {
     const fx: Fixture = {
       totals: {
-        agents: 5, dailies: 40, projects: 4, follows: 7,
-        project_follows: 2, dm_questions: 9, comments: 3, likes: 12, invites_used: 6,
+        agents: 5, dailies: 40, follows: 7,
+        dm_questions: 9, comments: 3, likes: 12, invites_used: 6,
       },
       signups: [
         { d: "2026-07-01", n: 2 },
@@ -137,7 +132,6 @@ describe("GET /api/admin/stats aggregations", () => {
         { last_posted_at: null },                              // lapsed (never)
       ],
       topAgents: [{ handle: "alpha", posts: 20, followers: 3 }],
-      topProjects: [{ name: "Yuka", slug: "yuka", owner_handle: "alpha", posts: 10, followers: 2 }],
       recentSignups: [{ handle: "zed", created_at: "2026-07-04T10:00:00Z" }],
       recentPosts: [{ handle: "alpha", headline: "shipped it", body_md: null, date: "2026-07-04" }],
     };
@@ -146,7 +140,7 @@ describe("GET /api/admin/stats aggregations", () => {
     const b: any = await r.json();
 
     expect(b.totals).toEqual({
-      agents: 5, posts: 40, projects: 4, follows: 7, project_follows: 2,
+      agents: 5, posts: 40, follows: 7,
       dm_questions: 9, comments: 3, likes: 12, invites_used: 6,
     });
 
@@ -173,7 +167,7 @@ describe("GET /api/admin/stats aggregations", () => {
 
     // top lists + recents shape
     expect(b.top_agents[0]).toEqual({ handle: "alpha", posts: 20, followers: 3 });
-    expect(b.top_projects[0]).toEqual({ name: "Yuka", slug: "yuka", owner_handle: "alpha", posts: 10, followers: 2 });
+    expect(b.top_projects).toBeUndefined();
     expect(b.recent_signups[0]).toEqual({ handle: "zed", created_at: "2026-07-04T10:00:00Z" });
     expect(b.recent_posts[0]).toEqual({ handle: "alpha", headline: "shipped it", date: "2026-07-04" });
   });

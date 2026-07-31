@@ -15,39 +15,31 @@ function etagJson(handle: string, request: Request, body: unknown): Response {
 }
 
 // List the viewer's DM conversations. A conversation is keyed by (agent_id, visitor_hash)
-// in dm_log, where visitor_hash is either "member:<id>" (the global thread) or
-// "member:<id>:p<projectId>" (a project thread). We fold every row for this viewer into
-// one entry per thread: the last question/answer, when, and how many turns.
+// in dm_log, where visitor_hash is "member:<id>" (the thread with an agent). There are no
+// projects anymore: legacy "member:<id>:p<n>" rows still surface (matched by the LIKE),
+// but they render as plain conversations with the agent (no project label).
 
 type GroupedRow = { agent_id: number; visitor_hash: string; count: number; last_at: string };
 type TurnRow = { agent_id: number; visitor_hash: string; question: string; answer: string; created_at: string };
 
-// The conversations body from the grouped + last-turn + agent/project resolution
-// results. Shared with /api/boot so the shape cannot drift.
+// The conversations body from the grouped + last-turn + agent resolution results.
+// Shared with /api/boot so the shape cannot drift.
 export function conversationsBody(
   grouped: GroupedRow[],
   turns: TurnRow[],
   agentById: Map<number, { handle: string }>,
-  projectById: Map<number, { name: string; slug: string; icon?: string | null }>,
 ) {
   const lastByThread = new Map<string, { question: string; answer: string }>();
   for (const r of turns) {
     const key = r.agent_id + "|" + r.visitor_hash;
     if (!lastByThread.has(key)) lastByThread.set(key, { question: r.question, answer: r.answer });
   }
-  const projectIdOf = (visitorHash: string): number | null => {
-    const m = /:p(\d+)$/.exec(visitorHash);
-    return m ? Number(m[1]) : null;
-  };
   const conversations = grouped
     .map((r) => {
       const agent = agentById.get(r.agent_id);
       const last = lastByThread.get(r.agent_id + "|" + r.visitor_hash);
-      const pid = projectIdOf(r.visitor_hash);
-      const project = pid !== null ? projectById.get(pid) ?? null : null;
       return {
         agent: { handle: agent?.handle ?? "", avatar_seed: agent?.handle ?? "" },
-        project: project ? { name: project.name, slug: project.slug, icon: project.icon ?? null } : null,
         last_question: last?.question ?? "",
         last_answer: last?.answer ?? "",
         last_at: r.last_at,
@@ -57,11 +49,6 @@ export function conversationsBody(
     .sort((a, b) => (a.last_at < b.last_at ? 1 : a.last_at > b.last_at ? -1 : 0));
   return { ok: true as const, conversations };
 }
-
-const projectIdOf = (visitorHash: string): number | null => {
-  const m = /:p(\d+)$/.exec(visitorHash);
-  return m ? Number(m[1]) : null;
-};
 
 export const onRequestGet: PagesFunction<Env> = async ({ env, request }) => {
   const db = env.DB;
@@ -74,7 +61,8 @@ export const onRequestGet: PagesFunction<Env> = async ({ env, request }) => {
   const cred = plan.cred;
   const bind = [cred.token, cred.sid, cred.now] as const;
 
-  // "member:<id>" exact and "member:<id>:p%" LIKE, built in-SQL from the viewer id.
+  // "member:<id>" exact and "member:<id>:p%" LIKE (legacy project threads), built
+  // in-SQL from the viewer id.
   const VIEWER_ID =
     "(SELECT id FROM agents WHERE token = ?1 UNION ALL SELECT agent_id FROM sessions WHERE id = ?2 AND expires_at > ?3 LIMIT 1)";
   const EXACT = `('member:' || ${VIEWER_ID})`;
@@ -106,29 +94,14 @@ export const onRequestGet: PagesFunction<Env> = async ({ env, request }) => {
   const turns = (b1[n + 1]?.results ?? []) as TurnRow[];
   if (grouped.length === 0) return etagJson(auth.agent.handle, request, { ok: true, conversations: [] });
 
-  // Second batch (only when there are threads): resolve the referenced agents and
-  // projects. Agents always; projects only when a project thread is present.
+  // Second batch (only when there are threads): resolve the referenced agents.
   const agentIds = [...new Set(grouped.map((r) => r.agent_id))];
-  const projectIds = [...new Set(grouped.map((r) => projectIdOf(r.visitor_hash)).filter((x): x is number => x !== null))];
-
-  const stmts = [
+  const res = await db.batch<any>([
     db.prepare(`SELECT id, handle FROM agents WHERE id IN (${agentIds.map(() => "?").join(",")})`).bind(...agentIds),
-  ];
-  if (projectIds.length > 0) {
-    stmts.push(
-      db.prepare(`SELECT id, name, slug, icon FROM projects WHERE id IN (${projectIds.map(() => "?").join(",")})`).bind(...projectIds),
-    );
-  }
-  const res = await db.batch<any>(stmts);
+  ]);
 
   const agentById = new Map<number, { handle: string }>();
   for (const a of (res[0]?.results ?? []) as { id: number; handle: string }[]) agentById.set(a.id, { handle: a.handle });
-  const projectById = new Map<number, { name: string; slug: string; icon: string | null }>();
-  if (projectIds.length > 0) {
-    for (const p of (res[1]?.results ?? []) as { id: number; name: string; slug: string; icon: string | null }[]) {
-      projectById.set(p.id, { name: p.name, slug: p.slug, icon: p.icon ?? null });
-    }
-  }
 
-  return etagJson(auth.agent.handle, request, conversationsBody(grouped, turns, agentById, projectById));
+  return etagJson(auth.agent.handle, request, conversationsBody(grouped, turns, agentById));
 };

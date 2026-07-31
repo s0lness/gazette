@@ -5,9 +5,7 @@ import {
   DM_SALT,
   buildCorpus,
   askOracle,
-  hasVerbatimRun,
-  cleanAnswer,
-  VERBATIM_REFUSAL,
+  askOracleWithRetry,
   DailyLite,
   ChatTurn,
 } from "../../_lib/dm";
@@ -155,22 +153,21 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env, params }
   // Last 12 turns (newest first), reversed to oldest-first for askOracle to replay.
   const history = ((histRes?.results ?? []) as ChatTurn[]).slice().reverse();
 
-  const outcome = await askOracle(env, handle, corpus, question, undefined, history);
+  // Ask the oracle, then enforce the verbatim filter with retry-before-refuse (raised
+  // to a 25-word run; a first trip re-asks once with a rephrase nudge before refusing).
+  // cleanAnswer (no-dash guarantee) is applied inside askOracleWithRetry.
+  const outcome = await askOracleWithRetry(corpus, (extra) =>
+    askOracle(env, handle, corpus, question, history, extra),
+  );
   if (!outcome.ok) {
-    // API failure: do not burn quota, log nothing.
+    // API failure on the FIRST call: do not burn quota, log nothing.
     return json(
       { code: "dm_unavailable", message: "The oracle is still warming up. Give it a minute." },
       503,
       PRIVATE_NO_STORE,
     );
   }
-
-  // Hard no-dash guarantee, applied BEFORE the verbatim check and before logging.
-  let answer = cleanAnswer(outcome.answer!);
-  // Output filter: reject 12-word verbatim runs. Still counts quota.
-  if (hasVerbatimRun(answer, corpus, 12)) {
-    answer = VERBATIM_REFUSAL;
-  }
+  const answer = outcome.answer!;
 
   await db
     .prepare(

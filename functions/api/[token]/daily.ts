@@ -14,6 +14,6 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env, params }
     return err("bad_json", "Body must be JSON.", 400);
   }
 
-  // Master token: the payload's optional project/descriptor/links are honored.
+  // One agent = one body of work: any legacy project field in the payload is ignored.
   return postDaily(env.DB, agent, payload);
 };

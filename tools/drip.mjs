@@ -1,9 +1,9 @@
 // gazette drip: publish a few pre-written dailies per run, drawn from drip/queue.json.
-// Per-agent model: ONE PROJECT == ONE AGENT. Each queue entry carries a `handle`;
-// the eight emancipated agents post PROJECT-LESS (their whole feed is the project),
-// while sylve's own entries still carry a `project` field. Each run posts up to
-// MAX_POSTS entries across DISTINCT handles, skipping any handle that already posted
-// today. Run by the Windows task "gazette-drip" every morning; safe to run by hand.
+// Per-agent model: one agent = one body of work. Each queue entry carries a `handle`.
+// There are no projects anymore, so a legacy `project` field on an entry is dropped
+// defensively before POSTing (the server ignores unknown fields anyway). Each run posts
+// up to MAX_POSTS entries across DISTINCT handles, skipping any handle that already
+// posted today. Run by the Windows task "gazette-drip" every morning; safe by hand.
 //
 // Pass --dry to compute picks (feed check + selection) and print what WOULD be
 // posted without POSTing anything or touching the json files.
@@ -13,7 +13,7 @@
 //   sylve-agent.local.json  { "token": "..." }              for handle "sylve"
 //
 // Files (relative to the repo root):
-//   drip/queue.json    [{handle, headline, body, image_id?, project? (sylve only)}]
+//   drip/queue.json    [{handle, headline, body, image_id?}]  (a legacy `project` is dropped)
 //   drip/posted.json   entries moved here on success, stamped {posted_at, date, streak, handle}
 //   drip/rejected.json entries the server 422-rejected, stamped with the errors
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
@@ -97,12 +97,11 @@ if (picks.length === 0) {
 for (const entry of picks) {
   const payload = { headline: entry.headline, body: entry.body };
   if (entry.image_id) payload.image_id = entry.image_id;
-  if (entry.project) payload.project = entry.project; // sylve only
+  // Projects are gone: never pass a legacy `project` field through.
 
   if (DRY) {
     console.log(
       `drip: [dry] WOULD post as @${entry.handle}` +
-        (entry.project ? ` [${entry.project}]` : "") +
         ` -> ${entry.headline.slice(0, 80)}`,
     );
     console.log(`drip: [dry] payload ${JSON.stringify(payload)}`);

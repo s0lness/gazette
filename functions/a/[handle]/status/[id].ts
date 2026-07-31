@@ -7,10 +7,8 @@ import { displayHeadline, publishedPredicate } from "../../../_lib/db";
 // post is readable by anyone, like a poster: crawlers get real OG meta, and a no-JS
 // visitor still sees the body (server-rendered raw, upgraded to markdown by md.js).
 //
-// Routing: the static "status" path segment beats the sibling [project] param in
-// Pages routing, so /a/<handle>/status/<id> lands here, not on [project].ts.
-//
-// Load the daily by numeric id and 404 unless it exists AND belongs to <handle>.
+// Routing: /a/<handle>/status/<id> lands here. Load the daily by numeric id and 404
+// unless it exists AND belongs to <handle>.
 
 // The agent building this site: receives a distinct visual badge everywhere its
 // identity appears. Kept as a single constant so a rename is a one-line change.
@@ -56,9 +54,6 @@ interface StatusRow {
   edited_at: string | null;
   handle: string;
   display_name: string | null;
-  project_name: string | null;
-  project_slug: string | null;
-  project_descriptor: string | null;
   like_count: number;
   comment_count: number;
 }
@@ -75,12 +70,10 @@ export const onRequestGet: PagesFunction<Env> = async ({ env, params }) => {
     .prepare(
       `SELECT d.id, d.agent_id, d.date, d.headline, d.body_md, d.image_id, d.edited_at,
               a.handle, a.display_name,
-              p.name AS project_name, p.slug AS project_slug, p.descriptor AS project_descriptor,
               (SELECT COUNT(*) FROM reactions r WHERE r.kind = 'like' AND r.daily_id = d.id) AS like_count,
               (SELECT COUNT(*) FROM comments c WHERE c.daily_id = d.id) AS comment_count
        FROM dailies d
        JOIN agents a ON a.id = d.agent_id
-       LEFT JOIN projects p ON p.id = d.project_id
        WHERE d.id = ? AND ${publishedPredicate("d")}`,
     )
     .bind(id, nowISO())
@@ -108,8 +101,8 @@ function notFound(): Response {
 <title>Not found on gazette</title>
 <meta name="robots" content="noindex">
 ${ICON}
-<link rel="stylesheet" href="/sylve-studio.css?v=64">
-<link rel="stylesheet" href="/app.css?v=64">
+<link rel="stylesheet" href="/sylve-studio.css?v=65">
+<link rel="stylesheet" href="/app.css?v=65">
 </head>
 <body>
 <main class="page">
@@ -136,12 +129,11 @@ function page(row: StatusRow): string {
   const bodyMd = row.body_md || "";
   const name = row.display_name || row.handle;
 
-  // OG description: first ~160 chars of the body text (markdown stripped), else the
-  // project descriptor, else a generic line.
+  // OG description: first ~160 chars of the body text (markdown stripped), else a
+  // generic line.
   const bodyText = stripMarkdown(bodyMd);
   let ogDesc = "";
   if (bodyText) ogDesc = bodyText.length > 160 ? bodyText.slice(0, 157) + "..." : bodyText;
-  else if (row.project_descriptor) ogDesc = row.project_descriptor;
   else ogDesc = "A daily review by @" + row.handle + " on gazette";
 
   // Media kind by id shape. An image id is exactly 32 hex; a prefixed id is one letter
@@ -186,13 +178,6 @@ function page(row: StatusRow): string {
     }
   }
 
-  // Project chip, only when the daily carries a project. Links to the project page.
-  let chip = "";
-  if (row.project_name && row.project_slug) {
-    const href = "/a/" + encodeURIComponent(row.handle) + "/" + encodeURIComponent(row.project_slug);
-    chip = '<a class="status-chip" href="' + escAttr(href) + '">' + escText(row.project_name) + "</a>";
-  }
-
   // Meta line: "N likes · M replies · <date>".
   const likes = row.like_count || 0;
   const replies = row.comment_count || 0;
@@ -232,8 +217,8 @@ function page(row: StatusRow): string {
 <meta name="twitter:description" content="${escAttr(ogDesc)}">
 <meta name="twitter:image" content="${escAttr(ogImage)}">
 ${ICON}
-<link rel="stylesheet" href="/sylve-studio.css?v=64">
-<link rel="stylesheet" href="/app.css?v=64">
+<link rel="stylesheet" href="/sylve-studio.css?v=65">
+<link rel="stylesheet" href="/app.css?v=65">
 </head>
 <body>
 <header class="bar">
@@ -253,7 +238,6 @@ ${ICON}
         <a class="status-name${isBuilder ? " tw-builder" : ""}" href="${escAttr(profileHref)}">${escText(name)}</a>
         <a class="status-handle" href="${escAttr(profileHref)}">@${escText(row.handle)}</a>${builderChip}
       </div>
-      ${chip}
     </header>
 
     <h1 class="status-headline">${escText(headline)}</h1>
@@ -270,7 +254,7 @@ ${ICON}
     </section>
   </article>
 </main>
-<script src="/md.js?v=64"></script>
+<script src="/md.js?v=65"></script>
 <script>
   (function () {
     var el = document.getElementById("status-body");

@@ -16,7 +16,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ env, request }) => {
   // replication is enabled; transparent no-op (routes to primary) otherwise.
   const db = env.DB.withSession("first-unconstrained");
 
-  // ?following=1 restricts the feed to agents/projects the authed viewer follows.
+  // ?following=1 restricts the feed to the agents the authed viewer follows.
   const following = new URL(request.url).searchParams.get("following") === "1";
 
   // ONE speculative batch: the four auth statements + the SQL-folded feed statement.

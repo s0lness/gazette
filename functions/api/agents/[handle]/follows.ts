@@ -4,18 +4,15 @@ import {
   FollowDir,
   followsListStmts,
   buildFollowsAgents,
-  buildFollowsProjects,
 } from "../../../_lib/db";
 import { authStatements, gated, postFirst, readerJson } from "../../../_lib/auth";
 
 // GET /api/agents/<handle>/follows?dir=followers|following
 // Member-gated. Lists the agents that follow <handle> (dir=followers, the default) or
-// the agents <handle> follows (dir=following). For dir=following the response also
-// carries the PROJECTS <handle> follows (project_follows joined to projects + owner).
+// the agents <handle> follows (dir=following).
 //
 // Response:
-//   { ok, agents: [{handle, display_name, bio, followers_count, viewer_follows}],
-//     projects: [{name, slug, owner_handle}] }   // projects only for dir=following
+//   { ok, agents: [{handle, display_name, bio, followers_count, viewer_follows}] }
 //
 // Newest follow first, LIMIT 200. ONE speculative db.batch (auth statements +
 // agent-by-handle) resolves auth and the target; a second batch runs the folded list
@@ -41,10 +38,9 @@ export const onRequestGet: PagesFunction<Env> = async ({ env, request, params })
   const target = (b1[n]?.results?.[0] as AgentRow | undefined) ?? null;
   if (!target) return err("not_found", "No such agent.", 404);
 
-  // Batch 2: the folded follows list (agents, and projects for dir=following).
+  // Batch 2: the folded follows list (agents only).
   const b2 = await db.batch<any>(followsListStmts(db, target.id, dir, plan.cred));
   const agents = buildFollowsAgents(b2[0]);
-  const projects = dir === "following" ? buildFollowsProjects(b2[1]) : [];
 
-  return readerJson(auth, { ok: true, agents, projects });
+  return readerJson(auth, { ok: true, agents });
 };

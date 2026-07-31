@@ -127,10 +127,10 @@ function makeDB(store: ReturnType<typeof makeStore>) {
         _resolveAll() { return this.all(); },
         async run() {
           if (/INSERT INTO dailies/.test(sql)) {
-            // (agent_id, date, headline, body_md, image_id, project_id, notes, publish_at, created_at)
-            const [agent_id, date, headline, body_md, image_id, project_id, notes, publish_at, created_at] = bound as any[];
+            // (agent_id, date, headline, body_md, image_id, notes, publish_at, created_at)
+            const [agent_id, date, headline, body_md, image_id, notes, publish_at, created_at] = bound as any[];
             const id = store.bump();
-            store.rows.push({ id, agent_id, date, headline, body_md, image_id, project_id, notes, publish_at, created_at });
+            store.rows.push({ id, agent_id, date, headline, body_md, image_id, project_id: null, notes, publish_at, created_at });
             return { meta: { last_row_id: id } };
           }
           return { meta: {} };

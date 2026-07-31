@@ -1,10 +1,9 @@
 // Messages page: the viewer's DM conversations with agent oracles. Two hash-routed
 // views so the browser back button works:
 //   /messages                       -> conversation list
-//   /messages#@handle               -> chat with @handle (agent-wide oracle)
-//   /messages#@handle/projectSlug   -> chat scoped to a project
-// The list is one row per conversation (avatar, handle, project chip, a one-line
-// preview of the last answer, relative time). The chat renders history as bubbles:
+//   /messages#@handle               -> chat with @handle (the agent's oracle)
+// The list is one row per conversation (avatar, handle, a one-line preview of the
+// last answer, relative time). The chat renders history as bubbles:
 // the viewer's questions right, the oracle's answers left (through window.gzMarkdown).
 // Sending is optimistic: the question bubble appears, a typing placeholder stands in
 // for the answer, then the real answer swaps in. 429 quota disables the input with a
@@ -34,22 +33,23 @@
   }
 
   // ---- routing ------------------------------------------------------------
-  // Parse the hash into a target: null for the list, else {handle, slug|null}.
+  // Parse the hash into a target: null for the list, else {handle}. A conversation
+  // is just with an agent now. A legacy hash may still carry a "/slug" tail; we
+  // ignore it and open the plain @handle chat (the backend renders old project-scoped
+  // rows as plain), so a stray slug never breaks the route.
   function parseHash() {
     var h = location.hash || "";
     if (h.charAt(0) === "#") h = h.slice(1);
     if (!h) return null;
     if (h.charAt(0) === "@") h = h.slice(1);
     if (!h) return null;
-    var parts = h.split("/");
-    var handle = decodeURIComponent(parts[0] || "").trim();
+    var handle = decodeURIComponent(h.split("/")[0] || "").trim();
     if (!handle) return null;
-    var slug = parts[1] ? decodeURIComponent(parts[1]).trim() : null;
-    return { handle: handle, slug: slug || null };
+    return { handle: handle };
   }
 
-  function chatHash(handle, slug) {
-    return "#@" + encodeURIComponent(handle) + (slug ? "/" + encodeURIComponent(slug) : "");
+  function chatHash(handle) {
+    return "#@" + encodeURIComponent(handle);
   }
 
   // ===================================================================== LIST
@@ -60,14 +60,11 @@
 
   function convRowHTML(c) {
     var handle = (c.agent && c.agent.handle) || "";
-    var proj = c.project && c.project.name ? c.project.name : "";
-    var projIcon = c.project && c.project.icon ? esc(c.project.icon) + " " : "";
-    var title = "@" + esc(handle) + (proj ? ' <span class="msg-row-proj">&middot; ' + projIcon + esc(proj) + "</span>" : "");
+    var title = "@" + esc(handle);
     var when = c.last_at ? window.gzTime(c.last_at) : "";
     var preview = convPreview(c);
     return (
-      '<button type="button" class="msg-row" data-handle="' + esc(handle) + '"' +
-      (c.project && c.project.slug ? ' data-slug="' + esc(c.project.slug) + '"' : "") + ">" +
+      '<button type="button" class="msg-row" data-handle="' + esc(handle) + '">' +
       '<span class="msg-row-avatar">' + avatar(handle) + "</span>" +
       '<span class="msg-row-body">' +
       '<span class="msg-row-top">' +
@@ -101,7 +98,7 @@
     var rowEls = view.querySelectorAll(".msg-row");
     for (var i = 0; i < rowEls.length; i++) {
       rowEls[i].addEventListener("click", function () {
-        location.hash = chatHash(this.getAttribute("data-handle"), this.getAttribute("data-slug"));
+        location.hash = chatHash(this.getAttribute("data-handle"));
       });
     }
   }
@@ -230,7 +227,7 @@
         picks[i].addEventListener("click", function () {
           var handle = this.getAttribute("data-handle");
           close();
-          location.hash = chatHash(handle, null);
+          location.hash = chatHash(handle);
         });
       }
     }
@@ -241,10 +238,10 @@
   }
 
   // ===================================================================== CHAT
-  var chatState = null; // { handle, slug, disabled }
+  var chatState = null; // { handle, disabled }
 
-  function apiBase(handle, slug) {
-    return "/api/dm/" + encodeURIComponent(handle) + (slug ? "/" + encodeURIComponent(slug) : "");
+  function apiBase(handle) {
+    return "/api/dm/" + encodeURIComponent(handle);
   }
 
   function bubbleHTML(m) {
@@ -266,8 +263,8 @@
     return '<div class="msg-pair">' + q + a + "</div>";
   }
 
-  function chatHeadHTML(handle, slug, projectName) {
-    var title = "@" + esc(handle) + (projectName ? ' <span class="msg-head-proj">&middot; ' + esc(projectName) + "</span>" : "");
+  function chatHeadHTML(handle) {
+    var title = "@" + esc(handle);
     return (
       '<div class="msg-chat-head">' +
       '<a href="#" class="msg-back" id="msg-back" aria-label="Back to messages">' +
@@ -279,9 +276,9 @@
     );
   }
 
-  function chatShellHTML(handle, slug, projectName) {
+  function chatShellHTML(handle) {
     return (
-      chatHeadHTML(handle, slug, projectName) +
+      chatHeadHTML(handle) +
       '<div class="msg-thread" id="msg-thread"><p class="muted gz-loading">Reading back through the conversation...</p></div>' +
       '<div class="msg-compose">' +
       '<div class="msg-compose-row">' +
@@ -387,7 +384,7 @@
     if (btn) btn.disabled = true;
 
     window
-      .gzFetch(apiBase(chatState.handle, chatState.slug), {
+      .gzFetch(apiBase(chatState.handle), {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ question: question }),
@@ -453,13 +450,13 @@
     }
   }
 
-  function loadChat(handle, slug) {
+  function loadChat(handle) {
     window
-      .gzFetch(apiBase(handle, slug))
+      .gzFetch(apiBase(handle))
       .then(function (r) { return r.json(); })
       .then(function (data) {
         // Ignore if the viewer navigated away or into another chat meanwhile.
-        if (!chatState || chatState.handle !== handle || chatState.slug !== slug) return;
+        if (!chatState || chatState.handle !== handle) return;
         renderThread(data.messages || []);
       })
       .catch(function (err) {
@@ -469,14 +466,12 @@
       });
   }
 
-  function renderChat(handle, slug) {
+  function renderChat(handle) {
     reveal();
     stopListPoll();
     listSig = null;
-    chatState = { handle: handle, slug: slug, disabled: false };
-    // The project name is not known up front for a bare hash; the slug reads fine as a
-    // label when present. Show the slug as the project label (backend has no name here).
-    view.innerHTML = chatShellHTML(handle, slug, slug || "");
+    chatState = { handle: handle, disabled: false };
+    view.innerHTML = chatShellHTML(handle);
     var back = document.getElementById("msg-back");
     if (back) back.addEventListener("click", function (e) { e.preventDefault(); location.hash = ""; });
     var ta = document.getElementById("msg-input");
@@ -489,7 +484,7 @@
       });
       setTimeout(function () { try { ta.focus({ preventScroll: true }); } catch (e) { ta.focus(); } }, 40);
     }
-    loadChat(handle, slug);
+    loadChat(handle);
   }
 
   // ---- top-level route switch ---------------------------------------------
@@ -497,7 +492,7 @@
     if (!view) return;
     var target = parseHash();
     if (target) {
-      renderChat(target.handle, target.slug);
+      renderChat(target.handle);
     } else {
       chatState = null;
       startListPoll();

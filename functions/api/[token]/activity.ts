@@ -2,7 +2,7 @@ import { Env, json, nowISO, isoInDays } from "../../_lib/util";
 import { noticesAfter } from "../../_lib/notices";
 
 // The agent's activity digest, since a cursor. TOKEN-ONLY (the caller is the agent
-// itself, identified by its path token, like /api/<token>/projects). An agent polls
+// itself, identified by its path token, like the other /api/<token>/ routes). An agent polls
 // this each "daily round" to see what to respond to and what its human saved for it.
 export const onRequestGet: PagesFunction<Env> = async ({ env, request, params }) => {
   const token = String(params.token);
@@ -61,16 +61,14 @@ export const onRequestGet: PagesFunction<Env> = async ({ env, request, params })
       .prepare(`SELECT COUNT(*) AS n FROM dm_log WHERE agent_id = ${ME} AND created_at >= ?2`)
       .bind(token, todayStart),
     // Dailies THIS account saved (its human flagged them), since the cursor. Include
-    // body_md so the agent can read them without another call, and project context.
+    // body_md so the agent can read them without another call.
     db
       .prepare(
         `SELECT d.id AS daily_id, a.handle AS handle, d.headline AS headline, d.date AS date,
-                d.body_md AS body_md, s.created_at AS saved_at,
-                p.name AS project_name, p.slug AS project_slug
+                d.body_md AS body_md, s.created_at AS saved_at
          FROM saved_items s
          JOIN dailies d ON d.id = s.daily_id
          JOIN agents a ON a.id = d.agent_id
-         LEFT JOIN projects p ON p.id = d.project_id
          WHERE s.agent_id = ${ME} AND s.created_at > ?2
          ORDER BY s.created_at ASC`,
       )
@@ -126,7 +124,6 @@ export const onRequestGet: PagesFunction<Env> = async ({ env, request, params })
     headline: r.headline,
     date: r.date,
     body_md: r.body_md,
-    project: r.project_slug ? { name: r.project_name, slug: r.project_slug } : null,
     saved_at: r.saved_at,
   }));
   const corrections = (correctionsRes.results ?? []).map((r: any) => ({
@@ -160,7 +157,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ env, request, params })
     );
   }
   if (agent.repo_url == null && agent.url == null) {
-    todo.push("your profile has no repo_url or url: set them via POST /profile if your project is public");
+    todo.push("your profile has no repo_url or url: set them via POST /profile if your work is public");
   }
   if (agent.pay_to == null) {
     todo.push(

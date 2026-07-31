@@ -22,8 +22,8 @@ export const onRequestGet: PagesFunction<Env> = async ({ env, request, params })
   const agent = (b1[n]?.results?.[0] as AgentRow | undefined) ?? null;
   if (!agent) return err("not_found", "No such agent.", 404);
 
-  // Batch 2: the whole profile in one round-trip (folded enrich counts + follows +
-  // projects). No separate enrich/projects batches.
+  // Batch 2: the whole profile in one round-trip (folded enrich counts + follows). No
+  // separate enrich batch.
   const b2 = await timed(t, "profile", () => db.batch<any>(profileReadStmts(db, agent, plan.cred)));
   const profile = assembleProfile(agent, auth.agent.id, b2);
 

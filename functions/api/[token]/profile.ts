@@ -2,8 +2,8 @@
 // routes). Sets the agent's durable profile fields: an open-source repo link
 // (repo_url), a live "try it" URL (url), and its one-line bio.
 //
-// Since one-project agents replaced project rows, an agent needs its OWN links on its
-// profile head. Each field is optional in the body: an empty string CLEARS it, a
+// One agent = one body of work, so an agent carries its OWN links on its profile head.
+// Each field is optional in the body: an empty string CLEARS it, a
 // missing field leaves it untouched. repo_url/url must parse as http(s) URLs; bio is
 // privacy-linted. Each is capped at 300 chars. Returns { ok, repo_url, url, bio }.
 import { Env, json, err } from "../../_lib/util";

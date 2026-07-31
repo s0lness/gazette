@@ -17,10 +17,8 @@ import { AgentRow } from "./db";
 import {
   buildCorpus,
   askOracleReply,
-  hasVerbatimRun,
-  cleanAnswer,
+  askOracleWithRetry,
   truncateAtSentence,
-  VERBATIM_REFUSAL,
   DailyLite,
 } from "./dm";
 
@@ -43,7 +41,6 @@ interface DailyRow {
   agent_id: number;
   headline: string | null;
   body_md: string | null;
-  project_id: number | null;
 }
 
 // Load a comment (with its author handle) by id.
@@ -57,10 +54,10 @@ async function loadComment(db: D1Database, commentId: number): Promise<CommentRo
     .first<CommentRow>();
 }
 
-// Load a daily's id/author/project/head.
+// Load a daily's id/author/head.
 async function loadDaily(db: D1Database, dailyId: number): Promise<DailyRow | null> {
   return db
-    .prepare("SELECT id, agent_id, headline, body_md, project_id FROM dailies WHERE id = ?")
+    .prepare("SELECT id, agent_id, headline, body_md FROM dailies WHERE id = ?")
     .bind(dailyId)
     .first<DailyRow>();
 }
@@ -111,40 +108,32 @@ async function generateFor(
   if (((authorAfterRes?.results?.[0]?.n as number) ?? 0) > 0) return false;
   if (((capRes?.results?.[0]?.n as number) ?? 0) >= ORACLE_DAILY_CAP) return false;
 
-  // Build the author's corpus exactly like the DM route: same publish filter, notes
-  // included. When the daily belongs to a project, scope the corpus to that project
-  // (like the project-scoped DM); otherwise the author's whole published corpus.
-  let corpusSql =
-    "SELECT date, headline, body_md, notes FROM dailies WHERE agent_id = ? AND (publish_at IS NULL OR publish_at <= ?) ORDER BY date DESC, created_at DESC";
-  let corpusBinds: unknown[] = [author.id, nowISO()];
-  let project: { name: string; descriptor: string | null } | undefined;
-  if (daily.project_id != null) {
-    corpusSql =
-      "SELECT date, headline, body_md, notes FROM dailies WHERE agent_id = ? AND project_id = ? AND (publish_at IS NULL OR publish_at <= ?) ORDER BY date DESC, created_at DESC";
-    corpusBinds = [author.id, daily.project_id, nowISO()];
-    const p = await db
-      .prepare("SELECT name, descriptor FROM projects WHERE id = ?")
-      .bind(daily.project_id)
-      .first<{ name: string; descriptor: string | null }>();
-    if (p) project = { name: p.name, descriptor: p.descriptor };
-  }
-  const corpusRes = await db.prepare(corpusSql).bind(...corpusBinds).all<DailyLite>();
+  // Build the author's whole published corpus, exactly like the DM route: same publish
+  // filter, notes included.
+  const corpusRes = await db
+    .prepare(
+      "SELECT date, headline, body_md, notes FROM dailies WHERE agent_id = ? AND (publish_at IS NULL OR publish_at <= ?) ORDER BY date DESC, created_at DESC",
+    )
+    .bind(author.id, nowISO())
+    .all<DailyLite>();
   const corpus = buildCorpus((corpusRes.results ?? []) as DailyLite[]);
 
-  const outcome = await askOracleReply(
-    env,
-    author.handle,
-    corpus,
-    { headline: daily.headline, body_md: daily.body_md },
-    { handle: comment.handle, body: comment.body },
-    project,
+  // Ask the oracle, then enforce the verbatim filter with retry-before-refuse (25-word
+  // run; a first trip re-asks once with a rephrase nudge). cleanAnswer runs inside.
+  const outcome = await askOracleWithRetry(corpus, (extra) =>
+    askOracleReply(
+      env,
+      author.handle,
+      corpus,
+      { headline: daily.headline, body_md: daily.body_md },
+      { handle: comment.handle, body: comment.body },
+      extra,
+    ),
   );
   if (!outcome.ok) return false;
 
-  // Hard no-dash guarantee, verbatim filter, then truncate to 500 chars at a boundary.
-  let answer = cleanAnswer(outcome.answer!);
-  if (hasVerbatimRun(answer, corpus, 12)) answer = VERBATIM_REFUSAL;
-  answer = truncateAtSentence(answer, 500);
+  // Truncate to 500 chars at a boundary.
+  const answer = truncateAtSentence(outcome.answer!, 500);
   if (!answer) return false;
 
   await db

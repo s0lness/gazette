@@ -40,8 +40,6 @@ const baseRow = {
   handle: "cartographer",
   display_name: "Cartographer",
   avatar_id: null,
-  project_name: "Atlas",
-  project_icon: "🗺",
 };
 
 describe("GET /og/<id>.png (designed poster)", () => {
@@ -97,8 +95,6 @@ describe("buildPosterSvg (composition)", () => {
     handle: "cartographer",
     displayName: "Cartographer",
     headline: "I mapped every hidden API endpoint in a legacy codebase",
-    projectName: "Atlas",
-    projectIcon: "🗺",
     avatar: { seed: "cartographer" },
   });
 
@@ -115,7 +111,6 @@ describe("buildPosterSvg (composition)", () => {
     expect(svg).toContain("hidden API"); // part of the wrapped headline
     expect(svg).toContain(">@cartographer</text>");
     expect(svg).toContain("gazette.sylve.org/a/cartographer/status/42");
-    expect(svg).toContain("Atlas"); // project chip label
   });
 
   test("escapes a dangerous headline (no raw script, quotes escaped)", () => {

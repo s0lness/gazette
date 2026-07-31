@@ -1,6 +1,6 @@
 // D1 query helpers.
 
-import { deriveStatus, nowISO, slugify, streakFromDates, todayUTC } from "./util";
+import { deriveStatus, nowISO, streakFromDates, todayUTC } from "./util";
 
 // Lazy reveal: a beat is VISIBLE only when it has no scheduled reveal (publish_at IS
 // NULL) or its reveal time has arrived (publish_at <= now). Every public/member READ
@@ -54,8 +54,8 @@ export interface AgentRow {
   created_at: string;
   last_posted_at: string | null;
   avatar_id?: string | null;
-  // Durable agent-level links (agent IS the project for one-project agents): an
-  // open-source repo and a live "try it" URL, shown on the profile head. NULL = unset.
+  // Durable agent-level links: an open-source repo and a live "try it" URL, shown on
+  // the profile head. NULL = unset.
   repo_url?: string | null;
   url?: string | null;
   // Optional EVM payout address (0x + 40 hex). When set, a paid oracle question to this
@@ -76,282 +76,6 @@ export interface DailyRow {
   body_md: string | null;
   image_id: string | null;
   created_at: string;
-  project_id?: number | null;
-}
-
-// A project is a durable "what it is" that an agent (brand/vitrine) owns. Dailies
-// hang off a project via dailies.project_id (nullable, backward-compatible).
-export interface ProjectRow {
-  id: number;
-  agent_id: number;
-  name: string;
-  slug: string;
-  descriptor: string | null;
-  created_at: string;
-  repo_url?: string | null;
-  url?: string | null;
-  icon?: string | null;
-}
-
-// A daily row plus the LEFT JOIN projects columns (null when unprojected).
-export type ProjectDailyRow = DailyRow & {
-  project_name?: string | null;
-  project_slug?: string | null;
-  project_descriptor?: string | null;
-  project_icon?: string | null;
-};
-
-// The short, durable project context stamped onto a daily/feed card so a stranger
-// understands it. Null when the daily has no project (backward-compatible).
-export interface ProjectContext {
-  name: string;
-  slug: string;
-  descriptor: string | null;
-  icon: string | null;
-}
-
-// The vitrine shape of a project: the durable descriptor plus a cheap rollup of its
-// stream (post_count, last_post_at, last_headline) for the profile grid.
-export interface ProjectView {
-  id: number;
-  name: string;
-  slug: string;
-  descriptor: string | null;
-  icon: string | null;
-  repo_url: string | null;
-  url: string | null;
-  post_count: number;
-  followers_count: number;
-  last_post_at: string | null;
-  last_headline: string | null;
-}
-
-// Every project an agent owns, each with a computed rollup of its dailies. ONE
-// grouped read of the agent's dailies (keyed by project_id) folds into per-project
-// {post_count, last_post_at, last_headline}; no N+1. Agents with zero projects
-// return [] (the flat, pre-projects profile). Mirrors the batched publicAgents style.
-export async function projectsForAgent(db: D1Reader, agentId: number): Promise<ProjectView[]> {
-  const projRes = await db
-    .prepare(
-      "SELECT id, agent_id, name, slug, descriptor, repo_url, url, icon, created_at FROM projects WHERE agent_id = ? ORDER BY created_at ASC, id ASC",
-    )
-    .bind(agentId)
-    .all<ProjectRow>();
-  const projects = projRes.results ?? [];
-  if (projects.length === 0) return [];
-
-  const ids = projects.map((p) => p.id);
-  const ph = ids.map(() => "?").join(",");
-
-  // Two independent grouped reads in ONE round-trip: the agent's projected dailies
-  // (newest-first, so the FIRST row per project is its latest headline + time), and
-  // one grouped follower count over project_follows keyed on this agent's project ids.
-  const [dRes, fRes] = await db.batch<any>([
-    db
-      .prepare(
-        `SELECT project_id, headline, body_md, created_at FROM dailies WHERE agent_id = ? AND project_id IS NOT NULL AND ${publishedPredicate("")} ORDER BY created_at DESC`,
-      )
-      .bind(agentId, nowISO()),
-    db
-      .prepare(
-        `SELECT project_id, COUNT(*) AS n FROM project_follows WHERE project_id IN (${ph}) GROUP BY project_id`,
-      )
-      .bind(...ids),
-  ]);
-
-  const rollup = new Map<number, { count: number; last_at: string | null; last_headline: string | null }>();
-  for (const p of projects) rollup.set(p.id, { count: 0, last_at: null, last_headline: null });
-  for (const r of (dRes.results ?? []) as { project_id: number; headline: string | null; body_md: string | null; created_at: string }[]) {
-    const e = rollup.get(r.project_id);
-    if (!e) continue;
-    e.count += 1;
-    if (e.last_at === null) {
-      // First row per project (newest-first order) is the latest daily.
-      e.last_at = r.created_at;
-      e.last_headline = displayHeadline(r.headline, r.body_md);
-    }
-  }
-  const followers = new Map<number, number>();
-  for (const r of (fRes.results ?? []) as { project_id: number; n: number }[]) {
-    followers.set(r.project_id, r.n);
-  }
-  return projects.map((p) => {
-    const e = rollup.get(p.id)!;
-    return {
-      id: p.id,
-      name: p.name,
-      slug: p.slug,
-      descriptor: p.descriptor,
-      icon: p.icon ?? null,
-      repo_url: p.repo_url ?? null,
-      url: p.url ?? null,
-      post_count: e.count,
-      followers_count: followers.get(p.id) ?? 0,
-      last_post_at: e.last_at,
-      last_headline: e.last_headline,
-    };
-  });
-}
-
-// Resolve a project by (agent, slug), creating it on first use. The slug is derived
-// from the display name; a falsy slug (empty/degenerate name) returns null so the
-// caller leaves the daily unprojected. When the project already exists and a non-empty
-// descriptor is supplied that differs from the stored one, the descriptor is refined
-// (an agent can sharpen its one-liner over time). Returns {id, name, slug}: on reuse the
-// name is the ORIGINALLY stored name (the slug is the stable key), on create it is the
-// name just inserted.
-// Optional durable links a project may register when posting: an open-source repo
-// (repoUrl) and a live "try it" URL (url). Each is set on create and, on reuse, only
-// OVERWRITTEN when a non-empty value is supplied (so an agent can add or sharpen a
-// link over time without a later post that omits it wiping it).
-export interface ProjectLinks {
-  repoUrl?: string | null;
-  url?: string | null;
-  // Authored emoji icon, already validated by validProjectIcon. Set on create and,
-  // on reuse, overwritten only when a non-empty value is supplied (like descriptor).
-  icon?: string | null;
-}
-
-export async function findOrCreateProject(
-  db: D1Database,
-  agentId: number,
-  name: string,
-  descriptor: string | null,
-  now: string,
-  links: ProjectLinks = {},
-): Promise<{ id: number; name: string; slug: string } | null> {
-  const slug = slugify(name);
-  if (slug === "") return null;
-
-  const repoUrl = typeof links.repoUrl === "string" && links.repoUrl.length > 0 ? links.repoUrl : null;
-  const url = typeof links.url === "string" && links.url.length > 0 ? links.url : null;
-  const icon = typeof links.icon === "string" && links.icon.length > 0 ? links.icon : null;
-
-  const existing = await db
-    .prepare("SELECT id, name, descriptor, repo_url, url, icon FROM projects WHERE agent_id = ? AND slug = ?")
-    .bind(agentId, slug)
-    .first<{ id: number; name: string; descriptor: string | null; repo_url: string | null; url: string | null; icon: string | null }>();
-
-  if (existing) {
-    // Refine any field for which a differing, non-empty value was supplied. Only the
-    // changed columns are written (a post that omits a link leaves it untouched).
-    const sets: string[] = [];
-    const binds: unknown[] = [];
-    if (typeof descriptor === "string" && descriptor.length > 0 && descriptor !== existing.descriptor) {
-      sets.push("descriptor = ?");
-      binds.push(descriptor);
-    }
-    if (repoUrl !== null && repoUrl !== existing.repo_url) {
-      sets.push("repo_url = ?");
-      binds.push(repoUrl);
-    }
-    if (url !== null && url !== existing.url) {
-      sets.push("url = ?");
-      binds.push(url);
-    }
-    if (icon !== null && icon !== existing.icon) {
-      sets.push("icon = ?");
-      binds.push(icon);
-    }
-    if (sets.length > 0) {
-      await db
-        .prepare(`UPDATE projects SET ${sets.join(", ")} WHERE id = ?`)
-        .bind(...binds, existing.id)
-        .run();
-    }
-    return { id: existing.id, name: existing.name, slug };
-  }
-
-  const ins = await db
-    .prepare(
-      "INSERT INTO projects (agent_id, name, slug, descriptor, repo_url, url, icon, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-    )
-    .bind(agentId, name, slug, descriptor, repoUrl, url, icon, now)
-    .run();
-  return { id: ins.meta.last_row_id as number, name, slug };
-}
-
-// Follower stats for a project, mirroring followStats() for agents.
-// followers_count = how many members follow the project; following = whether
-// `viewerId` follows it.
-export async function projectFollowStats(
-  db: D1Reader,
-  projectId: number,
-  viewerId: number,
-): Promise<{ followers_count: number; following: boolean }> {
-  const [followers, mine] = await db.batch<any>([
-    db.prepare("SELECT COUNT(*) AS n FROM project_follows WHERE project_id = ?").bind(projectId),
-    db
-      .prepare("SELECT 1 FROM project_follows WHERE follower_id = ? AND project_id = ?")
-      .bind(viewerId, projectId),
-  ]);
-  return {
-    followers_count: (followers.results?.[0]?.n as number) ?? 0,
-    following: (mine.results?.length ?? 0) > 0,
-  };
-}
-
-// Full project-page payload: the owning agent (by handle), the project (by
-// agent_id + slug), its follower stats, whether the viewer follows it, whether the
-// viewer owns it, and the project's dailies as enriched tweet cards (each carrying
-// its own project context). Null when the handle or the (agent, slug) is unknown.
-//
-// Round-trip shape: agent-by-handle, then ONE batch keyed on the project id (the
-// project row + its dailies + follower count + the viewer's follow membership),
-// then ONE enrich batch inside enrichDailies.
-export async function projectByHandleSlug(
-  db: D1Reader,
-  handle: string,
-  slug: string,
-  viewerId: number,
-) {
-  const owner = await getAgentByHandle(db, handle);
-  if (!owner) return null;
-
-  const project = await db
-    .prepare(
-      "SELECT id, agent_id, name, slug, descriptor, repo_url, url, icon, created_at FROM projects WHERE agent_id = ? AND slug = ?",
-    )
-    .bind(owner.id, slug)
-    .first<ProjectRow>();
-  if (!project) return null;
-
-  // Everything keyed on the project id, in a single round-trip: the project's dailies
-  // (LEFT JOIN projects so each card carries its own context), the follower count, and
-  // the viewer's own follow membership.
-  const [dailyRes, followersRes, mineRes] = await db.batch<any>([
-    db
-      .prepare(
-        `SELECT d.id, d.agent_id, d.date, d.headline, d.body_md, d.image_id, d.created_at, d.project_id, p.name AS project_name, p.slug AS project_slug, p.descriptor AS project_descriptor, p.icon AS project_icon FROM dailies d LEFT JOIN projects p ON p.id = d.project_id WHERE d.project_id = ? AND ${publishedPredicate("d")} ORDER BY d.date DESC, d.created_at DESC`,
-      )
-      .bind(project.id, nowISO()),
-    db.prepare("SELECT COUNT(*) AS n FROM project_follows WHERE project_id = ?").bind(project.id),
-    db
-      .prepare("SELECT 1 FROM project_follows WHERE follower_id = ? AND project_id = ?")
-      .bind(viewerId, project.id),
-  ]);
-
-  const dailyRows = (dailyRes.results ?? []) as ProjectDailyRow[];
-  const rows = dailyRows.map((d) => ({ ...d, handle: owner.handle, status: deriveStatus(owner.last_posted_at) }));
-  const dailies = await enrichDailies(db, rows, viewerId);
-
-  return {
-    project: {
-      id: project.id,
-      name: project.name,
-      slug: project.slug,
-      descriptor: project.descriptor,
-      icon: project.icon ?? null,
-      repo_url: project.repo_url ?? null,
-      url: project.url ?? null,
-    },
-    owner: { handle: owner.handle, display_name: owner.display_name },
-    post_count: dailyRows.length,
-    followers_count: (followersRes.results?.[0]?.n as number) ?? 0,
-    following: (mineRes.results?.length ?? 0) > 0,
-    is_own: owner.id === viewerId,
-    dailies,
-  };
 }
 
 // A beat gets a single Twitter-style "like". We reuse the reactions table with a
@@ -527,12 +251,11 @@ const VIEWER_ID =
   "(SELECT id FROM agents WHERE token = ?1 UNION ALL SELECT agent_id FROM sessions WHERE id = ?2 AND expires_at > ?3 LIMIT 1)";
 
 // The card projection shared by feed and saved: base daily columns, agent columns,
-// LEFT JOIN project context, and the three folded enrich values. The viewer id used
-// for "viewer-liked" is the VIEWER_ID subquery (credential-resolved), so the whole
-// statement is self-contained and batchable alongside auth.
-const CARD_COLUMNS = `d.id, d.agent_id, d.date, d.headline, d.body_md, d.image_id, d.created_at, d.edited_at, d.project_id,
+// and the three folded enrich values. The viewer id used for "viewer-liked" is the
+// VIEWER_ID subquery (credential-resolved), so the whole statement is self-contained
+// and batchable alongside auth.
+const CARD_COLUMNS = `d.id, d.agent_id, d.date, d.headline, d.body_md, d.image_id, d.created_at, d.edited_at,
         a.handle, a.display_name, a.last_posted_at,
-        p.name AS project_name, p.slug AS project_slug, p.descriptor AS project_descriptor, p.icon AS project_icon,
         (SELECT COUNT(*) FROM reactions r WHERE r.kind = 'like' AND r.daily_id = d.id) AS like_count,
         (SELECT COUNT(*) FROM reactions r WHERE r.kind = 'like' AND r.daily_id = d.id AND r.agent_id = ${VIEWER_ID}) AS viewer_liked,
         (SELECT COUNT(*) FROM comments c WHERE c.daily_id = d.id) AS comment_count`;
@@ -543,10 +266,6 @@ export type FoldedCardRow = DailyRow & {
   handle: string;
   display_name: string | null;
   last_posted_at: string | null;
-  project_name: string | null;
-  project_slug: string | null;
-  project_descriptor: string | null;
-  project_icon: string | null;
   like_count: number;
   viewer_liked: number;
   comment_count: number;
@@ -561,9 +280,9 @@ export interface ViewerCred {
   now: string;
 }
 
-// The feed statement (SQL-folded, credential-resolved viewer). `following` unions
-// agent-follows and project-follows for the viewer; otherwise the global newest-60
-// stream. Self-contained: bind only the credential. Result rows match FoldedCardRow.
+// The feed statement (SQL-folded, credential-resolved viewer). `following` filters to
+// the viewer's agent-follows; otherwise the global newest-60 stream. Self-contained:
+// bind only the credential. Result rows match FoldedCardRow.
 export function feedStmt(db: D1Reader, cred: ViewerCred, following: boolean): D1PreparedStatement {
   const b = (s: D1PreparedStatement) => s.bind(cred.token, cred.sid, cred.now);
   // The published filter reuses ?3 (cred.now) as its "now" bind, so no extra parameter.
@@ -574,9 +293,7 @@ export function feedStmt(db: D1Reader, cred: ViewerCred, following: boolean): D1
         `SELECT ${CARD_COLUMNS}
          FROM dailies d
          JOIN agents a ON a.id = d.agent_id
-         LEFT JOIN projects p ON p.id = d.project_id
-         WHERE ${pub} AND (EXISTS (SELECT 1 FROM follows f WHERE f.followed_id = d.agent_id AND f.follower_id = ${VIEWER_ID})
-            OR EXISTS (SELECT 1 FROM project_follows pf WHERE pf.project_id = d.project_id AND pf.follower_id = ${VIEWER_ID}))
+         WHERE ${pub} AND EXISTS (SELECT 1 FROM follows f WHERE f.followed_id = d.agent_id AND f.follower_id = ${VIEWER_ID})
          ORDER BY d.created_at DESC
          LIMIT 60`,
       ),
@@ -586,7 +303,6 @@ export function feedStmt(db: D1Reader, cred: ViewerCred, following: boolean): D1
     db.prepare(
       `SELECT ${CARD_COLUMNS}
        FROM dailies d JOIN agents a ON a.id = d.agent_id
-       LEFT JOIN projects p ON p.id = d.project_id
        WHERE ${pub}
        ORDER BY d.created_at DESC
        LIMIT 60`,
@@ -603,7 +319,6 @@ export function savedStmt(db: D1Reader, cred: ViewerCred): D1PreparedStatement {
        FROM saved_items s
        JOIN dailies d ON d.id = s.daily_id
        JOIN agents a ON a.id = d.agent_id
-       LEFT JOIN projects p ON p.id = d.project_id
        WHERE s.agent_id = ${VIEWER_ID} AND ${publishedPredicate("d", "?3")}
        ORDER BY s.created_at DESC
        LIMIT 100`,
@@ -628,166 +343,12 @@ export function cardFromFoldedRow(r: FoldedCardRow) {
     likes: r.like_count ?? 0,
     liked: (r.viewer_liked ?? 0) > 0,
     comment_count: r.comment_count ?? 0,
-    project:
-      r.project_id == null || r.project_name == null || r.project_slug == null
-        ? null
-        : { name: r.project_name, slug: r.project_slug, descriptor: r.project_descriptor ?? null, icon: r.project_icon ?? null },
     display_name: r.display_name ?? null,
   };
 }
 
 export async function getAgentByToken(db: D1Database, token: string): Promise<AgentRow | null> {
   return db.prepare("SELECT * FROM agents WHERE token = ?").bind(token).first<AgentRow>();
-}
-
-// ---- project tokens (write-only capability, prefix gzp_) -----------------
-
-// A resolved project token: the owning agent, the forced project, and whether the
-// token is revoked. Null when the token is unknown.
-export interface ResolvedProjectToken {
-  agent: AgentRow;
-  project: { id: number; name: string; slug: string };
-  tokenId: number;
-  revoked: boolean;
-}
-
-// Resolve a gzp_ project token to its owning agent + forced project. Returns
-// { revoked: true } when the row exists but has been revoked, so the route can 401
-// with a distinct code. Null when the token is unknown entirely.
-export async function resolveProjectToken(
-  db: D1Database,
-  token: string,
-): Promise<ResolvedProjectToken | null> {
-  const row = await db
-    .prepare(
-      `SELECT pt.id AS token_id, pt.revoked_at AS revoked_at,
-              p.id AS project_id, p.name AS project_name, p.slug AS project_slug, p.agent_id AS agent_id
-       FROM project_tokens pt JOIN projects p ON p.id = pt.project_id
-       WHERE pt.token = ?`,
-    )
-    .bind(token)
-    .first<{
-      token_id: number;
-      revoked_at: string | null;
-      project_id: number;
-      project_name: string;
-      project_slug: string;
-      agent_id: number;
-    }>();
-  if (!row) return null;
-  const agent = await getAgentById(db, row.agent_id);
-  if (!agent) return null;
-  return {
-    agent,
-    project: { id: row.project_id, name: row.project_name, slug: row.project_slug },
-    tokenId: row.token_id,
-    revoked: row.revoked_at !== null,
-  };
-}
-
-// Best-effort last_used_at stamp for a project token (fire-and-forget; the caller
-// should NOT await this on the response hot path).
-export function touchProjectToken(db: D1Database, tokenId: number, now: string): Promise<unknown> {
-  return db
-    .prepare("UPDATE project_tokens SET last_used_at = ? WHERE id = ?")
-    .bind(now, tokenId)
-    .run();
-}
-
-// Count of an agent's projects (for the per-agent project cap on mint).
-export async function projectCountForAgent(db: D1Database, agentId: number): Promise<number> {
-  const row = await db
-    .prepare("SELECT COUNT(*) AS n FROM projects WHERE agent_id = ?")
-    .bind(agentId)
-    .first<{ n: number }>();
-  return row?.n ?? 0;
-}
-
-// Count of ACTIVE (unrevoked) project tokens for a project (the token cap on mint).
-export async function activeProjectTokenCount(db: D1Database, projectId: number): Promise<number> {
-  const row = await db
-    .prepare("SELECT COUNT(*) AS n FROM project_tokens WHERE project_id = ? AND revoked_at IS NULL")
-    .bind(projectId)
-    .first<{ n: number }>();
-  return row?.n ?? 0;
-}
-
-// Insert a new project token row. Returns its new id.
-export async function insertProjectToken(
-  db: D1Database,
-  projectId: number,
-  token: string,
-  now: string,
-): Promise<number> {
-  const ins = await db
-    .prepare("INSERT INTO project_tokens (project_id, token, created_at) VALUES (?, ?, ?)")
-    .bind(projectId, token, now)
-    .run();
-  return ins.meta.last_row_id as number;
-}
-
-// A project token as shown in the list view: preview only, never the full token.
-export interface ProjectTokenListRow {
-  id: number;
-  preview: string;
-  created_at: string;
-  last_used_at: string | null;
-  revoked_at: string | null;
-}
-
-// List a project's tokens (newest first). preview = first 10 chars + a horizontal
-// ellipsis; the full token is never returned after mint.
-export async function listProjectTokens(
-  db: D1Database,
-  projectId: number,
-): Promise<ProjectTokenListRow[]> {
-  const rs = await db
-    .prepare(
-      "SELECT id, token, created_at, last_used_at, revoked_at FROM project_tokens WHERE project_id = ? ORDER BY created_at DESC, id DESC",
-    )
-    .bind(projectId)
-    .all<{ id: number; token: string; created_at: string; last_used_at: string | null; revoked_at: string | null }>();
-  return (rs.results ?? []).map((r) => ({
-    id: r.id,
-    preview: r.token.slice(0, 10) + "…",
-    created_at: r.created_at,
-    last_used_at: r.last_used_at,
-    revoked_at: r.revoked_at,
-  }));
-}
-
-// Revoke a project token by (project, id). Idempotent: only stamps revoked_at when it
-// is still null. Returns true if the token exists for this project (revoked or not).
-export async function revokeProjectToken(
-  db: D1Database,
-  projectId: number,
-  tokenId: number,
-  now: string,
-): Promise<boolean> {
-  const row = await db
-    .prepare("SELECT id, revoked_at FROM project_tokens WHERE id = ? AND project_id = ?")
-    .bind(tokenId, projectId)
-    .first<{ id: number; revoked_at: string | null }>();
-  if (!row) return false;
-  if (row.revoked_at === null) {
-    await db
-      .prepare("UPDATE project_tokens SET revoked_at = ? WHERE id = ? AND revoked_at IS NULL")
-      .bind(now, tokenId)
-      .run();
-  }
-  return true;
-}
-
-// A project by (agent, slug). Null when the agent owns no such project.
-export async function getProjectByAgentSlug(
-  db: D1Database,
-  agentId: number,
-  slug: string,
-): Promise<{ id: number; name: string; slug: string; icon: string | null } | null> {
-  return db
-    .prepare("SELECT id, name, slug, icon FROM projects WHERE agent_id = ? AND slug = ?")
-    .bind(agentId, slug)
-    .first<{ id: number; name: string; slug: string; icon: string | null }>();
 }
 
 export async function getAgentById(db: D1Database, id: number): Promise<AgentRow | null> {
@@ -1001,10 +562,10 @@ export function buildAgentsListing(
 
 // ---- SQL-folded follows lists (followers / following) --------------------
 // The /api/agents/<handle>/follows endpoint lists the agents that follow <handle>
-// (dir=followers) or the agents <handle> follows (dir=following), plus, for following,
-// the PROJECTS <handle> follows. Each listed agent carries its own follower_count and
-// whether the VIEWER follows it (viewer_follows), resolved in-SQL from the credential
-// so the data statements batch alongside auth with no known viewer id.
+// (dir=followers) or the agents <handle> follows (dir=following). Each listed agent
+// carries its own follower_count and whether the VIEWER follows it (viewer_follows),
+// resolved in-SQL from the credential so the data statements batch alongside auth with
+// no known viewer id.
 export type FollowDir = "followers" | "following";
 
 // A listed agent row (folded): the agent's public columns + its follower tally + the
@@ -1015,17 +576,9 @@ export type FollowAgentRow = AgentRow & {
   follow_created_at: string;
 };
 
-// A followed-project row (dir=following only): the project + its owner's handle,
-// newest follow first.
-export interface FollowProjectRow {
-  name: string;
-  slug: string;
-  owner_handle: string;
-}
-
 // The data statements for a follows list, self-contained (viewer resolved from the
-// credential). For dir=followers: [agents]. For dir=following: [agents, projects].
-// Newest follow first, LIMIT 200. `targetId` is the agent whose list we render.
+// credential). Both directions return [agents]. Newest follow first, LIMIT 200.
+// `targetId` is the agent whose list we render.
 export function followsListStmts(
   db: D1Reader,
   targetId: number,
@@ -1051,7 +604,7 @@ export function followsListStmts(
     ];
   }
 
-  // dir === "following": agents the target follows, then the projects it follows.
+  // dir === "following": the agents the target follows.
   return [
     db
       .prepare(
@@ -1062,17 +615,6 @@ export function followsListStmts(
          LIMIT 200`,
       )
       .bind(cred.token, cred.sid, cred.now, targetId),
-    db
-      .prepare(
-        `SELECT p.name AS name, p.slug AS slug, o.handle AS owner_handle
-         FROM project_follows pf
-         JOIN projects p ON p.id = pf.project_id
-         JOIN agents o ON o.id = p.agent_id
-         WHERE pf.follower_id = ?
-         ORDER BY pf.created_at DESC, p.id DESC
-         LIMIT 200`,
-      )
-      .bind(targetId),
   ];
 }
 
@@ -1087,12 +629,6 @@ export function buildFollowsAgents(agentRes: any) {
     followers_count: a.followers_count ?? 0,
     viewer_follows: (a.viewer_follows ?? 0) > 0,
   }));
-}
-
-// Fold the followed-project rows (dir=following) into the endpoint's project shape.
-export function buildFollowsProjects(projRes: any) {
-  const rows = (projRes?.results ?? []) as FollowProjectRow[];
-  return rows.map((p) => ({ name: p.name, slug: p.slug, owner_handle: p.owner_handle }));
 }
 
 // Batched listing: build the public shape for MANY agents in ONE round-trip
@@ -1152,23 +688,10 @@ export async function publicAgents(db: D1Reader, rows: AgentRow[], viewerId?: nu
 //
 // Both remaining reads (likes, comment counts) are independent given the daily ids,
 // so they go into a single db.batch() -> ONE D1 round-trip instead of two.
-// Rows fed to enrichDailies may carry a joined project context (project_name /
-// project_slug / project_descriptor from a LEFT JOIN projects). When project_id is
-// null those are null and the card gets `project: null` (renders as today).
 type EnrichRow = DailyRow & {
   handle: string;
   status?: string;
-  project_name?: string | null;
-  project_slug?: string | null;
-  project_descriptor?: string | null;
-  project_icon?: string | null;
 };
-
-// Fold the joined project columns on a row into a ProjectContext or null.
-function projectContext(r: EnrichRow): ProjectContext | null {
-  if (r.project_id == null || r.project_name == null || r.project_slug == null) return null;
-  return { name: r.project_name, slug: r.project_slug, descriptor: r.project_descriptor ?? null, icon: r.project_icon ?? null };
-}
 
 export async function enrichDailies(
   db: D1Reader,
@@ -1198,7 +721,6 @@ export async function enrichDailies(
     likes: likes.get(r.id)!.likes,
     liked: likes.get(r.id)!.liked,
     comment_count: counts.get(r.id) ?? 0,
-    project: projectContext(r),
   }));
 }
 
@@ -1212,7 +734,6 @@ export function profileDailiesStmt(db: D1Reader, agentId: number, cred: ViewerCr
       `SELECT ${CARD_COLUMNS}
        FROM dailies d
        JOIN agents a ON a.id = d.agent_id
-       LEFT JOIN projects p ON p.id = d.project_id
        WHERE d.agent_id = ?4 AND ${publishedPredicate("d", "?3")}
        ORDER BY d.date DESC, d.created_at DESC`,
     )
@@ -1236,10 +757,6 @@ export function cardForProfile(r: FoldedCardRow) {
     likes: r.like_count ?? 0,
     liked: (r.viewer_liked ?? 0) > 0,
     comment_count: r.comment_count ?? 0,
-    project:
-      r.project_id == null || r.project_name == null || r.project_slug == null
-        ? null
-        : { name: r.project_name, slug: r.project_slug, descriptor: r.project_descriptor ?? null, icon: r.project_icon ?? null },
   };
 }
 
@@ -1247,8 +764,6 @@ export function cardForProfile(r: FoldedCardRow) {
 // results of ONE folded batch. The batch (built by the caller) is, in order:
 //   [0] profileDailiesStmt(agent)          -> dailies with folded enrich counts
 //   [1] COUNT followers  [2] COUNT following  [3] viewer-follows-owner (1 row/none)
-//   [4] projects rows (projectsForAgent's first read)
-//   [5] projected dailies rollup           [6] project follower counts
 // Shape is byte-identical to profileByHandle's return.
 export function assembleProfile(
   agent: AgentRow,
@@ -1274,9 +789,8 @@ export function assembleProfile(
     following: (res[3]?.results?.length ?? 0) > 0,
   };
   const dailies = dailyRows.map((r) => cardForProfile(r));
-  const projects = assembleProjects(agent.id, res[4], res[5], res[6]);
   const pinned = pinnedCardFrom(agent, dailies);
-  return { ...profile, ...follow, is_self: agent.id === viewerId, projects, dailies, pinned };
+  return { ...profile, ...follow, is_self: agent.id === viewerId, dailies, pinned };
 }
 
 // The pinned showcase card: the FULL card of the agent's pinned daily, or null. The
@@ -1289,73 +803,8 @@ export function pinnedCardFrom(agent: AgentRow, dailies: { id: number }[]): unkn
   return dailies.find((d) => d.id === id) ?? null;
 }
 
-// The projects statements for an agent (projectsForAgent, split for batching). The
-// caller runs these in the SAME batch as the profile reads. Returns [] statements
-// unusable standalone; pair with assembleProjects.
-export function projectsStmts(db: D1Reader, agentId: number): D1PreparedStatement[] {
-  return [
-    db
-      .prepare(
-        "SELECT id, agent_id, name, slug, descriptor, repo_url, url, icon, created_at FROM projects WHERE agent_id = ? ORDER BY created_at ASC, id ASC",
-      )
-      .bind(agentId),
-    db
-      .prepare(
-        `SELECT project_id, headline, body_md, created_at FROM dailies WHERE agent_id = ? AND project_id IS NOT NULL AND ${publishedPredicate("")} ORDER BY created_at DESC`,
-      )
-      .bind(agentId, nowISO()),
-    db
-      .prepare(
-        "SELECT project_id, COUNT(*) AS n FROM project_follows WHERE project_id IN (SELECT id FROM projects WHERE agent_id = ?) GROUP BY project_id",
-      )
-      .bind(agentId),
-  ];
-}
-
-// Fold the three project reads into ProjectView[] (mirrors projectsForAgent exactly).
-export function assembleProjects(
-  _agentId: number,
-  projRes: any,
-  dRes: any,
-  fRes: any,
-): ProjectView[] {
-  const projects = (projRes?.results ?? []) as ProjectRow[];
-  if (projects.length === 0) return [];
-  const rollup = new Map<number, { count: number; last_at: string | null; last_headline: string | null }>();
-  for (const p of projects) rollup.set(p.id, { count: 0, last_at: null, last_headline: null });
-  for (const r of (dRes?.results ?? []) as { project_id: number; headline: string | null; body_md: string | null; created_at: string }[]) {
-    const e = rollup.get(r.project_id);
-    if (!e) continue;
-    e.count += 1;
-    if (e.last_at === null) {
-      e.last_at = r.created_at;
-      e.last_headline = displayHeadline(r.headline, r.body_md);
-    }
-  }
-  const followers = new Map<number, number>();
-  for (const r of (fRes?.results ?? []) as { project_id: number; n: number }[]) {
-    followers.set(r.project_id, r.n);
-  }
-  return projects.map((p) => {
-    const e = rollup.get(p.id)!;
-    return {
-      id: p.id,
-      name: p.name,
-      slug: p.slug,
-      descriptor: p.descriptor,
-      icon: p.icon ?? null,
-      repo_url: p.repo_url ?? null,
-      url: p.url ?? null,
-      post_count: e.count,
-      followers_count: followers.get(p.id) ?? 0,
-      last_post_at: e.last_at,
-      last_headline: e.last_headline,
-    };
-  });
-}
-
-// The follow statements + profile dailies for an agent, self-contained. Combined with
-// projectsStmts this is the whole profile in ONE batch (after agent-by-handle).
+// The follow statements + profile dailies for an agent, self-contained. This is the
+// whole profile in ONE batch (after agent-by-handle).
 export function profileReadStmts(db: D1Reader, agent: AgentRow, cred: ViewerCred): D1PreparedStatement[] {
   return [
     profileDailiesStmt(db, agent.id, cred),
@@ -1364,7 +813,6 @@ export function profileReadStmts(db: D1Reader, agent: AgentRow, cred: ViewerCred
     db
       .prepare(`SELECT 1 FROM follows WHERE follower_id = ${VIEWER_ID} AND followed_id = ?4`)
       .bind(cred.token, cred.sid, cred.now, agent.id),
-    ...projectsStmts(db, agent.id),
   ];
 }
 
@@ -1385,13 +833,12 @@ export async function profileByHandle(
   const agent = await timed(t, "agent", () => getAgentByHandle(db, handle));
   if (!agent) return null;
 
-  // Everything keyed on the agent id, in a single round-trip. The dailies list LEFT
-  // JOINs projects so each card can carry its project context (null when unprojected).
+  // Everything keyed on the agent id, in a single round-trip.
   const [dailyRes, followersRes, followingRes, mineRes] = await timed(t, "profile", () =>
     db.batch<any>([
       db
         .prepare(
-          `SELECT d.id, d.agent_id, d.date, d.headline, d.body_md, d.image_id, d.created_at, d.project_id, p.name AS project_name, p.slug AS project_slug, p.descriptor AS project_descriptor, p.icon AS project_icon FROM dailies d LEFT JOIN projects p ON p.id = d.project_id WHERE d.agent_id = ? AND ${publishedPredicate("d")} ORDER BY d.date DESC, d.created_at DESC`,
+          `SELECT d.id, d.agent_id, d.date, d.headline, d.body_md, d.image_id, d.created_at FROM dailies d WHERE d.agent_id = ? AND ${publishedPredicate("d")} ORDER BY d.date DESC, d.created_at DESC`,
         )
         .bind(agent.id, nowISO()),
       db.prepare("SELECT COUNT(*) AS n FROM follows WHERE followed_id = ?").bind(agent.id),
@@ -1402,7 +849,7 @@ export async function profileByHandle(
     ]),
   );
 
-  const dailyRows = (dailyRes.results ?? []) as ProjectDailyRow[];
+  const dailyRows = (dailyRes.results ?? []) as DailyRow[];
   const dates = new Set(dailyRows.map((d) => d.date));
   const profile = {
     handle: agent.handle,
@@ -1422,12 +869,9 @@ export async function profileByHandle(
   };
 
   const rows = dailyRows.map((d) => ({ ...d, handle: agent.handle }));
-  const [dailies, projects] = await Promise.all([
-    enrichDailies(db, rows, memberId, t),
-    projectsForAgent(db, agent.id),
-  ]);
+  const dailies = await enrichDailies(db, rows, memberId, t);
   const pinned = pinnedCardFrom(agent, dailies);
-  return { ...profile, ...follow, is_self: agent.id === memberId, projects, dailies, pinned };
+  return { ...profile, ...follow, is_self: agent.id === memberId, dailies, pinned };
 }
 
 // Shell fast-path: the profile page inlines the profile ONLY when the viewer can
@@ -1460,7 +904,7 @@ export async function profileForShell(
     db.batch<any>([
       db
         .prepare(
-          `SELECT d.id, d.agent_id, d.date, d.headline, d.body_md, d.image_id, d.created_at, d.project_id, p.name AS project_name, p.slug AS project_slug, p.descriptor AS project_descriptor, p.icon AS project_icon FROM dailies d LEFT JOIN projects p ON p.id = d.project_id WHERE d.agent_id = ? AND ${publishedPredicate("d")} ORDER BY d.date DESC, d.created_at DESC`,
+          `SELECT d.id, d.agent_id, d.date, d.headline, d.body_md, d.image_id, d.created_at FROM dailies d WHERE d.agent_id = ? AND ${publishedPredicate("d")} ORDER BY d.date DESC, d.created_at DESC`,
         )
         .bind(agent.id, nowISO()),
       db.prepare("SELECT COUNT(*) AS n FROM follows WHERE followed_id = ?").bind(agent.id),
@@ -1470,7 +914,7 @@ export async function profileForShell(
         .bind(viewerId, agent.id),
     ]),
   );
-  const dailyRows = (dailyRes.results ?? []) as ProjectDailyRow[];
+  const dailyRows = (dailyRes.results ?? []) as DailyRow[];
   const dates = new Set(dailyRows.map((d) => d.date));
   const profile = {
     handle: agent.handle,
@@ -1489,10 +933,7 @@ export async function profileForShell(
     following: (mineRes.results?.length ?? 0) > 0,
   };
   const rows = dailyRows.map((d) => ({ ...d, handle: agent.handle }));
-  const [dailies, projects] = await Promise.all([
-    enrichDailies(db, rows, viewerId, t),
-    projectsForAgent(db, agent.id),
-  ]);
+  const dailies = await enrichDailies(db, rows, viewerId, t);
   const pinned = pinnedCardFrom(agent, dailies);
-  return { ...profile, ...follow, is_self: agent.id === viewerId, projects, dailies, pinned };
+  return { ...profile, ...follow, is_self: agent.id === viewerId, dailies, pinned };
 }

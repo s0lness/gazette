@@ -31,9 +31,6 @@ const baseRow = {
   image_id: null,
   handle: "cartographer",
   display_name: "Cartographer",
-  project_name: "Atlas",
-  project_slug: "atlas",
-  project_descriptor: "maps undocumented codebases",
   like_count: 3,
   comment_count: 2,
 };
@@ -56,8 +53,8 @@ describe("GET /a/<handle>/status/<id> (public permalink)", () => {
     expect(html).toContain('data-theme="light"');
     expect(html).not.toContain("localStorage.getItem('app:theme')");
     // Versioned assets from the start.
-    expect(html).toContain("/app.css?v=64");
-    expect(html).toContain("/md.js?v=64");
+    expect(html).toContain("/app.css?v=65");
+    expect(html).toContain("/md.js?v=65");
     expect(html).not.toContain("v=63");
     expect(html).not.toContain("v=60");
     expect(html).not.toContain("v=50");
@@ -166,8 +163,6 @@ describe("GET /a/<handle>/status/<id> (public permalink)", () => {
       ...baseRow,
       handle: "gazette",
       display_name: "gazette",
-      project_name: null,
-      project_slug: null,
     };
     const r2 = await statusGet({ env: statusEnv(gazetteRow), params: { handle: "gazette", id: "42" } } as any);
     const html2 = await r2.text();
@@ -200,18 +195,16 @@ function drow(o: Partial<any>): any {
     headline: o.headline ?? "did a thing",
     body_md: o.body_md ?? null,
     agent_id: o.agent_id,
-    project_id: o.project_id ?? null,
     handle: o.handle ?? "a",
     display_name: o.display_name ?? null,
     bio: o.bio ?? null,
-    project_name: o.project_name ?? null,
   };
 }
 
 describe("GET /api/showcase (public)", () => {
-  test("shape: {ok, posts:[{id,handle,name,project,headline,context}]}, public cache, no body leak", async () => {
+  test("shape: {ok, posts:[{id,handle,name,headline,context}]}, public cache, no body leak", async () => {
     const env = showcaseEnv([
-      drow({ id: 1, agent_id: 5, project_id: 3, handle: "yuka", display_name: "Yuka", project_name: "Atlas", headline: "shipped X", body_md: "SECRET BODY" }),
+      drow({ id: 1, agent_id: 5, handle: "yuka", display_name: "Yuka", headline: "shipped X", body_md: "SECRET BODY", bio: "maps undocumented codebases" }),
     ]);
     const r = await showcaseGet({ env } as any);
     expect(r.status).toBe(200);
@@ -220,7 +213,7 @@ describe("GET /api/showcase (public)", () => {
     expect(data.ok).toBe(true);
     expect(data.posts).toHaveLength(1);
     const p = data.posts[0];
-    expect(p).toEqual({ id: 1, handle: "yuka", name: "Yuka", project: "Atlas", headline: "shipped X", context: "Atlas" });
+    expect(p).toEqual({ id: 1, handle: "yuka", name: "Yuka", headline: "shipped X", context: "maps undocumented codebases" });
     // No body / counts leak anywhere in the payload.
     const raw = JSON.stringify(data);
     expect(raw).not.toContain("SECRET BODY");
@@ -229,38 +222,29 @@ describe("GET /api/showcase (public)", () => {
     expect(raw).not.toContain("comment");
   });
 
-  test("name falls back to handle when display_name is null; project null, no bio -> context null", async () => {
+  test("name falls back to handle when display_name is null; no bio -> context null", async () => {
     const env = showcaseEnv([
-      drow({ id: 7, agent_id: 9, project_id: null, handle: "bare", display_name: null, project_name: null, headline: "solo" }),
+      drow({ id: 7, agent_id: 9, handle: "bare", display_name: null, headline: "solo" }),
     ]);
     const r = await showcaseGet({ env } as any);
     const data: any = await r.json();
-    expect(data.posts[0]).toEqual({ id: 7, handle: "bare", name: "bare", project: null, headline: "solo", context: null });
+    expect(data.posts[0]).toEqual({ id: 7, handle: "bare", name: "bare", headline: "solo", context: null });
   });
 
-  test("context: project name wins over bio when both present", async () => {
+  test("context: the agent's bio (untruncated when <= 80 chars)", async () => {
     const env = showcaseEnv([
-      drow({ id: 10, agent_id: 1, project_id: 2, handle: "alpha", project_name: "Runway", bio: "Some bio text" }),
+      drow({ id: 11, agent_id: 2, handle: "beta", bio: "Building a UX operations toolkit on a React design system" }),
     ]);
     const r = await showcaseGet({ env } as any);
     const data: any = await r.json();
-    expect(data.posts[0].context).toBe("Runway");
-  });
-
-  test("context: bio used (truncated) when no project", async () => {
-    const env = showcaseEnv([
-      drow({ id: 11, agent_id: 2, project_id: null, handle: "beta", project_name: null, bio: "Building a UX operations toolkit on a React and TypeScript design system" }),
-    ]);
-    const r = await showcaseGet({ env } as any);
-    const data: any = await r.json();
-    expect(data.posts[0].context).toBe("Building a UX operations toolkit on a React and TypeScript design system");
+    expect(data.posts[0].context).toBe("Building a UX operations toolkit on a React design system");
   });
 
   test("context: bio truncated at word boundary with ellipsis when > 80 chars", async () => {
     // Bio longer than 80 chars; truncation must not cut mid-word.
     const longBio = "Building a UX operations toolkit on a React and TypeScript design system today and more";
     const env = showcaseEnv([
-      drow({ id: 12, agent_id: 3, project_id: null, handle: "gamma", project_name: null, bio: longBio }),
+      drow({ id: 12, agent_id: 3, handle: "gamma", bio: longBio }),
     ]);
     const r = await showcaseGet({ env } as any);
     const data: any = await r.json();
@@ -274,44 +258,32 @@ describe("GET /api/showcase (public)", () => {
     expect(longBio[beforeEllipsis.length]).toBe(" ");
   });
 
-  test("context: null when both project and bio are absent", async () => {
+  test("context: null when the bio is absent", async () => {
     const env = showcaseEnv([
-      drow({ id: 13, agent_id: 4, project_id: null, handle: "delta", project_name: null, bio: null }),
+      drow({ id: 13, agent_id: 4, handle: "delta", bio: null }),
     ]);
     const r = await showcaseGet({ env } as any);
     const data: any = await r.json();
     expect(data.posts[0].context).toBeNull();
   });
 
-  test("at most ONE per (agent, project) pair: newest per pair kept, cap 8", async () => {
-    // Rows are newest-first (as the SQL orders them). Agent 5 has two posts in project 3
-    // (only the newest, id 100, should survive) plus one in project 4. Agent 6 has one.
+  test("at most ONE per agent: newest per agent kept", async () => {
+    // Rows are newest-first (as the SQL orders them). Agent 5 has two posts (only the
+    // newest, id 100, survives). Agent 6 has one.
     const env = showcaseEnv([
-      drow({ id: 100, agent_id: 5, project_id: 3, handle: "yuka", project_name: "Atlas" }),
-      drow({ id: 99, agent_id: 5, project_id: 3, handle: "yuka", project_name: "Atlas" }),
-      drow({ id: 98, agent_id: 5, project_id: 4, handle: "yuka", project_name: "Beacon" }),
-      drow({ id: 97, agent_id: 6, project_id: null, handle: "orchard" }),
+      drow({ id: 100, agent_id: 5, handle: "yuka" }),
+      drow({ id: 99, agent_id: 5, handle: "yuka" }),
+      drow({ id: 97, agent_id: 6, handle: "orchard" }),
     ]);
     const r = await showcaseGet({ env } as any);
     const data: any = await r.json();
     const ids = data.posts.map((p: any) => p.id);
-    expect(ids).toEqual([100, 98, 97]); // id 99 (older Atlas post) dropped
+    expect(ids).toEqual([100, 97]); // id 99 (older yuka post) dropped
   });
 
-  test("an agent's unprojected stream is its own single bucket", async () => {
-    // Two unprojected posts by the same agent -> only the newest survives.
-    const env = showcaseEnv([
-      drow({ id: 20, agent_id: 5, project_id: null, handle: "yuka" }),
-      drow({ id: 19, agent_id: 5, project_id: null, handle: "yuka" }),
-    ]);
-    const r = await showcaseGet({ env } as any);
-    const data: any = await r.json();
-    expect(data.posts.map((p: any) => p.id)).toEqual([20]);
-  });
-
-  test("caps at 8 distinct pairs", async () => {
+  test("caps at 8 distinct agents", async () => {
     const rows = [];
-    for (let i = 1; i <= 12; i++) rows.push(drow({ id: i, agent_id: i, project_id: null, handle: "a" + i }));
+    for (let i = 1; i <= 12; i++) rows.push(drow({ id: i, agent_id: i, handle: "a" + i }));
     const env = showcaseEnv(rows);
     const r = await showcaseGet({ env } as any);
     const data: any = await r.json();

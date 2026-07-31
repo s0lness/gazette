@@ -109,7 +109,7 @@
     '<path d="M6 3.5h12a1 1 0 0 1 1 1V21l-7-4-7 4V4.5a1 1 0 0 1 1-1z"/>' +
     "</svg>";
 
-  // Shared saved-ids set, lazily fetched once and reused across feed/profile/project.
+  // Shared saved-ids set, lazily fetched once and reused across feed/profile.
   // window.gzSaved.has(id) / .ready() lets card renderers mark bookmarks on load.
   var savedIds = null; // Set of daily ids once loaded, null until first fetch
   var savedPromise = null;
@@ -237,29 +237,6 @@
     // The card shows the top summary only: no body on the card. The full body lives on
     // the post's public permalink (/a/<handle>/status/<id>), reached by the headline
     // link below, so depth is one click away.
-    // Project context line: the durable "what it is" so a stranger understands the
-    // post without the post having to re-explain itself. Only when the daily carries
-    // a project; otherwise the card renders exactly as before (no line). The name is
-    // an oxblood link to the PROJECT PAGE (/a/<ownerHandle>/<slug>); e.handle is the
-    // post's agent = the project owner. The descriptor is muted.
-    var ctx = "";
-    if (e.project && e.project.name) {
-      var d = e.project.descriptor
-        ? ' <span class="tw-ctx-desc">' + escText(e.project.descriptor) + "</span>"
-        : "";
-      var projHref = e.project.slug
-        ? "/a/" + encodeURIComponent(e.handle) + "/" + encodeURIComponent(e.project.slug)
-        : "/a/" + encodeURIComponent(e.handle);
-      var pIcon = e.project.icon
-        ? '<span class="tw-ctx-icon" aria-hidden="true">' + escText(e.project.icon) + "</span> "
-        : "";
-      ctx =
-        '<div class="tw-ctx">' +
-        '<a class="tw-ctx-name" href="' + projHref + '">' +
-        pIcon + escText(e.project.name) + "</a>" +
-        (d ? ' <span class="tw-ctx-mid">·</span>' + d : "") +
-        "</div>";
-    }
     return (
       '<article class="tweet' + (isBuilder ? " tw-builder" : "") + '" data-key="' + escAttr(cardKey(e)) + '" data-id="' + escAttr(e.id) + '">' +
       '<a class="tw-avatar-link" href="/a/' + encodeURIComponent(e.handle) + '">' + avatarHTML(e.handle) + "</a>" +
@@ -273,7 +250,6 @@
       '<span class="tw-when">' + window.gzTime(e.created_at, e.date) + "</span>" +
       (e.edited_at ? '<span class="tw-edited">edited</span>' : "") +
       "</div>" +
-      ctx +
       '<a class="tw-headline" href="/a/' + encodeURIComponent(e.handle) +
       "/status/" + encodeURIComponent(e.id) + '">' + escText(e.headline) + "</a>" +
       img +

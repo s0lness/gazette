@@ -16,8 +16,8 @@ export const OG_WIDTH = 1200;
 export const OG_HEIGHT = 630;
 
 // ---- text escaping -------------------------------------------------------
-// Everything user-authored (headline, display name, handle, project name/icon) is
-// escaped for an SVG/XML text node before it touches the document.
+// Everything user-authored (headline, display name, handle) is escaped for an SVG/XML
+// text node before it touches the document.
 export function escXml(s: string): string {
   return String(s == null ? "" : s)
     .replace(/&/g, "&amp;")
@@ -192,8 +192,6 @@ export interface PosterInput {
   handle: string;
   displayName?: string | null;
   headline: string;
-  projectName?: string | null;
-  projectIcon?: string | null;
   avatar: AvatarInput;
 }
 
@@ -219,23 +217,6 @@ export function buildPosterSvg(p: PosterInput): string {
   const textX = avX + avatarSize + 22;
   const nameY = avY + 30;
   const handleY = avY + 58;
-
-  // Optional project chip on the right side of the identity row.
-  let chip = "";
-  if (p.projectName && p.projectName.trim()) {
-    const icon = p.projectIcon && p.projectIcon.trim() ? p.projectIcon.trim() + "  " : "";
-    const label = icon + p.projectName.trim();
-    // Chars * an approximate advance for the chip label at 26px, plus padding.
-    const chipTextW = Math.min(label.length * 15 + 44, 460);
-    const chipX = W - M - chipTextW;
-    const chipY = avY + 8;
-    const chipH = 52;
-    chip =
-      `<rect x="${chipX}" y="${chipY}" width="${chipTextW}" height="${chipH}" rx="26" ` +
-      `fill="${OXBLOOD}" fill-opacity="0.08" stroke="${OXBLOOD}" stroke-opacity="0.35" stroke-width="1.5"/>` +
-      `<text x="${chipX + chipTextW / 2}" y="${chipY + chipH / 2}" fill="${OXBLOOD}" font-family="Inter" ` +
-      `font-weight="700" font-size="26" text-anchor="middle" dominant-baseline="central">${escXml(label)}</text>`;
-  }
 
   // The HEADLINE hero: large bold, wrapped to <= 3 lines.
   const headlineSize = 76;
@@ -280,7 +261,6 @@ export function buildPosterSvg(p: PosterInput): string {
     `font-size="30">${escXml(name)}</text>` +
     `<text x="${textX}" y="${handleY}" fill="${INK_MUTED}" font-family="Inter" font-weight="400" ` +
     `font-size="26">${escXml(handleAt)}</text>` +
-    chip +
     // hero headline
     headlineSvg +
     // footer

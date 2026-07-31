@@ -53,16 +53,9 @@
     try { return decodeURIComponent(m[1]); } catch (e) { return m[1]; }
   }
 
-  // A gazette PROJECT link (/a/<handle>/<slug>), parsed, or null.
-  function projectFromLink(a) {
-    if (!a || !a.getAttribute) return null;
-    var href = a.getAttribute("href") || "";
-    var m = /^\/a\/([^/?#]+)\/([^/?#]+)/.exec(href);
-    if (!m) return null;
-    try { return { handle: decodeURIComponent(m[1]), slug: decodeURIComponent(m[2]) }; } catch (e) { return { handle: m[1], slug: m[2] }; }
-  }
-
-  // Nearest ancestor (or self) that is a profile OR project link.
+  // Nearest ancestor (or self) that is a profile link (/a/<handle>). A deeper
+  // /a/<handle>/status/<id> permalink still matches on its <handle>, which is the
+  // desired hover target (the post's author).
   function profileLinkFrom(el) {
     while (el && el !== document) {
       if (el.tagName === "A" && handleFromLink(el)) return el;
@@ -162,75 +155,6 @@
     if (wire) wire();
   }
 
-  function projectCardHTML(d) {
-    var p = d.project;
-    var owner = d.owner || {};
-    var href = "/a/" + encodeURIComponent(owner.handle) + "/" + encodeURIComponent(p.slug);
-    var followBtn = d.is_own
-      ? ""
-      : '<button type="button" class="follow-btn gz-hc-pfollow' + (d.following ? " following" : "") +
-        '" aria-pressed="' + (d.following ? "true" : "false") +
-        '"><span class="follow-label">' + (d.following ? "Following" : "Follow") + "</span></button>";
-    var links = "";
-    if (p.repo_url) links += '<a class="gz-hc-plink" href="' + esc(p.repo_url) + '" target="_blank" rel="noopener">Open source</a>';
-    if (p.url) links += '<a class="gz-hc-plink" href="' + esc(p.url) + '" target="_blank" rel="noopener">Try it</a>';
-    return (
-      '<div class="gz-hc-head">' +
-      '<a class="gz-hc-avatar-link" href="' + href + '">' +
-      (window.gzAvatar ? window.gzAvatar(p.name, "tw-avatar-lg") : "") +
-      "</a>" + followBtn + "</div>" +
-      '<a class="gz-hc-name" href="' + href + '">' +
-      (p.icon ? '<span class="gz-hc-icon" aria-hidden="true">' + esc(p.icon) + "</span> " : "") +
-      esc(p.name) + "</a>" +
-      '<a class="gz-hc-handle" href="/a/' + encodeURIComponent(owner.handle) + '">by @' + esc(owner.handle) + "</a>" +
-      (p.descriptor ? '<p class="gz-hc-bio">' + esc(p.descriptor) + "</p>" : "") +
-      '<p class="gz-hc-counts">' +
-      "<span><strong>" + (d.post_count || 0) + "</strong> posts</span>" +
-      " &middot; " +
-      '<span><strong class="gz-hc-pfollowers">' + (d.followers_count || 0) + "</strong> followers</span>" +
-      "</p>" +
-      (links ? '<p class="gz-hc-plinks">' + links + "</p>" : "")
-    );
-  }
-
-  function wireProjectFollow(d) {
-    var btn = card.querySelector(".gz-hc-pfollow");
-    if (!btn) return;
-    btn.addEventListener("click", function () {
-      if (btn.getAttribute("data-busy") === "1") return;
-      var label = btn.querySelector(".follow-label");
-      var nEl = card.querySelector(".gz-hc-pfollowers");
-      var was = btn.classList.contains("following");
-      var cur = parseInt((nEl && nEl.textContent) || "0", 10) || 0;
-      setFollow(btn, label, nEl, !was, was ? Math.max(0, cur - 1) : cur + 1);
-      btn.setAttribute("data-busy", "1");
-      window
-        .gzFetch("/api/project-follow", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ project_id: d.project.id, action: was ? "unfollow" : "follow" }),
-        })
-        .then(function (r) { return r.json().then(function (x) { return { status: r.status, data: x }; }); })
-        .then(function (res) {
-          btn.removeAttribute("data-busy");
-          var following, followers;
-          if (res.status === 200 && typeof res.data.followers_count === "number") {
-            following = !!res.data.following;
-            followers = res.data.followers_count;
-          } else { following = was; followers = cur; }
-          setFollow(btn, label, nEl, following, followers);
-          var key = "p:" + d.owner.handle + "/" + d.project.slug;
-          var c = cache[key];
-          if (c && typeof c === "object") { c.following = following; c.followers_count = followers; }
-        })
-        .catch(function (err) {
-          btn.removeAttribute("data-busy");
-          if (err && err.gzGated) return;
-          setFollow(btn, label, nEl, was, cur);
-        });
-    });
-  }
-
   function wireFollow(data) {
     var btn = card.querySelector(".gz-hc-follow");
     if (!btn) return;
@@ -313,25 +237,6 @@
     }, GRACE);
   }
 
-  // Fetch (once) a project card, resolving to its data or null.
-  function fetchProject(ref) {
-    var key = "p:" + ref.handle + "/" + ref.slug;
-    var hit = cache[key];
-    if (hit && typeof hit.then === "function") return hit;
-    if (hit) return Promise.resolve(hit);
-    var p = window
-      .gzFetch("/api/project/" + encodeURIComponent(ref.handle) + "/" + encodeURIComponent(ref.slug))
-      .then(function (r) { if (r.status === 404) return null; return r.json(); })
-      .then(function (data) {
-        if (data && data.project) { cache[key] = data; return data; }
-        delete cache[key];
-        return null;
-      })
-      .catch(function (err) { delete cache[key]; if (err && err.gzGated) return null; return null; });
-    cache[key] = p;
-    return p;
-  }
-
   // Fetch (once) the light card for a handle, resolving to its data or null.
   function fetchCard(handle) {
     var hit = cache[handle];
@@ -358,10 +263,9 @@
   }
 
   function onEnter(anchor) {
-    var proj = projectFromLink(anchor);
-    var handle = proj ? null : handleFromLink(anchor);
-    if (!proj && !handle) return;
-    var key = proj ? "p:" + proj.handle + "/" + proj.slug : "a:" + handle;
+    var handle = handleFromLink(anchor);
+    if (!handle) return;
+    var key = "a:" + handle;
     overAnchor = true;
     if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
     // Already showing this card: nothing to do.
@@ -370,12 +274,10 @@
     openTimer = setTimeout(function () {
       openTimer = null;
       if (!overAnchor) return; // pointer already left before the delay elapsed
-      var pending = proj ? fetchProject(proj) : fetchCard(handle);
-      pending.then(function (data) {
+      fetchCard(handle).then(function (data) {
         if (!data) return;
         if (!overAnchor && openHandle !== key) return; // left during fetch
-        if (proj) show(anchor, key, projectCardHTML(data), function () { wireProjectFollow(data); });
-        else show(anchor, key, cardHTML(data), function () { wireFollow(data); });
+        show(anchor, key, cardHTML(data), function () { wireFollow(data); });
       });
     }, OPEN_DELAY);
   }
