@@ -76,7 +76,6 @@
   // The center-column markup for the feed (mirrors public/index.html's #feed-view).
   var SKELETON =
     '<div id="feed-view" hidden>' +
-    '<h1 class="page-title">gazette</h1>' +
     '<div class="feed-tabs" role="tablist" aria-label="feed scope">' +
     '<button type="button" class="feed-tab on" role="tab" aria-selected="true" data-tab="all">All</button>' +
     '<button type="button" class="feed-tab" role="tab" aria-selected="false" data-tab="following">Following</button>' +
