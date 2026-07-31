@@ -247,13 +247,52 @@
     );
   }
 
+  // Rank top-level comments X-style by engagement (a pure, testable helper).
+  // `children[id]` is the reply-tree adjacency (each level chronological). `authorHandle`
+  // is the post author's handle. Sort keys, in order:
+  //   1. author-participated: a subtree containing at least one reply BY the post author
+  //      (a reply, not the top-level node itself) ranks first;
+  //   2. subtree size: total descendant replies (all nesting), DESC;
+  //   3. recency: newer created_at first, so equal-engagement fresh comments beat stale ones.
+  function rankTopLevel(roots, children, authorHandle) {
+    // Count all descendants of a node, and whether any descendant is by the author.
+    function walk(c) {
+      var kids = children[c.id] || [];
+      var count = kids.length;
+      var byAuthor = false;
+      for (var i = 0; i < kids.length; i++) {
+        if (authorHandle && kids[i].handle === authorHandle) byAuthor = true;
+        var sub = walk(kids[i]);
+        count += sub.count;
+        if (sub.byAuthor) byAuthor = true;
+      }
+      return { count: count, byAuthor: byAuthor };
+    }
+    var stats = {};
+    for (var i = 0; i < roots.length; i++) stats[roots[i].id] = walk(roots[i]);
+    // Stable sort: decorate with original index, compare tiers, then index as final tiebreak.
+    return roots
+      .map(function (c, idx) { return { c: c, idx: idx, s: stats[c.id] }; })
+      .sort(function (a, b) {
+        if (a.s.byAuthor !== b.s.byAuthor) return a.s.byAuthor ? -1 : 1;
+        if (a.s.count !== b.s.count) return b.s.count - a.s.count;
+        var at = Date.parse(a.c.created_at) || 0;
+        var bt = Date.parse(b.c.created_at) || 0;
+        if (at !== bt) return bt - at;
+        return a.idx - b.idx;
+      })
+      .map(function (x) { return x.c; });
+  }
+
   // Build a reply tree from a flat, chronological comment list and render it. Replies
   // (reply_to pointing at another loaded comment) nest under their parent behind a
   // Twitter-style connector line; visible nesting is capped at ONE level (a reply to a
   // reply stays at the same indent) so margins never run away. A reply whose parent is
   // not in the loaded set renders at top level (it still shows "replying to @who" only
-  // when the parent is present). Order within a level stays chronological.
-  function commentsListHTML(list) {
+  // when the parent is present). Replies inside a subtree stay chronological; the
+  // TOP-LEVEL comments are ranked by engagement (see rankTopLevel) when the post
+  // author's handle is known, else they stay chronological.
+  function commentsListHTML(list, authorHandle) {
     var byId = {};
     var i;
     for (i = 0; i < list.length; i++) byId[list[i].id] = list[i];
@@ -266,6 +305,7 @@
       if (p == null) roots.push(c);
       else (children[p] || (children[p] = [])).push(c);
     }
+    if (authorHandle) roots = rankTopLevel(roots, children, authorHandle);
     function renderNode(c, depth) {
       var html = commentHTML(c, byId, depth);
       var kids = children[c.id];
@@ -284,7 +324,7 @@
   // The comment region: preview comments (from feed payload) + a reply box. Full
   // thread loads lazily on first expand.
   function commentsHTML(e) {
-    var preview = commentsListHTML(e.comments_preview || []);
+    var preview = commentsListHTML(e.comments_preview || [], e.handle);
     return (
       '<div class="tw-comments" hidden>' +
       '<div class="tw-thread" data-loaded="0">' + preview + "</div>" +
@@ -326,7 +366,7 @@
     // the post's public permalink (/a/<handle>/status/<id>), reached by the headline
     // link below, so depth is one click away.
     return (
-      '<article class="tweet' + (isBuilder ? " tw-builder" : "") + '" data-key="' + escAttr(cardKey(e)) + '" data-id="' + escAttr(e.id) + '">' +
+      '<article class="tweet' + (isBuilder ? " tw-builder" : "") + '" data-key="' + escAttr(cardKey(e)) + '" data-id="' + escAttr(e.id) + '" data-author="' + escAttr(e.handle) + '">' +
       '<a class="tw-avatar-link" href="/a/' + encodeURIComponent(e.handle) + '">' + avatarHTML(e.handle) + "</a>" +
       '<div class="tw-body">' +
       '<div class="tw-head">' +
@@ -469,13 +509,14 @@
     var thread = card.querySelector(".tw-thread");
     if (!thread || thread.getAttribute("data-loaded") === "1") return;
     var id = card.getAttribute("data-id");
+    var author = card.getAttribute("data-author") || "";
     window
       .gzFetch("/api/daily/" + encodeURIComponent(id) + "/comments")
       .then(function (r) { return r.json(); })
       .then(function (data) {
         thread.setAttribute("data-loaded", "1");
         var list = data.comments || [];
-        thread.innerHTML = list.length ? commentsListHTML(list) : '<p class="tw-c-empty">No replies yet. Be the first word back.</p>';
+        thread.innerHTML = list.length ? commentsListHTML(list, author) : '<p class="tw-c-empty">No replies yet. Be the first word back.</p>';
       })
       .catch(function () {});
   }
@@ -721,7 +762,7 @@
   }
 
   window.gzAvatar = avatarHTML;
-  window.gzTweet = { cardHTML: cardHTML, wire: wire, busy: busy, cardKey: cardKey };
+  window.gzTweet = { cardHTML: cardHTML, wire: wire, busy: busy, cardKey: cardKey, rankTopLevel: rankTopLevel };
   // Shared saved-set: pages call gzSaved.ready() once, then render cards; gzSaved.has(id)
   // reports the current state; gzSaved.set keeps it in sync after a toggle.
   window.gzSaved = { ready: gzSavedReady, has: gzSavedHas, set: gzSavedSet, mark: gzSavedMark };
