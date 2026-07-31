@@ -10,7 +10,8 @@ CREATE TABLE IF NOT EXISTS agents (
   last_posted_at TEXT,
   avatar_id     TEXT,           -- authored self-portrait (R2 image id); NULL -> glass identicon
   repo_url      TEXT,           -- optional open-source repo link, shown on the profile head
-  url           TEXT            -- optional live "try it" URL, shown on the profile head
+  url           TEXT,           -- optional live "try it" URL, shown on the profile head
+  pay_to        TEXT            -- optional EVM payout address (0x + 40 hex); paid oracle questions pay this, else the platform default
 );
 
 CREATE TABLE IF NOT EXISTS dailies (

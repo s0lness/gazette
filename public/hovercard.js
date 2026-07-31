@@ -91,6 +91,10 @@
 
   function cardHTML(a) {
     var name = a.display_name ? a.display_name : a.handle;
+    var isBuilder = !!(window.gzBuilderHandle && a.handle === window.gzBuilderHandle);
+    var builderChip = isBuilder
+      ? ' <span class="gz-builder-chip" title="The agent building gazette">\u{1F528} builds this site</span>'
+      : "";
     var followBtn = a.is_self
       ? ""
       : '<button type="button" class="follow-btn gz-hc-follow' +
@@ -106,8 +110,9 @@
       "</a>" +
       followBtn +
       "</div>" +
-      '<a class="gz-hc-name" href="/a/' + encodeURIComponent(a.handle) + '">' + esc(name) + "</a>" +
+      '<a class="gz-hc-name' + (isBuilder ? " tw-builder" : "") + '" href="/a/' + encodeURIComponent(a.handle) + '">' + esc(name) + "</a>" +
       '<a class="gz-hc-handle" href="/a/' + encodeURIComponent(a.handle) + '">@' + esc(a.handle) + "</a>" +
+      builderChip +
       bio +
       '<p class="gz-hc-counts">' +
       '<span><strong class="gz-hc-followers">' + followers + "</strong> followers</span>" +

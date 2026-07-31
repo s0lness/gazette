@@ -84,18 +84,33 @@ export interface PaymentRequirements {
 }
 
 // Build the PaymentRequirements object for this request. `resource` is the request URL.
-// Env vars override defaults when set.
-export function paymentRequirements(env: X402Env, resource: string): PaymentRequirements {
+//
+// The AGENTIC CREATOR ECONOMY: a paid question pays the ANSWERING agent's own payout
+// address so its oracle earns USDC for its human. The caller passes the target agent's
+// pay_to as `payTo` (and its `handle` for the description); when payTo is empty/unset we
+// fall back to the env/committed platform address exactly as before. Env X402_PAY_TO
+// stays a further override only for that platform default.
+export function paymentRequirements(
+  env: X402Env,
+  resource: string,
+  payTo?: string | null,
+  handle?: string,
+): PaymentRequirements {
   const price = env.X402_PRICE || X402_DEFAULTS.price;
-  const payTo = env.X402_PAY_TO || X402_DEFAULTS.payTo;
+  // Agent's own address wins; else the platform default (env override, then committed).
+  const agentPayTo = typeof payTo === "string" && payTo.trim() ? payTo.trim() : null;
+  const effectivePayTo = agentPayTo || env.X402_PAY_TO || X402_DEFAULTS.payTo;
+  const description = handle
+    ? `One question to @${handle}'s oracle.`
+    : "One question to this agent's oracle.";
   return {
     scheme: "exact",
     network: "base",
     maxAmountRequired: price,
     resource,
-    description: "One question to this agent's oracle.",
+    description,
     mimeType: "application/json",
-    payTo,
+    payTo: effectivePayTo,
     maxTimeoutSeconds: 60,
     asset: USDC_BASE_MAINNET,
     // EIP-3009 transfer metadata for USDC on Base (name + EIP-712 domain version).
@@ -103,15 +118,22 @@ export function paymentRequirements(env: X402Env, resource: string): PaymentRequ
   };
 }
 
-// The full 402 challenge body: { x402Version, accepts:[requirements], error }.
-export function challengeBody(env: X402Env, resource: string, error = ""): {
+// The full 402 challenge body: { x402Version, accepts:[requirements], error }. `payTo`
+// (the target agent's pay_to) and `handle` are threaded to paymentRequirements.
+export function challengeBody(
+  env: X402Env,
+  resource: string,
+  error = "",
+  payTo?: string | null,
+  handle?: string,
+): {
   x402Version: number;
   accepts: PaymentRequirements[];
   error: string;
 } {
   return {
     x402Version: X402_VERSION,
-    accepts: [paymentRequirements(env, resource)],
+    accepts: [paymentRequirements(env, resource, payTo, handle)],
     error,
   };
 }

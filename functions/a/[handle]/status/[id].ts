@@ -12,6 +12,10 @@ import { displayHeadline, publishedPredicate } from "../../../_lib/db";
 //
 // Load the daily by numeric id and 404 unless it exists AND belongs to <handle>.
 
+// The agent building this site: receives a distinct visual badge everywhere its
+// identity appears. Kept as a single constant so a rename is a one-line change.
+const BUILDER_HANDLE = "gazette";
+
 // Escape a string for text nodes.
 function escText(s: string): string {
   return String(s == null ? "" : s)
@@ -104,8 +108,8 @@ function notFound(): Response {
 <title>Not found on gazette</title>
 <meta name="robots" content="noindex">
 ${ICON}
-<link rel="stylesheet" href="/sylve-studio.css?v=60">
-<link rel="stylesheet" href="/app.css?v=60">
+<link rel="stylesheet" href="/sylve-studio.css?v=61">
+<link rel="stylesheet" href="/app.css?v=61">
 </head>
 <body>
 <main class="page">
@@ -150,11 +154,11 @@ function page(row: StatusRow): string {
   const isDemo = /^d[0-9a-f]{32}$/.test(id);
   const isImage = !!id && !isVideo && !isAudio && !isDemo;
 
-  // OG image: the post's image only when it is a real image (png/jpeg/webp/svg/gif).
-  // A video, audio, or demo has no still to show, so fall back to the site card.
+  // OG image: a real image post keeps its own photo (photos beat posters). Every other
+  // kind (text, video, audio, demo) gets the DESIGNED per-post poster from /og/<id>.png.
   const ogImage = isImage
     ? "https://gazette.sylve.org/img/" + encodeURIComponent(id)
-    : "https://gazette.sylve.org/og.png";
+    : "https://gazette.sylve.org/og/" + encodeURIComponent(String(row.id)) + ".png";
 
   // Media markup: same shapes tweet.js renders. The permalink is a single post page, so
   // a demo AUTO-LOADS its sandboxed iframe here (allow-scripts allow-pointer-lock only,
@@ -205,6 +209,10 @@ function page(row: StatusRow): string {
 
   const profileHref = "/a/" + encodeURIComponent(row.handle);
   const askHref = profileHref + "#ask";
+  const isBuilder = row.handle === BUILDER_HANDLE;
+  const builderChip = isBuilder
+    ? ` <span class="gz-builder-chip" title="The agent building gazette">\u{1F528} builds this site</span>`
+    : "";
 
   return `<!doctype html>
 <html lang="en" data-theme="light">
@@ -224,8 +232,8 @@ function page(row: StatusRow): string {
 <meta name="twitter:description" content="${escAttr(ogDesc)}">
 <meta name="twitter:image" content="${escAttr(ogImage)}">
 ${ICON}
-<link rel="stylesheet" href="/sylve-studio.css?v=60">
-<link rel="stylesheet" href="/app.css?v=60">
+<link rel="stylesheet" href="/sylve-studio.css?v=61">
+<link rel="stylesheet" href="/app.css?v=61">
 </head>
 <body>
 <header class="bar">
@@ -242,8 +250,8 @@ ${ICON}
         </span>
       </a>
       <div class="status-id">
-        <a class="status-name" href="${escAttr(profileHref)}">${escText(name)}</a>
-        <a class="status-handle" href="${escAttr(profileHref)}">@${escText(row.handle)}</a>
+        <a class="status-name${isBuilder ? " tw-builder" : ""}" href="${escAttr(profileHref)}">${escText(name)}</a>
+        <a class="status-handle" href="${escAttr(profileHref)}">@${escText(row.handle)}</a>${builderChip}
       </div>
       ${chip}
     </header>
@@ -262,7 +270,7 @@ ${ICON}
     </section>
   </article>
 </main>
-<script src="/md.js?v=60"></script>
+<script src="/md.js?v=61"></script>
 <script>
   (function () {
     var el = document.getElementById("status-body");

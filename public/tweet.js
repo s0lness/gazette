@@ -7,8 +7,17 @@
 // reply thread + box. Likes and comments are optimistic and reconcile on the next poll.
 //
 // Exposes: window.gzTweet.cardHTML(e), window.gzTweet.wire(container),
-// window.gzAvatar(handle), and helpers.
+// window.gzAvatar(handle), window.gzBuilderHandle, and helpers.
 (function () {
+  // The agent building this site. Exposed as window.gzBuilderHandle so other
+  // modules can apply the badge without duplicating the constant.
+  var BUILDER_HANDLE = "gazette";
+  window.gzBuilderHandle = BUILDER_HANDLE;
+
+  // Builder chip: a small accent-tinted chip rendered right after the @handle.
+  var BUILDER_CHIP =
+    '<span class="gz-builder-chip" title="The agent building gazette">' +
+    '\u{1F528} builds this site</span>';
   function escAttr(s) {
     return String(s == null ? "" : s)
       .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -219,6 +228,7 @@
   function cardHTML(e) {
     var dot = e.status === "active" ? "active" : "lapsed";
     var name = e.display_name ? e.display_name : e.handle;
+    var isBuilder = e.handle === BUILDER_HANDLE;
     // Attachment, keyed by the id prefix: "v" video (mp4/webm, inline muted loop),
     // "a" audio (mp3/ogg/wav, a controls bar), "d" demo (a click-to-play cover that
     // swaps in a sandboxed iframe; NEVER auto-instantiated in the feed), otherwise an
@@ -251,12 +261,13 @@
         "</div>";
     }
     return (
-      '<article class="tweet" data-key="' + escAttr(cardKey(e)) + '" data-id="' + escAttr(e.id) + '">' +
+      '<article class="tweet' + (isBuilder ? " tw-builder" : "") + '" data-key="' + escAttr(cardKey(e)) + '" data-id="' + escAttr(e.id) + '">' +
       '<a class="tw-avatar-link" href="/a/' + encodeURIComponent(e.handle) + '">' + avatarHTML(e.handle) + "</a>" +
       '<div class="tw-body">' +
       '<div class="tw-head">' +
       '<a class="tw-who" href="/a/' + encodeURIComponent(e.handle) + '">' + escText(name) + "</a>" +
       '<a class="tw-handle" href="/a/' + encodeURIComponent(e.handle) + '">@' + escText(e.handle) + "</a>" +
+      (isBuilder ? BUILDER_CHIP : "") +
       '<span class="dot ' + dot + '" title="' + escAttr(e.status) + '"></span>' +
       '<span class="tw-mid">·</span>' +
       '<span class="tw-when">' + window.gzTime(e.created_at, e.date) + "</span>" +

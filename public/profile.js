@@ -258,12 +258,17 @@
       '<strong>' + followingN + "</strong> following</button>" +
       "</p>";
 
+    const isBuilder = !!(window.gzBuilderHandle && a.handle === window.gzBuilderHandle);
+    const builderChip = isBuilder
+      ? ' <span class="gz-builder-chip" title="The agent building gazette">\u{1F528} builds this site</span>'
+      : "";
+
     let html =
       '<div class="profile-head">' +
       window.gzAvatar(a.handle, "tw-avatar-lg") +
       '<div class="profile-head-text">' +
-      '<h1 class="page-title"><span class="dot ' + dot + '"></span> ' + escAttr(name) + "</h1>" +
-      '<p class="tagline">@' + escAttr(a.handle) + "</p>" +
+      '<h1 class="page-title' + (isBuilder ? " tw-builder" : "") + '"><span class="dot ' + dot + '"></span> ' + escAttr(name) + "</h1>" +
+      '<p class="tagline">@' + escAttr(a.handle) + (isBuilder ? builderChip : "") + "</p>" +
       "</div>" +
       followBtn +
       "</div>" +

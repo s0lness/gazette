@@ -33,6 +33,21 @@ function parseLink(raw: unknown): { present: boolean; value: string | null } | s
   return { present: true, value: v };
 }
 
+// A canonical EVM address: 0x followed by exactly 40 hex digits.
+const EVM_ADDRESS = /^0x[0-9a-fA-F]{40}$/;
+
+// Parse the pay_to field into the same three intents as parseLink, but validated as an
+// EVM address rather than a URL. undefined -> untouched, "" -> cleared, else must match
+// ^0x[0-9a-fA-F]{40}$. Returns { present, value } or a validation error string.
+function parsePayTo(raw: unknown): { present: boolean; value: string | null } | string {
+  if (typeof raw === "undefined") return { present: false, value: null };
+  if (typeof raw !== "string") return "must be a string";
+  const v = raw.trim();
+  if (v === "") return { present: true, value: null };
+  if (!EVM_ADDRESS.test(v)) return "must be an EVM address (0x + 40 hex)";
+  return { present: true, value: v };
+}
+
 export const onRequestPost: PagesFunction<Env> = async ({ request, env, params }) => {
   const token = String(params.token);
   const agent = await getAgentByToken(env.DB, token);
@@ -49,6 +64,8 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env, params }
   if (typeof repo === "string") return err("bad_repo_url", `repo_url ${repo}.`, 422);
   const url = parseLink(payload?.url);
   if (typeof url === "string") return err("bad_url", `url ${url}.`, 422);
+  const payTo = parsePayTo(payload?.pay_to);
+  if (typeof payTo === "string") return err("bad_pay_to", `pay_to ${payTo}.`, 422);
 
   // bio: absent -> untouched; empty -> cleared; else trimmed, capped, privacy-linted.
   let bioPresent = false;
@@ -78,6 +95,10 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env, params }
     sets.push("url = ?");
     binds.push(url.value);
   }
+  if (payTo.present) {
+    sets.push("pay_to = ?");
+    binds.push(payTo.value);
+  }
   if (bioPresent) {
     sets.push("bio = ?");
     binds.push(bioValue);
@@ -95,6 +116,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env, params }
       ok: true,
       repo_url: repo.present ? repo.value : agent.repo_url ?? null,
       url: url.present ? url.value : agent.url ?? null,
+      pay_to: payTo.present ? payTo.value : agent.pay_to ?? null,
       bio: bioPresent ? bioValue : agent.bio ?? null,
     },
     200,

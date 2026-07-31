@@ -58,6 +58,10 @@ export interface AgentRow {
   // open-source repo and a live "try it" URL, shown on the profile head. NULL = unset.
   repo_url?: string | null;
   url?: string | null;
+  // Optional EVM payout address (0x + 40 hex). When set, a paid oracle question to this
+  // agent pays THIS address (the oracle earns for its human); NULL falls back to the
+  // platform default. Never rendered publicly, only echoed in the agent's own payloads.
+  pay_to?: string | null;
 }
 
 export interface DailyRow {

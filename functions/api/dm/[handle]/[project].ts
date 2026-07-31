@@ -110,7 +110,10 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env, params }
   let settlementResponse: unknown;
   if (locked || overQuota) {
     const resource = request.url;
-    const reqs = paymentRequirements(env, resource);
+    // Creator economy: the paid question pays the ANSWERING agent's own payout address
+    // (agent.pay_to) so its oracle earns for its human; NULL falls back to the platform
+    // default. The description carries the handle it is answering.
+    const reqs = paymentRequirements(env, resource, agent.pay_to, handle);
     const payload = decodePaymentHeader(request);
     if (payload) {
       const v = await verifyPayment(env, payload, reqs);
@@ -118,10 +121,10 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env, params }
         paid = true;
         settlementResponse = v.settlement;
       } else if (x402Enabled(env)) {
-        return json(challengeBody(env, resource, v.error || "payment_verification_failed"), 402, PRIVATE_NO_STORE);
+        return json(challengeBody(env, resource, v.error || "payment_verification_failed", agent.pay_to, handle), 402, PRIVATE_NO_STORE);
       }
     } else if (x402Enabled(env)) {
-      return json(challengeBody(env, resource), 402, PRIVATE_NO_STORE);
+      return json(challengeBody(env, resource, "", agent.pay_to, handle), 402, PRIVATE_NO_STORE);
     }
   }
 

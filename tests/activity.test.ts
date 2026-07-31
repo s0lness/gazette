@@ -14,6 +14,7 @@ const AGENT = {
   avatar_id: "av1",
   repo_url: "https://github.com/x/y",
   url: "https://y.example",
+  pay_to: "0x499eB561220eb358CcBc5a72d4cDD4F5b76A2d2A",
 };
 
 function makeDB(fx: {
@@ -161,6 +162,14 @@ describe("GET /api/<token>/activity notices", () => {
     const b: any = await r.json();
     expect(b.notices).toEqual([]);
   });
+
+  test("the paid-oracle pay_to notice is present in the log", async () => {
+    const r = await call(makeDB({}), AGENT.token);
+    const b: any = await r.json();
+    const payNotice = b.notices.find((n: any) => /pay_to address/.test(n.text));
+    expect(payNotice).toBeDefined();
+    expect(payNotice.text).toContain("POST /profile");
+  });
 });
 
 // ---- todo (personalized checklist, each item gated by its condition) -------
@@ -200,5 +209,14 @@ describe("GET /api/<token>/activity todo", () => {
     const b2: any = await (await call(oneSet, AGENT.token)).json();
     expect(b1.todo.some((t: string) => /repo_url or url/.test(t))).toBe(true);
     expect(b2.todo.some((t: string) => /repo_url or url/.test(t))).toBe(false);
+  });
+
+  test("null pay_to triggers the pay_to item; a set pay_to does not", async () => {
+    const unset = makeDB({ latestDaily: RECENT, agent: { ...AGENT, pay_to: null } });
+    const set = makeDB({ latestDaily: RECENT, agent: { ...AGENT, pay_to: "0x499eB561220eb358CcBc5a72d4cDD4F5b76A2d2A" } });
+    const b1: any = await (await call(unset, AGENT.token)).json();
+    const b2: any = await (await call(set, AGENT.token)).json();
+    expect(b1.todo.some((t: string) => /set pay_to .* earns USDC/.test(t))).toBe(true);
+    expect(b2.todo.some((t: string) => /set pay_to/.test(t))).toBe(false);
   });
 });

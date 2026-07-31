@@ -13,13 +13,14 @@ import { DEEPSEEK_MODEL } from "../functions/_lib/dm";
 const AGENT = { id: 5, handle: "yuka" };
 const REQUESTER = { id: 42, handle: "asker", token: "tok-asker" };
 
-function makeDB(state: { used: number; recency: number }) {
+function makeDB(state: { used: number; recency: number; agentPayTo?: string | null }) {
   const dailies = [{ date: "2026-07-30", headline: "shipped a fix", body_md: "work" }];
+  const agentRow = { ...AGENT, pay_to: state.agentPayTo ?? null };
   function resolveFirst(sql: string, bound: unknown[]): any {
     if (/FROM agents WHERE token/.test(sql)) return bound[0] === REQUESTER.token ? REQUESTER : null;
     // dailiesCount (canRead): the requester HAS posted at least once historically.
     if (/COUNT\(\*\).*FROM dailies WHERE agent_id/.test(sql)) return { n: 3 };
-    if (/FROM agents WHERE handle/.test(sql)) return bound[0] === AGENT.handle ? AGENT : null;
+    if (/FROM agents WHERE handle/.test(sql)) return bound[0] === AGENT.handle ? agentRow : null;
     return null;
   }
   function resolveAll(sql: string): { results: any[] } {
@@ -181,6 +182,40 @@ describe("PAID: x402 challenge past the free tier", () => {
     expect(acc.maxAmountRequired).toBe("50000"); // default 0.05 USDC
     expect(acc.asset).toBe("0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"); // USDC on Base mainnet
     expect(acc.resource).toContain("/api/dm/yuka");
+  });
+
+  test("challenge pays the ANSWERING agent's pay_to when set (creator economy)", async () => {
+    stubAnthropic("should not be reached");
+    const AGENT_ADDR = "0x1111111111111111111111111111111111111111";
+    const env: any = {
+      DB: makeDB({ used: 0, recency: 0, agentPayTo: AGENT_ADDR }),
+      ANTHROPIC_API_KEY: "sk-test",
+      X402_ENABLED: "1",
+      X402_PAY_TO: "0xPlatformDefault", // platform default, overridden by the agent's own
+    };
+    const r = await call(env);
+    expect(r.status).toBe(402);
+    const b: any = await r.json();
+    // The agent's own address wins over the platform default.
+    expect(b.accepts[0].payTo).toBe(AGENT_ADDR);
+    // The description names the handle it is answering.
+    expect(b.accepts[0].description).toBe("One question to @yuka's oracle.");
+  });
+
+  test("challenge falls back to the platform default when the agent has no pay_to", async () => {
+    stubAnthropic("should not be reached");
+    const env: any = {
+      DB: makeDB({ used: 0, recency: 0, agentPayTo: null }),
+      ANTHROPIC_API_KEY: "sk-test",
+      X402_ENABLED: "1",
+      X402_PAY_TO: "0xPlatformDefault",
+    };
+    const r = await call(env);
+    expect(r.status).toBe(402);
+    const b: any = await r.json();
+    expect(b.accepts[0].payTo).toBe("0xPlatformDefault");
+    // Description still names the target handle even on the fallback address.
+    expect(b.accepts[0].description).toBe("One question to @yuka's oracle.");
   });
 
   test("over-quota + X402_ENABLED=1 -> 402 (over-quota path)", async () => {

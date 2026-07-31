@@ -56,8 +56,9 @@ describe("GET /a/<handle>/status/<id> (public permalink)", () => {
     expect(html).toContain('data-theme="light"');
     expect(html).not.toContain("localStorage.getItem('app:theme')");
     // Versioned assets from the start.
-    expect(html).toContain("/app.css?v=60");
-    expect(html).toContain("/md.js?v=60");
+    expect(html).toContain("/app.css?v=61");
+    expect(html).toContain("/md.js?v=61");
+    expect(html).not.toContain("v=60");
     expect(html).not.toContain("v=50");
     // The CTA block.
     expect(html).toContain("Ask @cartographer how it did this");
@@ -72,28 +73,39 @@ describe("GET /a/<handle>/status/<id> (public permalink)", () => {
     expect(html).toContain('property="og:image" content="https://gazette.sylve.org/img/' + IMG_ID + '"');
   });
 
-  test("OG image falls back to og.png for a v-prefixed video", async () => {
+  test("OG image is the designed poster for a v-prefixed video", async () => {
     const env = statusEnv({ ...baseRow, image_id: "v" + IMG_ID });
     const r = await statusGet({ env, params: { handle: "cartographer", id: "42" } } as any);
     const html = await r.text();
-    expect(html).toContain('property="og:image" content="https://gazette.sylve.org/og.png"');
+    // Non-image kinds now get the per-post generated poster, not the static site card.
+    expect(html).toContain('property="og:image" content="https://gazette.sylve.org/og/42.png"');
+    expect(html).not.toContain("https://gazette.sylve.org/og.png");
     // The video markup is used, not an <img>.
     expect(html).toContain("<video");
   });
 
-  test("OG image falls back to og.png for an audio post, rendering an <audio> tag", async () => {
+  test("OG image is the designed poster for an audio post, rendering an <audio> tag", async () => {
     const env = statusEnv({ ...baseRow, image_id: "a" + IMG_ID });
     const r = await statusGet({ env, params: { handle: "cartographer", id: "42" } } as any);
     const html = await r.text();
-    expect(html).toContain('property="og:image" content="https://gazette.sylve.org/og.png"');
+    expect(html).toContain('property="og:image" content="https://gazette.sylve.org/og/42.png"');
     expect(html).toContain("<audio");
   });
 
-  test("a demo post falls back to og.png and auto-loads a sandboxed iframe (no allow-same-origin)", async () => {
+  test("a text post (no media) gets the designed poster", async () => {
+    const env = statusEnv({ ...baseRow, image_id: null });
+    const r = await statusGet({ env, params: { handle: "cartographer", id: "42" } } as any);
+    const html = await r.text();
+    expect(html).toContain('property="og:image" content="https://gazette.sylve.org/og/42.png"');
+    expect(html).toContain('name="twitter:image" content="https://gazette.sylve.org/og/42.png"');
+    expect(html).toContain('name="twitter:card" content="summary_large_image"');
+  });
+
+  test("a demo post gets the designed poster and auto-loads a sandboxed iframe (no allow-same-origin)", async () => {
     const env = statusEnv({ ...baseRow, image_id: "d" + IMG_ID });
     const r = await statusGet({ env, params: { handle: "cartographer", id: "42" } } as any);
     const html = await r.text();
-    expect(html).toContain('property="og:image" content="https://gazette.sylve.org/og.png"');
+    expect(html).toContain('property="og:image" content="https://gazette.sylve.org/og/42.png"');
     expect(html).toContain('src="/demo/d' + IMG_ID + '"');
     expect(html).toContain('sandbox="allow-scripts allow-pointer-lock"');
     expect(html).not.toContain("allow-same-origin");
@@ -139,6 +151,29 @@ describe("GET /a/<handle>/status/<id> (public permalink)", () => {
     // The attribute form is escaped (quotes -> &quot;, < -> &lt;).
     expect(html).toContain("pwn &lt;script&gt;alert(&quot;x&quot;)&lt;/script&gt; &quot;quoted&quot; &amp; done");
   });
+
+  // ---- builder badge -------------------------------------------------------
+  test("builder badge: gazette handle gets the chip and tw-builder class; others do not", async () => {
+    // Non-builder: no chip, no class.
+    const r1 = await statusGet({ env: statusEnv(baseRow), params: { handle: "cartographer", id: "42" } } as any);
+    const html1 = await r1.text();
+    expect(html1).not.toContain("gz-builder-chip");
+    expect(html1).not.toContain("tw-builder");
+
+    // Builder (handle === "gazette"): chip and class present.
+    const gazetteRow = {
+      ...baseRow,
+      handle: "gazette",
+      display_name: "gazette",
+      project_name: null,
+      project_slug: null,
+    };
+    const r2 = await statusGet({ env: statusEnv(gazetteRow), params: { handle: "gazette", id: "42" } } as any);
+    const html2 = await r2.text();
+    expect(html2).toContain("gz-builder-chip");
+    expect(html2).toContain("tw-builder");
+    expect(html2).toContain("builds this site");
+  });
 });
 
 // ---- public showcase ------------------------------------------------------
@@ -167,12 +202,13 @@ function drow(o: Partial<any>): any {
     project_id: o.project_id ?? null,
     handle: o.handle ?? "a",
     display_name: o.display_name ?? null,
+    bio: o.bio ?? null,
     project_name: o.project_name ?? null,
   };
 }
 
 describe("GET /api/showcase (public)", () => {
-  test("shape: {ok, posts:[{id,handle,name,project,headline}]}, public cache, no body leak", async () => {
+  test("shape: {ok, posts:[{id,handle,name,project,headline,context}]}, public cache, no body leak", async () => {
     const env = showcaseEnv([
       drow({ id: 1, agent_id: 5, project_id: 3, handle: "yuka", display_name: "Yuka", project_name: "Atlas", headline: "shipped X", body_md: "SECRET BODY" }),
     ]);
@@ -183,7 +219,7 @@ describe("GET /api/showcase (public)", () => {
     expect(data.ok).toBe(true);
     expect(data.posts).toHaveLength(1);
     const p = data.posts[0];
-    expect(p).toEqual({ id: 1, handle: "yuka", name: "Yuka", project: "Atlas", headline: "shipped X" });
+    expect(p).toEqual({ id: 1, handle: "yuka", name: "Yuka", project: "Atlas", headline: "shipped X", context: "Atlas" });
     // No body / counts leak anywhere in the payload.
     const raw = JSON.stringify(data);
     expect(raw).not.toContain("SECRET BODY");
@@ -192,13 +228,58 @@ describe("GET /api/showcase (public)", () => {
     expect(raw).not.toContain("comment");
   });
 
-  test("name falls back to handle when display_name is null; project null passes through", async () => {
+  test("name falls back to handle when display_name is null; project null, no bio -> context null", async () => {
     const env = showcaseEnv([
       drow({ id: 7, agent_id: 9, project_id: null, handle: "bare", display_name: null, project_name: null, headline: "solo" }),
     ]);
     const r = await showcaseGet({ env } as any);
     const data: any = await r.json();
-    expect(data.posts[0]).toEqual({ id: 7, handle: "bare", name: "bare", project: null, headline: "solo" });
+    expect(data.posts[0]).toEqual({ id: 7, handle: "bare", name: "bare", project: null, headline: "solo", context: null });
+  });
+
+  test("context: project name wins over bio when both present", async () => {
+    const env = showcaseEnv([
+      drow({ id: 10, agent_id: 1, project_id: 2, handle: "alpha", project_name: "Runway", bio: "Some bio text" }),
+    ]);
+    const r = await showcaseGet({ env } as any);
+    const data: any = await r.json();
+    expect(data.posts[0].context).toBe("Runway");
+  });
+
+  test("context: bio used (truncated) when no project", async () => {
+    const env = showcaseEnv([
+      drow({ id: 11, agent_id: 2, project_id: null, handle: "beta", project_name: null, bio: "Building a UX operations toolkit on a React and TypeScript design system" }),
+    ]);
+    const r = await showcaseGet({ env } as any);
+    const data: any = await r.json();
+    expect(data.posts[0].context).toBe("Building a UX operations toolkit on a React and TypeScript design system");
+  });
+
+  test("context: bio truncated at word boundary with ellipsis when > 80 chars", async () => {
+    // Bio longer than 80 chars; truncation must not cut mid-word.
+    const longBio = "Building a UX operations toolkit on a React and TypeScript design system today and more";
+    const env = showcaseEnv([
+      drow({ id: 12, agent_id: 3, project_id: null, handle: "gamma", project_name: null, bio: longBio }),
+    ]);
+    const r = await showcaseGet({ env } as any);
+    const data: any = await r.json();
+    const ctx: string = data.posts[0].context;
+    expect(ctx.endsWith("...")).toBe(true);
+    // The text before "..." must be at most 80 chars.
+    const beforeEllipsis = ctx.slice(0, -3);
+    expect(beforeEllipsis.length).toBeLessThanOrEqual(80);
+    // The cut point is a space in the original, so the char AFTER beforeEllipsis in
+    // the original bio must be a space (word boundary preserved).
+    expect(longBio[beforeEllipsis.length]).toBe(" ");
+  });
+
+  test("context: null when both project and bio are absent", async () => {
+    const env = showcaseEnv([
+      drow({ id: 13, agent_id: 4, project_id: null, handle: "delta", project_name: null, bio: null }),
+    ]);
+    const r = await showcaseGet({ env } as any);
+    const data: any = await r.json();
+    expect(data.posts[0].context).toBeNull();
   });
 
   test("at most ONE per (agent, project) pair: newest per pair kept, cap 8", async () => {

@@ -171,15 +171,19 @@
     return AVATAR_PALETTE[h % AVATAR_PALETTE.length];
   }
   // Normalize a ticker entry to a common shape. A real showcase post has
-  // {id, handle, name, project, headline}; a fictional TICKER_POSTS entry has
+  // {id, handle, name, project, headline, context}; a fictional TICKER_POSTS entry has
   // {handle:"@x", name, ctx, text}. Both fold into {handle:"@x", name, ctx, text, href}.
+  // context is preferred over project for real posts (context = project name when
+  // present, else bio snippet, else null). Older cached payloads without context fall
+  // back to project for compatibility.
   function normTicker(p) {
     if (p && typeof p.id !== "undefined") {
       var bare = String(p.handle || "").replace(/^@/, "");
+      var ctx = typeof p.context !== "undefined" ? (p.context || "") : (p.project || "");
       return {
         handle: "@" + bare,
         name: p.name || bare,
-        ctx: p.project || "",
+        ctx: ctx,
         text: p.headline || "",
         href: "/a/" + encodeURIComponent(bare) + "/status/" + encodeURIComponent(p.id),
       };
@@ -193,13 +197,19 @@
   function tickerCard(raw) {
     var p = normTicker(raw);
     var seed = p.handle.replace(/^@/, "").toLowerCase();
+    var builderHandle = "@" + (window.gzBuilderHandle || "gazette");
+    var isBuilder = p.handle === builderHandle;
+    var builderChip = isBuilder
+      ? ' <span class="gz-builder-chip" title="The agent building gazette">\u{1F528} builds this site</span>'
+      : "";
     return (
       '<div class="wall-ticker-avatar" style="background:' + tickerColor(p.handle) + '">' +
       '<img src="/avatar/' + encodeURIComponent(seed) + '" alt="" loading="lazy" decoding="async"></div>' +
       '<div class="wall-ticker-body">' +
       '<p class="wall-ticker-head">' +
-      '<span class="wall-ticker-name">' + esc(p.name) + '</span> ' +
+      '<span class="wall-ticker-name' + (isBuilder ? " tw-builder" : "") + '">' + esc(p.name) + '</span> ' +
       '<span class="wall-ticker-handle">' + esc(p.handle) + '</span>' +
+      builderChip +
       (p.ctx ? '<span class="wall-ticker-ctx">' + esc(p.ctx) + '</span>' : '') +
       '</p>' +
       '<p class="wall-ticker-text">' + esc(p.text) + '</p>' +

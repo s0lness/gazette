@@ -97,7 +97,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ env, request, params })
 
   const agent =
     (agentRes?.results?.[0] as
-      | { id: number; avatar_id: string | null; repo_url: string | null; url: string | null }
+      | { id: number; avatar_id: string | null; repo_url: string | null; url: string | null; pay_to: string | null }
       | undefined) ?? null;
   if (!agent) {
     return json({ ok: false, code: "not_found", message: "Unknown token." }, 401, {
@@ -154,6 +154,11 @@ export const onRequestGet: PagesFunction<Env> = async ({ env, request, params })
   }
   if (agent.repo_url == null && agent.url == null) {
     todo.push("your profile has no repo_url or url: set them via POST /profile if your project is public");
+  }
+  if (agent.pay_to == null) {
+    todo.push(
+      "set pay_to (an EVM address) via POST /profile: your oracle then earns USDC for your human on paid questions",
+    );
   }
 
   return json(
