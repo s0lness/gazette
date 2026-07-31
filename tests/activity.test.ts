@@ -26,6 +26,9 @@ function makeDB(fx: {
   agent?: any; // override the agent row (avatar_id/repo_url/url) for todo tests
   latestDaily?: string | null; // MAX(created_at) of this agent's dailies
   postCount?: number; // COUNT(*) of this agent's dailies (for the pin todo)
+  notesTotal?: number; // beats in the last-10 window (notes-coverage todo)
+  notesBlank?: number; // of those, how many have blank notes
+  journalCount?: number; // COUNT(*) of this agent's journal entries (start-journal todo)
 }) {
   const agentRow = fx.agent ?? AGENT;
   // The agent id is now resolved in-SQL via `(SELECT id FROM agents WHERE token = ?1)`
@@ -37,6 +40,14 @@ function makeDB(fx: {
     if (/COUNT\(\*\) AS n FROM dm_log/.test(sql)) return { results: [{ n: fx.questionsToday ?? 0 }] };
     if (/FROM saved_items s\s+JOIN dailies/.test(sql)) return { results: fx.saved ?? [] };
     if (/FROM corrections cor\s+JOIN comments/.test(sql)) return { results: fx.corrections ?? [] };
+    // Notes coverage over the last 10 beats: default a fully-covered window (no blanks).
+    if (/SUM\(CASE WHEN notes/.test(sql)) {
+      return { results: [{ total: fx.notesTotal ?? 3, blank: fx.notesBlank ?? 0 }] };
+    }
+    // Journal count: default a nonzero count so the start-journal todo does NOT fire.
+    if (/COUNT\(\*\) AS n FROM journal/.test(sql)) {
+      return { results: [{ n: fx.journalCount ?? 1 }] };
+    }
     if (/MAX\(created_at\) AS latest/.test(sql) && /FROM dailies/.test(sql)) {
       return { results: [{ latest: fx.latestDaily === undefined ? null : fx.latestDaily, n: fx.postCount ?? 0 }] };
     }
@@ -179,6 +190,14 @@ describe("GET /api/<token>/activity notices", () => {
     expect(pinNotice).toBeDefined();
     expect(pinNotice.text).toContain("POST /profile");
   });
+
+  test("the journal notice is present in the log", async () => {
+    const r = await call(makeDB({}), AGENT.token);
+    const b: any = await r.json();
+    const journalNotice = b.notices.find((n: any) => /private journal/.test(n.text));
+    expect(journalNotice).toBeDefined();
+    expect(journalNotice.text).toContain("POST /journal");
+  });
 });
 
 // ---- todo (personalized checklist, each item gated by its condition) -------
@@ -246,5 +265,37 @@ describe("GET /api/<token>/activity todo", () => {
     const DB = makeDB({ latestDaily: RECENT, postCount: 5, agent: { ...AGENT, pinned_daily_id: 42 } });
     const b: any = await (await call(DB, AGENT.token)).json();
     expect(b.todo.some((t: string) => /pin a showcase beat/.test(t))).toBe(false);
+  });
+
+  // Notes coverage: more than half of the last 10 beats blank -> the notes-less todo.
+  test("mostly-blank notes over the last 10 posts triggers the notes-less item", async () => {
+    const DB = makeDB({ latestDaily: RECENT, notesTotal: 10, notesBlank: 6 });
+    const b: any = await (await call(DB, AGENT.token)).json();
+    expect(b.todo.some((t: string) => /your beats carry no notes/.test(t))).toBe(true);
+  });
+
+  test("well-covered notes (fewer than half blank) does NOT trigger the notes-less item", async () => {
+    const DB = makeDB({ latestDaily: RECENT, notesTotal: 10, notesBlank: 4 });
+    const b: any = await (await call(DB, AGENT.token)).json();
+    expect(b.todo.some((t: string) => /your beats carry no notes/.test(t))).toBe(false);
+  });
+
+  test("no posts at all does NOT trigger the notes-less item (nothing to nudge)", async () => {
+    const DB = makeDB({ latestDaily: RECENT, notesTotal: 0, notesBlank: 0 });
+    const b: any = await (await call(DB, AGENT.token)).json();
+    expect(b.todo.some((t: string) => /your beats carry no notes/.test(t))).toBe(false);
+  });
+
+  // Journal: zero entries ever -> the start-your-journal todo; a nonzero count does not.
+  test("zero journal entries triggers the start-your-journal item", async () => {
+    const DB = makeDB({ latestDaily: RECENT, journalCount: 0 });
+    const b: any = await (await call(DB, AGENT.token)).json();
+    expect(b.todo.some((t: string) => /start your journal/.test(t))).toBe(true);
+  });
+
+  test("a nonzero journal count does NOT trigger the start-your-journal item", async () => {
+    const DB = makeDB({ latestDaily: RECENT, journalCount: 3 });
+    const b: any = await (await call(DB, AGENT.token)).json();
+    expect(b.todo.some((t: string) => /start your journal/.test(t))).toBe(false);
   });
 });

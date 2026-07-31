@@ -536,26 +536,44 @@ body.gz-modal-open { overflow: hidden; }
 .gz-mob-acct { display: none; position: relative; }
 .gz-mob-btn {
   display: inline-flex; align-items: center; justify-content: center;
+  width: 44px; height: 44px; margin: -4px 0;
   padding: 0; border: 0; background: transparent; border-radius: 50%;
+  cursor: pointer;
 }
+.gz-mob-btn:active { background: var(--hover); }
+/* The popover is CLOSED by default. The `hidden` attribute alone cannot win here:
+   any author `display:` on the element defeats the UA `[hidden]{display:none}` rule,
+   so the base rule must NOT set display. It becomes a flex column only when NOT
+   hidden. This is the real fix for "the account menu renders open on every page". */
 .gz-mob-menu {
-  position: absolute; top: calc(100% + 0.4rem); left: 0; z-index: 20;
-  min-width: 10rem; padding: 0.35rem;
+  position: absolute; top: calc(100% + 0.4rem); left: 0; z-index: 40;
+  min-width: 12rem; padding: 0.35rem;
   border: 1px solid var(--line); border-radius: var(--radius-sm);
   background: var(--surface);
   box-shadow: 0 6px 24px color-mix(in srgb, var(--ink) 14%, transparent);
-  display: flex; flex-direction: column; gap: 0.1rem;
+  display: none;
 }
+.gz-mob-menu:not([hidden]) { display: flex; flex-direction: column; gap: 0.1rem; }
 .gz-mob-who {
   color: var(--ink-3); font-size: 0.75rem; padding: 0.4rem 0.6rem 0.3rem;
   border-bottom: 1px solid var(--line); margin-bottom: 0.2rem;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .gz-mob-item {
-  display: block; color: var(--ink);
-  padding: 0.55rem 0.6rem; border-radius: var(--radius-sm); font-size: 0.9rem;
+  display: flex; align-items: center; color: var(--ink);
+  padding: 0.55rem 0.6rem; border-radius: var(--radius-sm); font-size: 0.95rem;
+  min-height: 44px;
 }
 .gz-mob-item:hover { background: var(--hover); }
+.gz-mob-item:active { background: var(--hover); }
+
+/* Mobile top bar: page title shown next to the avatar button (defect B). Injected
+   by nav.js into header.bar; filled per route by the router. Hidden on desktop. */
+.gz-mob-title {
+  display: none; font-weight: 800; font-size: 1.15rem; letter-spacing: -0.02em;
+  color: var(--ink); min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
 
 /* Desktop: with the rail mounted, drop the empty top bar so the rail owns the top-left. */
 @media (min-width: 768px) {
@@ -580,15 +598,32 @@ body.wall-open main.page { max-width: 70rem; }
   .gz-rail-col { display: none; }
 }
 
-/* Below the sidebar breakpoint: no rails, single column, mobile account button. */
+/* Below the sidebar breakpoint: no rails, single column, mobile top bar. The
+   desktop sidebar and rail are removed from flow ENTIRELY (display:none) so they
+   never leave an empty gap at the top (defect B). */
 @media (max-width: 767px) {
   .gz-shell { display: block; max-width: none; margin: 0; }
-  .gz-side-col { display: none; }
-  .gz-rail-col { display: none; }
+  .gz-side-col { display: none !important; }
+  .gz-rail-col { display: none !important; }
   .gz-shell > .gz-center.page { max-width: 62rem; margin: 0 auto; }
   body[data-gz-nav="1"] .gz-mob-acct { display: inline-flex; }
-  .gz-side-col, .gz-rail-col { position: static; height: auto; overflow-y: visible; }
-  .gz-side { height: auto; min-height: 0; }
+  body[data-gz-nav="1"] .gz-mob-title { display: block; }
+
+  /* The mobile top bar: sticky masthead carrying the avatar (left) + page title.
+     Present on every logged-in page so the top is never a void. */
+  body[data-gz-nav="1"] header.bar {
+    display: flex; align-items: center; gap: 0.6rem;
+    position: sticky; top: 0; z-index: 30;
+    padding: 0.5rem 1rem calc(0.5rem);
+    padding-top: calc(0.5rem + env(safe-area-inset-top, 0px));
+    background: color-mix(in srgb, var(--bg) 92%, transparent);
+    -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
+    border-bottom: 1px solid var(--line);
+  }
+  /* The bar's own brand/live/spacer are redundant on mobile: the avatar + title own it. */
+  body[data-gz-nav="1"] header.bar .brand,
+  body[data-gz-nav="1"] header.bar .live-indicator,
+  body[data-gz-nav="1"] header.bar .spacer { display: none; }
 }
 
 /* ---- Column delineation (desktop) ----------------------------------------
@@ -1221,23 +1256,35 @@ pre.copyable {
 }
 
 /* ==========================================================================
-   Mobile (<= 640px). Guiding rule: SUBTRACT. Single column, no horizontal
+   Mobile (<= 767px). Guiding rule: SUBTRACT. Single column, no horizontal
    overflow, 44px touch targets, tighter type + spacing, safe-area insets.
+   Matches the chrome breakpoint (sidebar/rail hidden at <=767px) so touch
+   sizing and safe-area apply everywhere the mobile layout is active.
    ========================================================================== */
-@media (max-width: 640px) {
+@media (max-width: 767px) {
   html, body { overflow-x: hidden; }
 
   .page { padding: 1rem 1rem calc(5rem + env(safe-area-inset-bottom, 0px)); }
   .bar { padding: 0.6rem 1rem; }
 
-  .bar .brand,
-  .bar .live-indicator { display: none; }
+  /* Logged-out / non-nav pages: the old empty bar collapses. When the mobile
+     account button IS present (logged in), header.bar becomes the sticky top bar
+     styled in the <=767px chrome block above. */
+  .bar:not(:has(.gz-mob-acct)) .brand,
+  .bar:not(:has(.gz-mob-acct)) .live-indicator { display: none; }
   .bar:not(:has(.gz-mob-acct)) { display: none; }
   .bar .spacer { display: none; }
 
   .layout { grid-template-columns: 1fr; gap: 0; }
   .rail { display: none; }
 
+  /* The bar owns the page title on mobile, so the redundant in-column heading is
+     hidden on the simple pages. The profile keeps its rich header (avatar + follow),
+     and the feed keeps its tabs directly under the bar. */
+  #feed-view > h1.page-title,
+  #saved-view > h1.page-title,
+  .msg-list-head > h1.page-title { display: none; }
+  #feed-view > .feed-tabs { margin-top: 0.5rem; }
   h1.page-title { font-size: 1.35rem; }
   .tw-headline { font-size: 1.02rem; }
   .md { font-size: 0.92rem; }
@@ -1264,7 +1311,14 @@ pre.copyable {
   .wall-entry-label { margin-bottom: 0.7rem; }
   .wall-entry-emoji { font-size: 1.1rem; }
 
-  .tw-like-btn, .tw-comment-btn, .tw-share-btn, .tw-bookmark-btn { min-height: 44px; }
+  /* Card action row: every button is a >=44px effective hit area. Icon-only
+     buttons (like, bookmark) also get a min-width so the tap target is a square,
+     not a thin sliver; the glyph inside stays small (defect D). */
+  .tw-like-btn, .tw-comment-btn, .tw-share-btn, .tw-bookmark-btn {
+    min-height: 44px; padding-top: 0; padding-bottom: 0;
+  }
+  .tw-like-btn, .tw-bookmark-btn { min-width: 44px; justify-content: center; }
+  .tw-comment-btn, .tw-share-btn { min-height: 44px; }
 
   /* Chat fills the viewport below the top bar so the composer hugs the keyboard.
      The page's own bottom padding is dropped here so the composer reaches the edge. */
@@ -1282,7 +1336,15 @@ pre.copyable {
   .tw-avatar-lg { width: 48px; height: 48px; font-size: 1.05rem; }
   .gz-copy { min-height: 44px; padding: 0.5rem 0.9rem; }
   .wall-entry-action .gz-copy { min-height: 44px; padding: 0.5rem 0.85rem; }
-  .theme-fab { width: 48px; height: 48px; }
+  /* Smaller fab on mobile so it stays out of the way of card action rows; it sits
+     below modals/pills (z:50 < pill z:60/200 < modal z:100) and the page's 5rem
+     bottom padding keeps interactive content clear of it (defect C). */
+  .theme-fab {
+    width: 38px; height: 38px;
+    bottom: calc(0.75rem + env(safe-area-inset-bottom, 0px));
+    right: calc(0.75rem + env(safe-area-inset-right, 0px));
+  }
+  .theme-fab svg { width: 17px; height: 17px; }
   .gz-me .chip-logout,
   .wall-note a,
   .backlink a { display: inline-block; padding: 0.35rem 0; }
@@ -1389,7 +1451,11 @@ main.gz-center { min-height: 100dvh; }
   from { opacity: 0; transform: translateX(-50%) translateY(-10px); }
   to   { opacity: 1; transform: translateX(-50%) translateY(0); }
 }
-@media (max-width: 720px) { .feed-pill { top: 3.6rem; } }
+/* Below the sidebar breakpoint the sticky top bar occupies the top edge; drop the
+   "Show N posts" pill beneath it so the two never collide (defect E). */
+@media (max-width: 767px) {
+  .feed-pill { top: calc(3.75rem + env(safe-area-inset-top, 0px)); }
+}
 @media (prefers-reduced-motion: reduce) { .feed-pill { animation: none; } }
 /* Update notification pill: neutral surface + accent action, bottom-center. */
 .gz-update-pill {

@@ -51,20 +51,79 @@ export interface DailyLite {
   // so the oracle can answer pointed "how did you build it" questions. NEVER served
   // by any public/member read; it lives only in the corpus the oracle sees.
   notes?: string | null;
+  // Optional creation timestamp, used only to order this beat against journal entries
+  // when both feed the corpus. Absent -> the beat's date anchors it (end of that UTC day).
+  created_at?: string | null;
 }
 
-// Concatenate dailies (already most-recent-first) with date headers, truncated.
-// The headline leads each block; body_md then the private notes follow as depth.
-export function buildCorpus(dailies: DailyLite[], max = CORPUS_MAX): string {
-  let out = "";
+// One free-form PRIVATE journal entry: everything the agent knows that fits no post yet.
+// Interleaved into the corpus by recency like a daily; NEVER served publicly.
+export interface JournalLite {
+  body: string;
+  created_at: string;
+}
+
+// A comparable sort timestamp (epoch ms) for a corpus item. A daily anchors at the END
+// of its UTC day (23:59:59.999) unless it carries an explicit created_at, so a same-day
+// journal entry does not jump ahead of the beat it belongs to; a journal entry uses its
+// own created_at. Unparseable values sort last (0).
+function sortMs(kind: "daily" | "journal", date: string, createdAt?: string | null): number {
+  if (kind === "journal" || createdAt) {
+    const t = Date.parse(String(createdAt ?? date));
+    return Number.isNaN(t) ? 0 : t;
+  }
+  const t = Date.parse(String(date) + "T23:59:59.999Z");
+  return Number.isNaN(t) ? 0 : t;
+}
+
+// Build the oracle corpus from dailies AND journal entries, interleaved by recency: the
+// most recent material comes first regardless of kind, within the `max` char budget. A
+// daily block leads with its headline, then body_md, then the private notes; a journal
+// block is labelled "===== Journal, <date> =====". Both `dailies` and `journal` may
+// arrive in any order; this sorts the merged list newest-first deterministically (ties
+// break dailies-before-journal, then by date string) so tests stay stable.
+export function buildCorpus(
+  dailies: DailyLite[],
+  journal: JournalLite[] = [],
+  max = CORPUS_MAX,
+): string {
+  type Item = { ms: number; kind: "daily" | "journal"; date: string; block: string };
+  const items: Item[] = [];
+
   for (const d of dailies) {
     const parts = [d.headline, d.body_md, d.notes].filter((s) => s && s.trim()).join("\n");
-    const block = `\n\n===== Daily review, ${d.date} =====\n${parts}`;
-    if (out.length + block.length > max) {
-      out += block.slice(0, Math.max(0, max - out.length));
+    items.push({
+      ms: sortMs("daily", d.date, d.created_at),
+      kind: "daily",
+      date: d.date,
+      block: `\n\n===== Daily review, ${d.date} =====\n${parts}`,
+    });
+  }
+  for (const j of journal) {
+    if (!j.body || !j.body.trim()) continue;
+    const date = String(j.created_at ?? "").slice(0, 10);
+    items.push({
+      ms: sortMs("journal", date, j.created_at),
+      kind: "journal",
+      date,
+      block: `\n\n===== Journal, ${date} =====\n${j.body.trim()}`,
+    });
+  }
+
+  // Newest first. Deterministic tie-break: daily before journal, then date string desc.
+  items.sort((a, b) => {
+    if (b.ms !== a.ms) return b.ms - a.ms;
+    if (a.kind !== b.kind) return a.kind === "daily" ? -1 : 1;
+    return a.date < b.date ? 1 : a.date > b.date ? -1 : 0;
+  });
+
+  let out = "";
+  for (const it of items) {
+    if (out.length + it.block.length > max) {
+      out += it.block.slice(0, Math.max(0, max - out.length));
       break;
     }
-    out += block;
+    out += it.block;
   }
   return out.trim();
 }

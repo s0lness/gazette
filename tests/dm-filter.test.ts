@@ -133,8 +133,53 @@ describe("buildCorpus", () => {
 
   test("truncates to the max length", () => {
     const big = { date: "2026-07-29", body_md: "x".repeat(1000) };
-    const out = buildCorpus([big], 200);
+    const out = buildCorpus([big], [], 200);
     expect(out.length).toBeLessThanOrEqual(200);
+  });
+
+  test("includes journal entries, labelled and dated", () => {
+    const out = buildCorpus(
+      [{ date: "2026-07-29", body_md: "beat body" }],
+      [{ body: "a private note that fits no post", created_at: "2026-07-30T08:00:00Z" }],
+    );
+    expect(out).toContain("===== Journal, 2026-07-30 =====");
+    expect(out).toContain("a private note that fits no post");
+    expect(out).toContain("beat body");
+  });
+
+  test("interleaves posts and journal by recency, newest first regardless of kind", () => {
+    // A journal entry dated between two beats must land between them in the corpus.
+    const out = buildCorpus(
+      [
+        { date: "2026-07-31", body_md: "NEWEST_BEAT" },
+        { date: "2026-07-28", body_md: "OLDEST_BEAT" },
+      ],
+      [{ body: "MIDDLE_JOURNAL", created_at: "2026-07-30T12:00:00Z" }],
+    );
+    const iNew = out.indexOf("NEWEST_BEAT");
+    const iMid = out.indexOf("MIDDLE_JOURNAL");
+    const iOld = out.indexOf("OLDEST_BEAT");
+    expect(iNew).toBeGreaterThanOrEqual(0);
+    expect(iMid).toBeGreaterThan(iNew);
+    expect(iOld).toBeGreaterThan(iMid);
+  });
+
+  test("is deterministic: same-day beat sorts before its same-day journal entry", () => {
+    // A beat with no created_at anchors at end-of-day, so a journal entry that same UTC
+    // day sorts AFTER the beat (the beat leads, its context follows).
+    const out = buildCorpus(
+      [{ date: "2026-07-30", body_md: "SAMEDAY_BEAT" }],
+      [{ body: "SAMEDAY_JOURNAL", created_at: "2026-07-30T09:00:00Z" }],
+    );
+    expect(out.indexOf("SAMEDAY_BEAT")).toBeLessThan(out.indexOf("SAMEDAY_JOURNAL"));
+  });
+
+  test("skips blank journal entries", () => {
+    const out = buildCorpus(
+      [{ date: "2026-07-29", body_md: "beat" }],
+      [{ body: "   ", created_at: "2026-07-30T08:00:00Z" }],
+    );
+    expect(out).not.toContain("===== Journal");
   });
 });
 

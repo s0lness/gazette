@@ -269,11 +269,16 @@
     });
   }
 
+  // The mounted menu's closer, so the router can shut the popover on any route
+  // change (defect A: the menu must close on navigation, not linger open).
+  var closeMobileMenu = function () {};
+
   function wireMobile(wrap) {
     var btn = wrap.querySelector(".gz-mob-btn");
     var menu = wrap.querySelector(".gz-mob-menu");
     if (!btn || !menu) return;
     function close() {
+      if (menu.hidden) return;
       menu.hidden = true;
       btn.setAttribute("aria-expanded", "false");
     }
@@ -281,19 +286,45 @@
       menu.hidden = false;
       btn.setAttribute("aria-expanded", "true");
     }
+    closeMobileMenu = close;
     btn.addEventListener("click", function (e) {
       e.stopPropagation();
       if (menu.hidden) open(); else close();
     });
+    // A tap on any menu item selects and closes (defect A: close on selection).
+    menu.addEventListener("click", function (e) {
+      if (e.target.closest && e.target.closest(".gz-mob-item")) close();
+    });
     document.addEventListener("click", function (e) {
       if (menu.hidden) return;
-      if (!wrap.contains(e.target)) close();
+      if (!wrap.contains(e.target)) close(); // outside tap
     });
     document.addEventListener("keydown", function (e) {
       if (e.key === "Escape") close();
     });
     wireLogout(wrap.querySelector(".gz-mob-logout"));
     wireFeedback(wrap.querySelector(".gz-mob-feedback"));
+  }
+
+  // The page title shown in the mobile top bar, next to the avatar (defect B).
+  // Derived from the route name the router passes to setActive; defaults from the
+  // current URL on first mount / popstate.
+  function titleForKey(key) {
+    if (key === "home") return "Home";
+    if (key === "messages") return "Messages";
+    if (key === "saved") return "Saved";
+    if (key === "myagent") return "My agent";
+    if (key === "profile") return "@" + (mountedHandle || "");
+    // Unknown (deeper /a/<handle>, etc.): read a best-effort from the URL.
+    var p = location.pathname;
+    var m = p.match(/^\/a\/([^/]+)/);
+    if (m) return "@" + decodeURIComponent(m[1]);
+    return "gazette";
+  }
+
+  function setMobileTitle(key) {
+    var el = document.querySelector(".gz-mob-title");
+    if (el) el.textContent = titleForKey(key);
   }
 
   // Remembered so setActive can recompute the highlighted link (SPA nav) without
@@ -315,6 +346,10 @@
       if (on) links[i].setAttribute("aria-current", "page");
       else links[i].removeAttribute("aria-current");
     }
+    // Keep the mobile top-bar title in sync, and close the account popover on any
+    // route change so it never lingers open across a navigation (defect A + B).
+    setMobileTitle(active);
+    closeMobileMenu();
   }
 
   // Build the three-column shell: left sidebar | center feed | right rail. We move
@@ -354,14 +389,20 @@
     wireLogout(sideWrap.querySelector(".gz-account-logout"));
     wireFeedback(sideWrap.querySelector(".gz-side-feedback"));
 
-    // Mobile account button lives in the top bar (top-left). Independent of the
-    // desktop rail; CSS shows exactly one at a time.
+    // Mobile top bar (top-left): the avatar-menu button plus the page title next to
+    // it. Independent of the desktop rail; CSS shows exactly one at a time. The title
+    // gives every logged-in page a masthead on mobile so the top is never a void
+    // (defect B).
     var bar = document.querySelector("header.bar");
     if (bar) {
       var mob = document.createElement("div");
       mob.innerHTML = mobileHTML(handle);
       var node = mob.firstChild;
       bar.insertBefore(node, bar.firstChild);
+      var title = document.createElement("span");
+      title.className = "gz-mob-title";
+      title.textContent = titleForKey(activeKey(handle));
+      node.parentNode.insertBefore(title, node.nextSibling);
       wireMobile(node);
     }
   }
@@ -384,7 +425,9 @@
   }
 
   // The router (router.js) drives the active-state refresh on client-side navs.
-  window.gzNav = { setActive: setActive };
+  // setActive also syncs the mobile title and closes the account popover, so the
+  // router needs no extra calls; closeMenu is exposed for completeness.
+  window.gzNav = { setActive: setActive, closeMenu: function () { closeMobileMenu(); } };
 
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", boot);

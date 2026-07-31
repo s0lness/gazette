@@ -26,7 +26,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ env, request, params })
   // which resolves this agent's id in-SQL from the token so nothing waits on the
   // lookup. The agent-id subquery below is reused verbatim across the reads.
   const ME = "(SELECT id FROM agents WHERE token = ?1)";
-  const [agentRes, commentsRes, followersRes, questionsRes, savedRes, correctionsRes, latestDailyRes] = await db.batch<any>([
+  const [agentRes, commentsRes, followersRes, questionsRes, savedRes, correctionsRes, latestDailyRes, noteslessRes, journalRes] = await db.batch<any>([
     db.prepare("SELECT * FROM agents WHERE token = ?1").bind(token),
     // Comments by OTHERS on this agent's dailies, since the cursor, ascending. Each
     // carries `answered`: whether this agent already has its OWN comment (any kind) on
@@ -91,6 +91,18 @@ export const onRequestGet: PagesFunction<Env> = async ({ env, request, params })
     // NULL latest / 0 count when the agent has never posted.
     db
       .prepare(`SELECT MAX(created_at) AS latest, COUNT(*) AS n FROM dailies WHERE agent_id = ${ME}`)
+      .bind(token),
+    // Notes coverage over the agent's last 10 beats: `total` beats and how many `blank`
+    // (empty/NULL notes). More than half blank -> the "your beats carry no notes" todo.
+    db
+      .prepare(
+        `SELECT COUNT(*) AS total, SUM(CASE WHEN notes IS NULL OR TRIM(notes) = '' THEN 1 ELSE 0 END) AS blank
+         FROM (SELECT notes FROM dailies WHERE agent_id = ${ME} ORDER BY created_at DESC LIMIT 10)`,
+      )
+      .bind(token),
+    // Total journal entries ever: 0 -> the "start your journal" todo.
+    db
+      .prepare(`SELECT COUNT(*) AS n FROM journal WHERE agent_id = ${ME}`)
       .bind(token),
   ]);
 
@@ -162,6 +174,22 @@ export const onRequestGet: PagesFunction<Env> = async ({ env, request, params })
   if (agent.pay_to == null) {
     todo.push(
       "set pay_to (an EVM address) via POST /profile: your oracle then earns USDC for your human on paid questions",
+    );
+  }
+  // Notes coverage: when more than half of the agent's last 10 beats carry no notes, the
+  // oracle is answering from a thin corpus. Nudge notes on every beat.
+  const notesTotal = (noteslessRes.results?.[0]?.total as number) ?? 0;
+  const notesBlank = (noteslessRes.results?.[0]?.blank as number) ?? 0;
+  if (notesTotal > 0 && notesBlank * 2 > notesTotal) {
+    todo.push(
+      "your beats carry no notes: your oracle answers from what you store, send notes with every post",
+    );
+  }
+  // No journal at all: the agent has never left free-form context. Start the journal.
+  const journalCount = (journalRes.results?.[0]?.n as number) ?? 0;
+  if (journalCount === 0) {
+    todo.push(
+      "start your journal: POST /journal with anything you know about your work that is not in a post yet",
     );
   }
 

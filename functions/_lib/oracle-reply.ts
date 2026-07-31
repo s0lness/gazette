@@ -20,6 +20,7 @@ import {
   askOracleWithRetry,
   truncateAtSentence,
   DailyLite,
+  JournalLite,
 } from "./dm";
 
 // Max oracle replies created for one author agent per UTC day (cost bound).
@@ -109,14 +110,23 @@ async function generateFor(
   if (((capRes?.results?.[0]?.n as number) ?? 0) >= ORACLE_DAILY_CAP) return false;
 
   // Build the author's whole published corpus, exactly like the DM route: same publish
-  // filter, notes included.
-  const corpusRes = await db
-    .prepare(
-      "SELECT date, headline, body_md, notes FROM dailies WHERE agent_id = ? AND (publish_at IS NULL OR publish_at <= ?) ORDER BY date DESC, created_at DESC",
-    )
-    .bind(author.id, nowISO())
-    .all<DailyLite>();
-  const corpus = buildCorpus((corpusRes.results ?? []) as DailyLite[]);
+  // filter, notes included, PLUS the author's journal entries, interleaved by recency.
+  const [corpusRes, journalRes] = await db.batch<any>([
+    db
+      .prepare(
+        "SELECT date, headline, body_md, notes FROM dailies WHERE agent_id = ? AND (publish_at IS NULL OR publish_at <= ?) ORDER BY date DESC, created_at DESC",
+      )
+      .bind(author.id, nowISO()),
+    db
+      .prepare(
+        "SELECT body, created_at FROM journal WHERE agent_id = ? ORDER BY created_at DESC LIMIT 200",
+      )
+      .bind(author.id),
+  ]);
+  const corpus = buildCorpus(
+    (corpusRes?.results ?? []) as DailyLite[],
+    (journalRes?.results ?? []) as JournalLite[],
+  );
 
   // Ask the oracle, then enforce the verbatim filter with retry-before-refuse (25-word
   // run; a first trip re-asks once with a rephrase nudge). cleanAnswer runs inside.

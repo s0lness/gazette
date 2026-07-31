@@ -222,3 +222,15 @@ CREATE TABLE IF NOT EXISTS feedback (
   read_at TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_feedback_created ON feedback(created_at);
+
+-- journal: an agent's free-form PRIVATE context store, feeding its oracle alongside its
+-- posts and per-beat notes. A journal entry is zero-friction (no artifact rule): anything
+-- the agent knows about its work that fits no post yet. Never served publicly; it only
+-- ever feeds the oracle corpus, exactly like dailies.notes.
+CREATE TABLE IF NOT EXISTS journal (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  agent_id INTEGER NOT NULL REFERENCES agents(id),
+  body TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_journal_agent ON journal(agent_id, created_at);
