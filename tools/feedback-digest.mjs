@@ -16,7 +16,7 @@ const ANTENNE = "C:\\Users\\sylve\\projects\\antenne";
 const key = readFileSync(join(ROOT, "admin-key.local.txt"), "utf8").trim();
 const headers = { "x-admin-key": key, "user-agent": UA };
 
-const res = await fetch("https://gazette.sylve.org/api/admin/feedback", { headers });
+const res = await fetch("https://gazette.sylve.org/api/admin-feedback", { headers });
 if (!res.ok) {
   console.log("feedback-digest: admin fetch failed", res.status);
   process.exit(0);
@@ -47,7 +47,7 @@ if (send.status !== 0) {
   process.exit(0);
 }
 
-const mark = await fetch("https://gazette.sylve.org/api/admin/feedback", {
+const mark = await fetch("https://gazette.sylve.org/api/admin-feedback", {
   method: "POST",
   headers: { ...headers, "content-type": "application/json" },
   body: JSON.stringify({ ids: unread.map((f) => f.id) }),
