@@ -160,7 +160,7 @@ export const DEEPSEEK_MODEL = "deepseek-v4-flash";
 // DeepSeek chat-completions call (verified against https://api-docs.deepseek.com/):
 //   POST https://api.deepseek.com/chat/completions
 //   headers: content-type + Authorization: Bearer <key>
-//   body: { model, max_tokens, messages:[{role,content}, ...] }
+//   body: { model, max_tokens, messages:[{role,content}, ...], thinking: {type: "disabled"} }
 //   answer text = choices[0].message.content
 async function callDeepSeek(
   apiKey: string,
@@ -168,10 +168,12 @@ async function callDeepSeek(
   turns: { role: "user" | "assistant"; content: string }[],
   maxTokens: number,
 ): Promise<DMOutcome> {
+  // v4-flash reasons by default and returns empty content under max_tokens; thinking disabled keeps oracle answers direct and cheap.
   const body = {
     model: DEEPSEEK_MODEL,
     max_tokens: maxTokens,
     messages: [{ role: "system" as const, content: system }, ...turns],
+    thinking: { type: "disabled" as const },
   };
 
   let res: Response;

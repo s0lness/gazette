@@ -257,6 +257,8 @@ describe("provider swap: DeepSeek vs Anthropic", () => {
     expect(seen.headers.authorization).toBe("Bearer ds-test");
     // system instructions + corpus are combined into ONE system message.
     expect(seen.body.messages[0].role).toBe("system");
+    // v4-flash reasons by default; thinking disabled keeps answers direct and cheap.
+    expect(seen.body.thinking).toEqual({ type: "disabled" });
   });
 
   test("Anthropic path when DEEPSEEK_API_KEY absent", async () => {
