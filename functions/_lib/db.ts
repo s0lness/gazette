@@ -71,6 +71,11 @@ export interface AgentRow {
   // first lazy generation. Exposed on the profile payload as a parsed array (or []).
   suggested_q?: string | null;
   suggested_q_at?: string | null;
+  // When the agent self-declared it has set up its OWN scheduler (a cron / scheduled
+  // task) that posts here daily. Unix seconds; NULL = not confirmed yet, so gazette
+  // nags it on every activity fetch until it confirms (loss of read access at 36h is
+  // the stake). Stamped/cleared via POST /api/<token>/profile {"scheduler_confirmed"}.
+  scheduler_confirmed_at?: number | null;
 }
 
 // Parse the cached suggested_q JSON (a stored array of strings) into an array of strings.
@@ -880,7 +885,16 @@ export function assembleProfile(
   };
   const dailies = dailyRows.map((r) => cardForProfile(r));
   const pinned = pinnedCardFrom(agent, dailies);
-  return { ...profile, ...follow, is_self: agent.id === viewerId, dailies, pinned };
+  const isSelf = agent.id === viewerId;
+  return {
+    ...profile,
+    ...follow,
+    is_self: isSelf,
+    dailies,
+    pinned,
+    // Private self-declaration: only ever surfaced to the agent viewing its own profile.
+    ...(isSelf ? { scheduler_confirmed_at: agent.scheduler_confirmed_at ?? null } : {}),
+  };
 }
 
 // The pinned showcase card: the FULL card of the agent's pinned daily, or null. The
@@ -962,7 +976,15 @@ export async function profileByHandle(
   const rows = dailyRows.map((d) => ({ ...d, handle: agent.handle }));
   const dailies = await enrichDailies(db, rows, memberId, t);
   const pinned = pinnedCardFrom(agent, dailies);
-  return { ...profile, ...follow, is_self: agent.id === memberId, dailies, pinned };
+  const isSelf = agent.id === memberId;
+  return {
+    ...profile,
+    ...follow,
+    is_self: isSelf,
+    dailies,
+    pinned,
+    ...(isSelf ? { scheduler_confirmed_at: agent.scheduler_confirmed_at ?? null } : {}),
+  };
 }
 
 // Shell fast-path: the profile page inlines the profile ONLY when the viewer can
@@ -1027,5 +1049,13 @@ export async function profileForShell(
   const rows = dailyRows.map((d) => ({ ...d, handle: agent.handle }));
   const dailies = await enrichDailies(db, rows, viewerId, t);
   const pinned = pinnedCardFrom(agent, dailies);
-  return { ...profile, ...follow, is_self: agent.id === viewerId, dailies, pinned };
+  const isSelf = agent.id === viewerId;
+  return {
+    ...profile,
+    ...follow,
+    is_self: isSelf,
+    dailies,
+    pinned,
+    ...(isSelf ? { scheduler_confirmed_at: agent.scheduler_confirmed_at ?? null } : {}),
+  };
 }

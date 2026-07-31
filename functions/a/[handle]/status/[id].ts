@@ -27,7 +27,7 @@ import { displayHeadline, publishedPredicate } from "../../../_lib/db";
 const BUILDER_HANDLE = "gazette";
 
 // The front-end asset version. Bump in lockstep with every other shell.
-const V = "71";
+const V = "72";
 
 // Escape a string for text nodes.
 function escText(s: string): string {
@@ -219,13 +219,14 @@ function page(row: StatusRow): string {
     : "";
 
   // The post object handed to the client. boot.js feeds this to tweet.js cardHTML so
-  // the center column becomes a real feed card, identical to the app's.
+  // the center column becomes a real feed card, identical to the app's. gazette is
+  // post-to-read: the full body is members-only, so it is NOT inlined here (the public
+  // permalink shows only the card tease; the body never leaves the gate).
   const statusObj = {
     id: row.id,
     handle: row.handle,
     display_name: row.display_name,
     headline,
-    body_md: bodyMd,
     date: row.date,
     image_id: row.image_id,
     edited_at: row.edited_at,
@@ -274,7 +275,6 @@ ${ICON}
 .status-handle { color: var(--ink-3); font-size: 0.9rem; text-decoration: none; }
 .status-headline { font-size: 1.15rem; line-height: 1.35; margin: 0 0 0.6rem; color: var(--ink); font-weight: 700; }
 .status-media { display: block; margin: 0 0 0.75rem; }
-.status-body { color: var(--ink); line-height: 1.6; }
 .status-meta { margin: 0.85rem 0 0; color: var(--ink-3); font-size: 0.85rem; }
 
 /* Right-rail join card (logged-out) copy affordance + tease. Built by rail.js's
@@ -330,8 +330,6 @@ body.gz-permalink-out .gz-center.page { padding-bottom: 7rem; }
 
     ${media}
 
-    <div class="status-body md" id="status-body">${escText(bodyMd)}</div>
-
     <p class="status-meta">${metaLine}</p>
   </article>
 </main>
@@ -355,13 +353,6 @@ body.gz-permalink-out .gz-center.page { padding-bottom: 7rem; }
 <script src="/router.js?v=${V}"></script>
 <script>
   (function () {
-    // ---- markdown upgrade of the server-rendered body (crawler fallback) ----
-    var el = document.getElementById("status-body");
-    if (el && window.gzMarkdown) {
-      var raw = ${inlineJSON(bodyMd)};
-      el.innerHTML = raw ? window.gzMarkdown(raw) : "";
-    }
-
     // ---- swap the fallback post for a REAL tweet card -----------------------
     // nav.js has (on this permalink) already built the three-column shell and moved
     // main.page into it as the center column. We now replace the server-rendered
@@ -388,24 +379,11 @@ body.gz-permalink-out .gz-center.page { padding-bottom: 7rem; }
         comments_preview: [],
       });
       fallback.parentNode.replaceChild(host, fallback);
-      // The card omits the body (feed cards link to the permalink for depth); here we
-      // ARE the permalink, so render the full body under the headline.
+      // gazette is post-to-read: the permalink is a PUBLIC share link, so it shows only
+      // the tweet card (avatar, name, @handle, time, the headline tease, media, actions).
+      // The full body essay is members-only and is NOT rendered here.
       var card = host.querySelector(".tweet");
       if (card) {
-        var headlineLink = card.querySelector(".tw-headline");
-        if (headlineLink) {
-          var body = document.createElement("div");
-          body.className = "tw-permalink-body md";
-          var raw = post.body_md || "";
-          body.innerHTML = window.gzMarkdown ? (raw ? window.gzMarkdown(raw) : "") : raw;
-          if (post.image_id) {
-            var m = card.querySelector(".tw-video,.tw-audio,.tw-demo,.tw-img");
-            if (m && m.parentNode === card.querySelector(".tw-body")) m.insertAdjacentElement("afterend", body);
-            else headlineLink.insertAdjacentElement("afterend", body);
-          } else {
-            headlineLink.insertAdjacentElement("afterend", body);
-          }
-        }
         if (window.gzTweet.wire) window.gzTweet.wire(host);
         if (window.gzRefreshTimes) window.gzRefreshTimes();
       }

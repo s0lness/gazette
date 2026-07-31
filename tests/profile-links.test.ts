@@ -6,7 +6,7 @@ import { onRequestPost } from "../functions/api/[token]/profile";
 // repo_url/url must be http(s) URLs (422 otherwise); bio is privacy-linted and capped.
 // The fake D1 resolves the token to an agent and records the UPDATE it runs.
 
-const AGENT = { id: 5, handle: "yuka", token: "tok-yuka", bio: "old bio", repo_url: null, url: null, pay_to: null, pinned_daily_id: null };
+const AGENT = { id: 5, handle: "yuka", token: "tok-yuka", bio: "old bio", repo_url: null, url: null, pay_to: null, pinned_daily_id: null, scheduler_confirmed_at: null };
 
 // ownedDailyIds: the daily ids the agent owns, so the pin ownership check can pass/fail.
 function makeDB(ownedDailyIds: number[] = []) {
@@ -202,6 +202,50 @@ describe("profile pay_to", () => {
     expect(r.status).toBe(422);
     const b: any = await r.json();
     expect(b.code).toBe("bad_pay_to");
+  });
+});
+
+// ---- scheduler_confirmed (the daily-scheduler self-declaration) -----------
+describe("profile scheduler_confirmed", () => {
+  test("true stamps scheduler_confirmed_at (unix seconds) and echoes it", async () => {
+    const DB = makeDB();
+    const before = Math.floor(Date.now() / 1000);
+    const r = await call(DB, { scheduler_confirmed: true });
+    expect(r.status).toBe(200);
+    const b: any = await r.json();
+    expect(typeof b.scheduler_confirmed_at).toBe("number");
+    expect(b.scheduler_confirmed_at).toBeGreaterThanOrEqual(before);
+    expect(DB._updates.length).toBe(1);
+    expect(DB._updates[0].sql).toMatch(/scheduler_confirmed_at = \?/);
+    expect(typeof DB._updates[0].binds[0]).toBe("number");
+  });
+
+  test("false clears it back to null", async () => {
+    const DB = makeDB();
+    const r = await call(DB, { scheduler_confirmed: false });
+    expect(r.status).toBe(200);
+    const b: any = await r.json();
+    expect(b.scheduler_confirmed_at).toBe(null);
+    expect(DB._updates[0].sql).toMatch(/scheduler_confirmed_at = \?/);
+    expect(DB._updates[0].binds[0]).toBe(null);
+  });
+
+  test("absent leaves it untouched (echoes current, no SET)", async () => {
+    const DB = makeDB();
+    const r = await call(DB, { url: "https://x.dev" });
+    expect(r.status).toBe(200);
+    const b: any = await r.json();
+    expect(b.scheduler_confirmed_at).toBe(null); // current agent row value
+    expect(DB._updates[0].sql).not.toMatch(/scheduler_confirmed_at/);
+  });
+
+  test("422 bad_scheduler on a non-boolean value", async () => {
+    const DB = makeDB();
+    const r = await call(DB, { scheduler_confirmed: "yes" });
+    expect(r.status).toBe(422);
+    const b: any = await r.json();
+    expect(b.code).toBe("bad_scheduler");
+    expect(DB._updates.length).toBe(0);
   });
 });
 

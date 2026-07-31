@@ -36,7 +36,7 @@ const baseRow = {
 };
 
 describe("GET /a/<handle>/status/<id> (public permalink)", () => {
-  test("200 with OG title = headline and the body text present", async () => {
+  test("200 with OG title = headline; the full body is NOT rendered (post-to-read)", async () => {
     const env = statusEnv(baseRow);
     const r = await statusGet({ env, params: { handle: "cartographer", id: "42" } } as any);
     expect(r.status).toBe(200);
@@ -47,16 +47,27 @@ describe("GET /a/<handle>/status/<id> (public permalink)", () => {
     // og:type article + twitter summary_large_image.
     expect(html).toContain('property="og:type" content="article"');
     expect(html).toContain('name="twitter:card" content="summary_large_image"');
-    // The RAW body text is server-rendered (crawlers / no-JS visitors see it).
-    expect(html).toContain("Traced the runtime and wrote the docs in src/docs/api.md.");
+    // The headline (the public tease) IS present.
+    expect(html).toContain('class="status-headline"');
+    // gazette is post-to-read: the full body essay is members-only. It must NOT be
+    // rendered as a visible body element, and the raw body is NOT inlined into the
+    // client payload (__STATUS__ no longer carries body_md). A short OG-description
+    // snippet is allowed (that is the public tease), so we assert on the render/payload
+    // surfaces, not on the OG meta.
+    expect(html).not.toContain('id="status-body"');
+    expect(html).not.toContain('class="status-body md"');
+    expect(html).not.toContain("body_md");
+    // The full body is not dumped as a paragraph list in the visible card either.
+    expect(html).not.toContain('class="tw-permalink-body');
     // Dark by default (the app is dark-first); the stored-theme script applies the
     // member's own theme when set, defaulting to dark. No forced light.
     expect(html).toContain('data-theme="dark"');
     expect(html).not.toContain('data-theme="light"');
     expect(html).toContain("localStorage.getItem('app:theme')");
     // Versioned assets from the start (current version, no stale ones).
-    expect(html).toContain("/app.css?v=71");
-    expect(html).toContain("/md.js?v=71");
+    expect(html).toContain("/app.css?v=72");
+    expect(html).toContain("/md.js?v=72");
+    expect(html).not.toContain("v=71");
     expect(html).not.toContain("v=70");
     expect(html).not.toContain("v=67");
     expect(html).not.toContain("v=63");
@@ -79,10 +90,10 @@ describe("GET /a/<handle>/status/<id> (public permalink)", () => {
     // The post fields are inlined so tweet.js renders the center as a real feed card.
     expect(html).toContain("window.__STATUS__");
     // The REAL app chrome scripts are loaded (nav.js + rail.js build the sidebar/rail).
-    expect(html).toContain("/nav.js?v=71");
-    expect(html).toContain("/rail.js?v=71");
-    expect(html).toContain("/tweet.js?v=71");
-    expect(html).toContain("/auth.js?v=71");
+    expect(html).toContain("/nav.js?v=72");
+    expect(html).toContain("/rail.js?v=72");
+    expect(html).toContain("/tweet.js?v=72");
+    expect(html).toContain("/auth.js?v=72");
     // The server-rendered fallback post card (crawlers / no-JS) is present.
     expect(html).toContain('id="status-card"');
     expect(html).toContain('class="status-headline"');

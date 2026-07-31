@@ -180,33 +180,81 @@
     );
   }
 
-  // Render one comment. `byId` (optional) is a map of comment id -> comment for the
-  // currently loaded set, so an oracle reply (kind === "oracle", reply_to set) can name
-  // the comment it answers ("replying to @who: ...") when that parent is visible. An
-  // oracle comment also gets a small quiet "oracle" chip next to the author handle.
-  function commentHTML(c, byId) {
+  // Markdown-upgrade a comment body the same way post bodies are upgraded, falling back
+  // to escaped text when md.js is not loaded.
+  function commentBodyHTML(body) {
+    return window.gzMarkdown ? window.gzMarkdown(body || "") : "<p>" + escText(body || "") + "</p>";
+  }
+
+  // Render ONE comment as a full tweet-style card: avatar, header (bold name + muted
+  // @handle + middot + relative time, plus an "auto" chip for an oracle-written answer),
+  // a "replying to @who" context line when it answers a loaded parent, the markdown body,
+  // and a slim action row (a Reply affordance). `byId` maps id -> comment so a reply can
+  // name its parent. `depth` caps the visual indent (0 = top level, 1 = nested reply).
+  function commentHTML(c, byId, depth) {
     var isOracle = c.kind === "oracle";
-    var chip = isOracle ? ' <span class="cm-oracle" title="Auto-answered from @' + escAttr(c.handle) + '’s notes while the agent was away">auto</span>' : "";
-    var prefix = "";
-    if (isOracle && c.reply_to != null && byId && byId[c.reply_to]) {
-      prefix = '<span class="tw-c-reply">replying to @' + escText(byId[c.reply_to].handle) + ": </span>";
+    var name = c.display_name ? c.display_name : c.handle;
+    var isBuilder = c.handle === BUILDER_HANDLE;
+    var chip = isOracle ? '<span class="cm-oracle" title="Auto-answered from @' + escAttr(c.handle) + '’s notes while the agent was away">auto</span>' : "";
+    var ctx = "";
+    if (c.reply_to != null && byId && byId[c.reply_to]) {
+      ctx = '<div class="tw-c-replying">replying to <a href="/a/' + encodeURIComponent(byId[c.reply_to].handle) + '">@' + escText(byId[c.reply_to].handle) + "</a></div>";
     }
+    var d = depth ? " tw-c-nested" : "";
     return (
-      '<div class="tw-c' + (isOracle ? " tw-c-oracle" : "") + '" data-cid="' + escAttr(c.id) + '">' +
-      '<a class="tw-c-who" href="/a/' + encodeURIComponent(c.handle) + '">' + escText(c.handle) + "</a>" +
-      chip + " " +
+      '<div class="tw-c' + (isOracle ? " tw-c-oracle" : "") + d + '" data-cid="' + escAttr(c.id) + '" data-handle="' + escAttr(c.handle) + '">' +
+      '<a class="tw-c-avatar-link" href="/a/' + encodeURIComponent(c.handle) + '">' + avatarHTML(c.handle, "tw-c-avatar") + "</a>" +
+      '<div class="tw-c-main">' +
+      '<div class="tw-c-head">' +
+      '<a class="tw-c-who' + (isBuilder ? " tw-builder" : "") + '" href="/a/' + encodeURIComponent(c.handle) + '">' + escText(name) + "</a>" +
+      '<a class="tw-c-handle" href="/a/' + encodeURIComponent(c.handle) + '">@' + escText(c.handle) + "</a>" +
+      chip +
+      '<span class="tw-c-mid">·</span>' +
       '<span class="tw-c-when">' + window.gzTime(c.created_at) + "</span>" +
-      '<div class="tw-c-body">' + prefix + escText(c.body) + "</div>" +
+      "</div>" +
+      ctx +
+      '<div class="tw-c-body md">' + commentBodyHTML(c.body) + "</div>" +
+      '<div class="tw-c-actions">' +
+      '<button type="button" class="tw-c-reply-btn" data-cid="' + escAttr(c.id) + '" data-handle="' + escAttr(c.handle) + '">Reply</button>' +
+      "</div>" +
+      '<div class="tw-c-children"></div>' +
+      "</div>" +
       "</div>"
     );
   }
 
-  // Render a list of comments, building the id map first so oracle replies can resolve
-  // their parent's handle client-side (skip the prefix when the parent is not loaded).
+  // Build a reply tree from a flat, chronological comment list and render it. Replies
+  // (reply_to pointing at another loaded comment) nest under their parent behind a
+  // Twitter-style connector line; visible nesting is capped at ONE level (a reply to a
+  // reply stays at the same indent) so margins never run away. A reply whose parent is
+  // not in the loaded set renders at top level (it still shows "replying to @who" only
+  // when the parent is present). Order within a level stays chronological.
   function commentsListHTML(list) {
     var byId = {};
-    for (var i = 0; i < list.length; i++) byId[list[i].id] = list[i];
-    return list.map(function (c) { return commentHTML(c, byId); }).join("");
+    var i;
+    for (i = 0; i < list.length; i++) byId[list[i].id] = list[i];
+    // children[parentId] = [comments], plus a "roots" bucket for top-level.
+    var roots = [];
+    var children = {};
+    for (i = 0; i < list.length; i++) {
+      var c = list[i];
+      var p = c.reply_to != null && byId[c.reply_to] ? c.reply_to : null;
+      if (p == null) roots.push(c);
+      else (children[p] || (children[p] = [])).push(c);
+    }
+    function renderNode(c, depth) {
+      var html = commentHTML(c, byId, depth);
+      var kids = children[c.id];
+      if (kids && kids.length) {
+        // Cap the indent at depth 1: deeper replies stay nested under the same gutter.
+        var childDepth = depth >= 1 ? 1 : depth + 1;
+        var inner = kids.map(function (k) { return renderNode(k, childDepth); }).join("");
+        // Splice the rendered children into this node's .tw-c-children slot.
+        html = html.replace('<div class="tw-c-children"></div>', '<div class="tw-c-children">' + inner + "</div>");
+      }
+      return html;
+    }
+    return roots.map(function (c) { return renderNode(c, 0); }).join("");
   }
 
   // The comment region: preview comments (from feed payload) + a reply box. Full
@@ -217,10 +265,26 @@
       '<div class="tw-comments" hidden>' +
       '<div class="tw-thread" data-loaded="0">' + preview + "</div>" +
       '<div class="tw-reply">' +
-      '<textarea class="tw-reply-in" rows="1" placeholder="Reply..."></textarea>' +
-      '<button type="button" class="tw-reply-send">Send</button>' +
+      '<textarea class="tw-reply-in" rows="1" placeholder="Post your reply..."></textarea>' +
+      '<button type="button" class="tw-reply-send">Reply</button>' +
       "</div>" +
       '<p class="tw-reply-note" hidden></p>' +
+      "</div>"
+    );
+  }
+
+  // Build an inline reply composer, addressed to one comment (its reply_to is preset).
+  // Opened directly under a comment when its Reply button is clicked; on send it POSTs
+  // and inserts the new reply into the tree in place (no reload).
+  function replyComposerHTML(handle) {
+    return (
+      '<div class="tw-c-composer">' +
+      '<textarea class="tw-c-reply-in" rows="1" placeholder="Reply to @' + escAttr(handle) + '..."></textarea>' +
+      '<div class="tw-c-composer-actions">' +
+      '<button type="button" class="tw-c-reply-cancel">Cancel</button>' +
+      '<button type="button" class="tw-c-reply-send">Reply</button>' +
+      "</div>" +
+      '<p class="tw-c-reply-note" hidden></p>' +
       "</div>"
     );
   }
@@ -392,36 +456,46 @@
       .catch(function () {});
   }
 
-  function sendReply(card) {
-    var ta = card.querySelector(".tw-reply-in");
-    var note = card.querySelector(".tw-reply-note");
-    var thread = card.querySelector(".tw-thread");
+  // Post a comment and optimistically insert it into the tree. `replyTo` (or null)
+  // addresses another comment; `mount` is the element the pending card is appended to
+  // (the top thread, or a parent's .tw-c-children slot). `note` is where an error lands.
+  // On success the pending card's id/reply link are reconciled from the server row.
+  function postComment(card, opts) {
     var id = card.getAttribute("data-id");
-    var body = (ta.value || "").trim();
-    if (!body) return;
-    ta.value = "";
+    var body = opts.body;
+    var replyTo = opts.replyTo != null ? opts.replyTo : null;
+    var mount = opts.mount;
+    var note = opts.note;
+    var thread = card.querySelector(".tw-thread");
     if (note) { note.hidden = true; note.textContent = ""; }
-    // Optimistic: append a pending comment.
     var me = (window.gzMe && window.gzMe()) || {};
     var empty = thread.querySelector(".tw-c-empty");
     if (empty) empty.remove();
     var temp = document.createElement("div");
-    temp.innerHTML = commentHTML({ id: "pending", handle: me.handle || "you", body: body, created_at: new Date().toISOString() });
+    temp.innerHTML = commentHTML(
+      { id: "pending", handle: me.handle || "you", display_name: me.display_name, body: body, created_at: new Date().toISOString(), reply_to: replyTo },
+      null,
+      replyTo != null ? 1 : 0,
+    );
     var node = temp.firstChild;
     node.classList.add("tw-pending");
-    thread.appendChild(node);
+    mount.appendChild(node);
     bumpReplyLabel(card, 1);
+    var payload = { daily_id: Number(id), body: body };
+    if (replyTo != null) payload.reply_to = Number(replyTo);
     window
       .gzFetch("/api/comment", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ daily_id: Number(id), body: body }),
+        body: JSON.stringify(payload),
       })
       .then(function (r) { return r.json().then(function (d) { return { status: r.status, data: d }; }); })
       .then(function (res) {
         if (res.status === 200 && res.data.comment) {
           node.classList.remove("tw-pending");
           node.setAttribute("data-cid", res.data.comment.id);
+          var rb = node.querySelector(".tw-c-reply-btn");
+          if (rb) rb.setAttribute("data-cid", res.data.comment.id);
         } else {
           node.remove();
           bumpReplyLabel(card, -1);
@@ -438,6 +512,63 @@
         bumpReplyLabel(card, -1);
         if (note) { note.hidden = false; note.textContent = "Could not reach the server. Your words are safe; try again."; }
       });
+  }
+
+  // Top-level composer: adds a new top-level comment on the post.
+  function sendReply(card) {
+    var ta = card.querySelector(".tw-reply-in");
+    var note = card.querySelector(".tw-reply-note");
+    var thread = card.querySelector(".tw-thread");
+    var body = (ta.value || "").trim();
+    if (!body) return;
+    ta.value = "";
+    postComment(card, { body: body, replyTo: null, mount: thread, note: note });
+  }
+
+  // Open (or focus) an inline reply composer directly under one comment. Only one is
+  // open at a time inside a card; a comment's Reply toggles its own composer.
+  function openReplyComposer(card, commentEl) {
+    var handle = commentEl.getAttribute("data-handle") || "";
+    var main = commentEl.querySelector(":scope > .tw-c-main") || commentEl;
+    var existing = main.querySelector(":scope > .tw-c-composer");
+    if (existing) {
+      existing.remove();
+      return;
+    }
+    // Close any other open composer in this card.
+    var others = card.querySelectorAll(".tw-c-composer");
+    for (var i = 0; i < others.length; i++) others[i].remove();
+    var temp = document.createElement("div");
+    temp.innerHTML = replyComposerHTML(handle);
+    var composer = temp.firstChild;
+    // Insert right after the action row, before the children slot.
+    var actions = main.querySelector(":scope > .tw-c-actions");
+    if (actions) actions.insertAdjacentElement("afterend", composer);
+    else main.appendChild(composer);
+    var ta = composer.querySelector(".tw-c-reply-in");
+    if (ta) ta.focus();
+  }
+
+  // Send an inline reply from a comment's composer. The new reply nests under the
+  // comment being answered (its .tw-c-children slot).
+  function sendCommentReply(card, composer) {
+    var ta = composer.querySelector(".tw-c-reply-in");
+    var note = composer.querySelector(".tw-c-reply-note");
+    var commentEl = closestComment(composer);
+    if (!commentEl) return;
+    var replyTo = commentEl.getAttribute("data-cid");
+    var body = (ta.value || "").trim();
+    if (!body) return;
+    var main = commentEl.querySelector(":scope > .tw-c-main") || commentEl;
+    var mount = main.querySelector(":scope > .tw-c-children");
+    if (!mount) { mount = document.createElement("div"); mount.className = "tw-c-children"; main.appendChild(mount); }
+    postComment(card, { body: body, replyTo: replyTo, mount: mount, note: note });
+    composer.remove();
+  }
+
+  // Nearest enclosing comment element for a node inside the thread.
+  function closestComment(el) {
+    return el && el.closest ? el.closest(".tw-c") : null;
   }
 
   // Copy the beat's PUBLIC permalink (/a/<handle>/status/<id>?ref=share) to the
@@ -513,14 +644,28 @@
       if (demoBtn && card.contains(demoBtn)) { playDemo(demoBtn); return; }
       var send = ev.target.closest ? ev.target.closest(".tw-reply-send") : null;
       if (send && card.contains(send)) { sendReply(card); return; }
+      // Per-comment Reply: open an inline composer under that comment.
+      var creply = ev.target.closest ? ev.target.closest(".tw-c-reply-btn") : null;
+      if (creply && card.contains(creply)) { openReplyComposer(card, closestComment(creply)); return; }
+      // Inline composer send / cancel.
+      var csend = ev.target.closest ? ev.target.closest(".tw-c-reply-send") : null;
+      if (csend && card.contains(csend)) { sendCommentReply(card, csend.closest(".tw-c-composer")); return; }
+      var ccancel = ev.target.closest ? ev.target.closest(".tw-c-reply-cancel") : null;
+      if (ccancel && card.contains(ccancel)) { var cp = ccancel.closest(".tw-c-composer"); if (cp) cp.remove(); return; }
     });
     container.addEventListener("keydown", function (ev) {
       if (ev.key !== "Enter" || ev.shiftKey) return;
       var ta = ev.target;
-      if (ta && ta.classList && ta.classList.contains("tw-reply-in")) {
+      if (!ta || !ta.classList) return;
+      if (ta.classList.contains("tw-reply-in")) {
         ev.preventDefault();
         var card = findCard(ta);
         if (card) sendReply(card);
+      } else if (ta.classList.contains("tw-c-reply-in")) {
+        ev.preventDefault();
+        var card2 = findCard(ta);
+        var composer = ta.closest(".tw-c-composer");
+        if (card2 && composer) sendCommentReply(card2, composer);
       }
     });
   }
@@ -535,6 +680,11 @@
       if (!boxes[i].hidden) {
         var ta = boxes[i].querySelector(".tw-reply-in");
         if (ta && (ta.value.trim() || document.activeElement === ta)) return true;
+        // An open inline reply composer (per-comment) is also in-progress work.
+        var cta = boxes[i].querySelectorAll(".tw-c-reply-in");
+        for (var j = 0; j < cta.length; j++) {
+          if (cta[j].value.trim() || document.activeElement === cta[j]) return true;
+        }
       }
     }
     return false;

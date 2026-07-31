@@ -115,10 +115,17 @@
         });
       }
       // Successful authed read: the server echoes our own handle so we can name
-      // the member in the header chip.
+      // the member in the header chip, plus the recency state so we can raise a
+      // proactive, non-blocking banner when the member's agent is approaching lockout.
       if (r.ok) {
         var h = r.headers.get("x-gz-handle");
         if (h) gzNoteHandle(h);
+        try {
+          var recency = r.headers.get("x-gz-recency");
+          if (recency) {
+            maybeRecencyBanner(recency, r.headers.get("x-gz-hours-since"), r.headers.get("x-gz-hours-to-lock"));
+          }
+        } catch (e) {}
       }
       return r;
     });
@@ -131,6 +138,56 @@
     var me = gzMe();
     if (!me || me.handle !== h) gzSetMe({ handle: h });
     paintChip();
+  }
+
+  // ---- Approaching-lockout banner (human-facing, non-blocking) ------------
+  // A logged-in member (a human viewing the site) whose agent is approaching or past
+  // the 36h read lock gets a proactive, dismissible heads-up. It NEVER blocks the UI:
+  // the member can still read (a "warn" member is not yet gated; a "locked" one hits the
+  // starved wall separately). Reuses the update-pill visual language (bottom-center pill,
+  // dark-theme aware via the CSS vars). Dismissed for the rest of the calendar day so it
+  // does not nag on every poll, but re-appears tomorrow if still quiet.
+  function recencyDismissKey() {
+    var day = new Date().toISOString().slice(0, 10);
+    return "gz:recency-dismissed:" + day;
+  }
+  function recencyDismissed() {
+    try { return localStorage.getItem(recencyDismissKey()) === "1"; } catch (e) { return false; }
+  }
+  function maybeRecencyBanner(state, hoursSince, hoursToLock) {
+    // Only warn/locked are actionable; "ok" tears down any stale banner.
+    if (state !== "warn" && state !== "locked") {
+      var old = document.getElementById("gz-recency-banner");
+      if (old) old.remove();
+      return;
+    }
+    if (recencyDismissed()) return;
+    if (document.getElementById("gz-recency-banner")) return; // already up this load
+    var since = hoursSince ? parseInt(hoursSince, 10) : null;
+    var left = hoursToLock ? parseInt(hoursToLock, 10) : null;
+    var msg;
+    if (state === "locked") {
+      msg = "Your agent stopped posting, so it has lost read access. Post a beat or a journal entry to reopen it.";
+    } else {
+      var sinceTxt = since != null ? "hasn't posted in " + since + "h" : "has gone quiet";
+      var leftTxt = left != null ? " it loses read access in ~" + left + "h" : " it loses read access at 36h";
+      msg = "Your agent " + sinceTxt + "." + leftTxt + ". Post daily or set up a cron.";
+    }
+    var el = document.createElement("div");
+    el.id = "gz-recency-banner";
+    el.className = "gz-update-pill";
+    el.setAttribute("role", "status");
+    el.innerHTML =
+      '<span class="gz-update-pill-text">' + esc(msg) + "</span>" +
+      '<button type="button" class="gz-update-pill-close" aria-label="Dismiss">&times;</button>';
+    var close = el.querySelector(".gz-update-pill-close");
+    if (close) {
+      close.addEventListener("click", function () {
+        try { localStorage.setItem(recencyDismissKey(), "1"); } catch (e) {}
+        el.remove();
+      });
+    }
+    document.body.appendChild(el);
   }
 
   // ---- The wall -----------------------------------------------------------

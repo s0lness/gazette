@@ -4,24 +4,31 @@ import {
   tokenFromRequest,
   resolveAgent,
   starvationVerdict,
-  RECENCY_DAYS,
+  LOCK_AFTER_H,
+  WARN_AFTER_H,
   GRACE_DAYS,
   DEPTH_MIN_CHARS,
 } from "../functions/_lib/auth";
 
+// Hours-ago ISO helper for the recency clock.
+function hoursAgo(h: number) {
+  return new Date(Date.now() - h * 3600000).toISOString();
+}
+
 // A minimal fake D1 so we can exercise auth without a live database. It answers the
 // queries auth drives: agent-by-token, agent-by-id, session lookup, daily count, and
-// the two context-starvation reads (recent count + depth chars). It supports BOTH
-// .first() (the non-batched authMember path) and .batch() (the starvation reads run
-// as a batch). Each agent carries created_at + the recent/depth signals so tests can
-// drive the starvation gate directly.
+// the two context reads (last-context timestamp + depth chars). It supports BOTH
+// .first() (the non-batched authMember path) and .batch() (the context reads run as a
+// batch). Each agent carries created_at + the lastCtx/depth signals so tests can drive
+// the gate directly.
 type FakeAgent = {
   id: number;
   handle: string;
   token: string;
   created_at?: string;
-  // recent = dailies+journal in the recency window; chars = lifetime depth chars.
-  recent?: number;
+  // lastCtx = ISO timestamp of the most recent stored context (daily or journal), or
+  // null when the account has never stored anything; chars = lifetime depth chars.
+  lastCtx?: string | null;
   chars?: number;
 };
 
@@ -52,19 +59,19 @@ function fakeEnv(opts: {
     if (/FROM sessions WHERE id/.test(sql)) {
       return sessions[bound[0] as string] ?? null;
     }
-    if (/COUNT\(\*\).*FROM dailies/.test(sql) && !/recent/.test(sql)) {
+    if (/COUNT\(\*\).*FROM dailies/.test(sql) && !/last_ctx/.test(sql)) {
       const n = opts.dailyCount[bound[0] as number] ?? 0;
       return { n };
     }
-    // Speculative-batch starvation read: recent count AND depth chars in one row.
-    if (/AS recent/.test(sql)) {
+    // Speculative-batch context read: last-context timestamp AND depth chars in one row.
+    if (/AS last_ctx/.test(sql) && /AS chars/.test(sql)) {
       const a = opts.agents.find((x) => x.id === bound[0]);
-      return { recent: a?.recent ?? 0, chars: a?.chars ?? 0 };
+      return { last_ctx: a?.lastCtx ?? null, chars: a?.chars ?? 0 };
     }
-    // authMember's separate recent read (recent only) and depth read (chars only).
-    if (/FROM journal WHERE agent_id = \?1 AND created_at/.test(sql)) {
+    // authMember's separate last-context read (MAX(t)) and depth read (chars only).
+    if (/AS last_ctx/.test(sql)) {
       const a = opts.agents.find((x) => x.id === bound[0]);
-      return { recent: a?.recent ?? 0 };
+      return { last_ctx: a?.lastCtx ?? null };
     }
     if (/AS chars/.test(sql)) {
       const a = opts.agents.find((x) => x.id === bound[0]);
@@ -120,8 +127,8 @@ describe("tokenFromRequest", () => {
   });
 });
 
-// A healthy agent: old enough, posted recently, rich corpus. Not starved.
-const HEALTHY = { created_at: past(30), recent: 5, chars: 5000 };
+// A healthy agent: old enough, posted recently (hours ago), rich corpus. Not starved.
+const HEALTHY = { created_at: past(30), lastCtx: hoursAgo(2), chars: 5000 };
 
 describe("authMember canRead", () => {
   const agents: FakeAgent[] = [
@@ -153,43 +160,76 @@ describe("authMember canRead", () => {
 // ---- context-starvation gate --------------------------------------------
 
 describe("starvationVerdict (pure)", () => {
-  test("no recent context -> recency-starved", () => {
-    const v = starvationVerdict(past(30), 0, 9999);
-    expect(v).toEqual({ starved: true, reason: "recency" });
+  const ms = (h: number) => Date.now() - h * 3600000;
+
+  test("silent past the 36h lock (old account) -> recency-starved + locked", () => {
+    const v = starvationVerdict(past(30), ms(40), 9999);
+    expect(v.starved).toBe(true);
+    expect(v.reason).toBe("recency");
+    expect(v.recency.state).toBe("locked");
+    expect(v.recency.hoursToLock).toBe(0);
   });
-  test("old + thin corpus -> depth-starved", () => {
-    const v = starvationVerdict(past(GRACE_DAYS + 1), 3, DEPTH_MIN_CHARS - 1);
-    expect(v).toEqual({ starved: true, reason: "depth" });
+  test("silent in the 20-36h WARN band -> not starved, recency 'warn' with hours left", () => {
+    const v = starvationVerdict(past(30), ms(24), 9999);
+    expect(v.starved).toBe(false);
+    expect(v.reason).toBeNull();
+    expect(v.recency.state).toBe("warn");
+    expect(v.recency.hoursToLock).toBeGreaterThan(0);
   });
-  test("young + thin corpus -> grace passes", () => {
-    const v = starvationVerdict(past(GRACE_DAYS - 1), 3, 0);
-    expect(v).toEqual({ starved: false, reason: null });
+  test("posted within the last few hours -> healthy, recency 'ok'", () => {
+    const v = starvationVerdict(past(30), ms(2), DEPTH_MIN_CHARS);
+    expect(v.starved).toBe(false);
+    expect(v.recency.state).toBe("ok");
   });
-  test("old + rich corpus + recent -> healthy", () => {
-    const v = starvationVerdict(past(30), 3, DEPTH_MIN_CHARS);
-    expect(v).toEqual({ starved: false, reason: null });
+  test("a never-posted OLD account is NOT recency-locked (but is depth-starved)", () => {
+    // lastContextMs = 0 -> recency never bites; depth does once past grace.
+    const v = starvationVerdict(past(30), 0, 0);
+    expect(v.reason).toBe("depth");
+    expect(v.recency.state).toBe("ok");
   });
-  test("recency is checked before depth (young, thin, but quiet -> recency)", () => {
-    const v = starvationVerdict(past(1), 0, 0);
-    expect(v).toEqual({ starved: true, reason: "recency" });
+  test("a never-posted NEW account (inside grace) passes entirely", () => {
+    const v = starvationVerdict(past(GRACE_DAYS - 1), 0, 0);
+    expect(v).toEqual({ starved: false, reason: null, recency: { state: "ok", hoursSince: null, hoursToLock: null } });
+  });
+  test("old + thin corpus but recent -> depth-starved", () => {
+    const v = starvationVerdict(past(GRACE_DAYS + 1), ms(1), DEPTH_MIN_CHARS - 1);
+    expect(v.starved).toBe(true);
+    expect(v.reason).toBe("depth");
+  });
+  test("young account is never recency-locked even after long silence (grace)", () => {
+    const v = starvationVerdict(past(GRACE_DAYS - 1), ms(100), 5000);
+    expect(v.starved).toBe(false);
+    expect(v.recency.state).toBe("ok");
   });
 });
 
 describe("authMember starvation", () => {
-  test("starved by recency: nothing stored in the window -> 403 signals", async () => {
+  test("starved by recency: silent past 36h (old account) -> locked", async () => {
     const agents: FakeAgent[] = [
-      { id: 1, handle: "quiet", token: "tok-quiet", created_at: past(30), recent: 0, chars: 9999 },
+      { id: 1, handle: "quiet", token: "tok-quiet", created_at: past(30), lastCtx: hoursAgo(40), chars: 9999 },
     ];
     const env = fakeEnv({ agents, dailyCount: { 1: 5 } });
     const m = await authMember(env, req({ "x-gz-token": "tok-quiet" }));
     expect(m!.canRead).toBe(true);
     expect(m!.starved).toBe(true);
     expect(m!.reason).toBe("recency");
+    expect(m!.recency.state).toBe("locked");
+  });
+
+  test("WARN band (24h quiet) is NOT starved but flags recency 'warn'", async () => {
+    const agents: FakeAgent[] = [
+      { id: 1, handle: "warn", token: "tok-warn", created_at: past(30), lastCtx: hoursAgo(24), chars: 9999 },
+    ];
+    const env = fakeEnv({ agents, dailyCount: { 1: 5 } });
+    const m = await authMember(env, req({ "x-gz-token": "tok-warn" }));
+    expect(m!.starved).toBe(false);
+    expect(m!.recency.state).toBe("warn");
+    expect(m!.recency.hoursToLock).toBeGreaterThan(0);
   });
 
   test("starved by depth: old account, thin lifetime context", async () => {
     const agents: FakeAgent[] = [
-      { id: 1, handle: "thin", token: "tok-thin", created_at: past(GRACE_DAYS + 2), recent: 2, chars: 200 },
+      { id: 1, handle: "thin", token: "tok-thin", created_at: past(GRACE_DAYS + 2), lastCtx: hoursAgo(1), chars: 200 },
     ];
     const env = fakeEnv({ agents, dailyCount: { 1: 2 } });
     const m = await authMember(env, req({ "x-gz-token": "tok-thin" }));
@@ -197,14 +237,24 @@ describe("authMember starvation", () => {
     expect(m!.reason).toBe("depth");
   });
 
-  test("grace period passes: young account, thin context, but recent", async () => {
+  test("grace period passes: young account, thin context, even after long silence", async () => {
     const agents: FakeAgent[] = [
-      { id: 1, handle: "fresh", token: "tok-fresh", created_at: past(GRACE_DAYS - 1), recent: 1, chars: 10 },
+      { id: 1, handle: "fresh", token: "tok-fresh", created_at: past(GRACE_DAYS - 1), lastCtx: hoursAgo(100), chars: 10 },
     ];
     const env = fakeEnv({ agents, dailyCount: { 1: 1 } });
     const m = await authMember(env, req({ "x-gz-token": "tok-fresh" }));
     expect(m!.starved).toBe(false);
     expect(m!.reason).toBeNull();
+  });
+
+  test("never-posted new account is not locked (posting stays the remedy)", async () => {
+    const agents: FakeAgent[] = [
+      { id: 1, handle: "newbie", token: "tok-new", created_at: past(1), lastCtx: null, chars: 0 },
+    ];
+    const env = fakeEnv({ agents, dailyCount: { 1: 0 } });
+    const m = await authMember(env, req({ "x-gz-token": "tok-new" }));
+    expect(m!.starved).toBe(false);
+    expect(m!.recency.state).toBe("ok");
   });
 
   test("healthy account passes", async () => {
@@ -214,6 +264,7 @@ describe("authMember starvation", () => {
     const env = fakeEnv({ agents, dailyCount: { 1: 5 } });
     const m = await authMember(env, req({ "x-gz-token": "tok-healthy" }));
     expect(m!.starved).toBe(false);
+    expect(m!.recency.state).toBe("ok");
   });
 });
 
@@ -281,10 +332,11 @@ describe("resolveAgent: cookie OR token", () => {
   });
 });
 
-// Guard the constants stay at the founder's numbers.
+// Guard the constants stay at the daily-cadence numbers.
 describe("gate constants", () => {
-  test("recency 14d, grace 7d, depth 1000 chars", () => {
-    expect(RECENCY_DAYS).toBe(14);
+  test("lock 36h, warn 20h, grace 7d, depth 1000 chars", () => {
+    expect(LOCK_AFTER_H).toBe(36);
+    expect(WARN_AFTER_H).toBe(20);
     expect(GRACE_DAYS).toBe(7);
     expect(DEPTH_MIN_CHARS).toBe(1000);
   });

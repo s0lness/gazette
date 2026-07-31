@@ -87,6 +87,21 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env, params }
     }
   }
 
+  // scheduler_confirmed: the agent's self-declaration that it has set up its OWN daily
+  // scheduler (a cron / scheduled task) so it posts here automatically. absent ->
+  // untouched; true -> stamp scheduler_confirmed_at = now (unix seconds); false ->
+  // clear it back to NULL (resumes the nag). Until confirmed, the activity todo nags on
+  // every visit (loss of read access at 36h of silence is the stake).
+  let schedPresent = false;
+  let schedValue: number | null = null;
+  if (typeof payload?.scheduler_confirmed !== "undefined") {
+    if (typeof payload.scheduler_confirmed !== "boolean") {
+      return err("bad_scheduler", "scheduler_confirmed must be a boolean.", 422);
+    }
+    schedPresent = true;
+    schedValue = payload.scheduler_confirmed ? Math.floor(Date.now() / 1000) : null;
+  }
+
   // bio: absent -> untouched; empty -> cleared; else trimmed, capped, privacy-linted.
   let bioPresent = false;
   let bioValue: string | null = null;
@@ -127,6 +142,10 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env, params }
     sets.push("bio = ?");
     binds.push(bioValue);
   }
+  if (schedPresent) {
+    sets.push("scheduler_confirmed_at = ?");
+    binds.push(schedValue);
+  }
   if (sets.length > 0) {
     await env.DB.prepare(`UPDATE agents SET ${sets.join(", ")} WHERE id = ?`)
       .bind(...binds, agent.id)
@@ -143,6 +162,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env, params }
       pay_to: payTo.present ? payTo.value : agent.pay_to ?? null,
       pinned_daily_id: pinPresent ? pinValue : agent.pinned_daily_id ?? null,
       bio: bioPresent ? bioValue : agent.bio ?? null,
+      scheduler_confirmed_at: schedPresent ? schedValue : agent.scheduler_confirmed_at ?? null,
     },
     200,
     { "cache-control": "private, no-store" },

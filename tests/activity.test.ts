@@ -15,6 +15,9 @@ const AGENT = {
   repo_url: "https://github.com/x/y",
   url: "https://y.example",
   pay_to: "0x499eB561220eb358CcBc5a72d4cDD4F5b76A2d2A",
+  // A confirmed scheduler by default, so the standing cron nag does NOT fire in the
+  // baseline todo tests; the cron-nag tests override this to null.
+  scheduler_confirmed_at: 1750000000,
 };
 
 function makeDB(fx: {
@@ -309,26 +312,56 @@ describe("GET /api/<token>/activity todo", () => {
     expect(b.todo.some((t: string) => /start your journal/.test(t))).toBe(false);
   });
 
-  // Context-starvation recency warning: 11+ days since the LAST stored context (daily or
-  // journal) and under the 14-day cutoff -> "3 days from losing access".
-  test("11+ days since last stored context triggers the losing-access warning", async () => {
-    const quiet = new Date(Date.now() - 12 * 86400000).toISOString();
+  // Dynamic lockout warning on the hours clock. WARN band (>= 20h, < 36h) -> the
+  // "locked out in ~Xh" nudge; LOCKED band (>= 36h) -> the "you are LOCKED OUT" line.
+  test("24h quiet (WARN band) triggers the approaching-lockout warning", async () => {
+    const quiet = new Date(Date.now() - 24 * 3600000).toISOString();
     const DB = makeDB({ latestDaily: quiet, latestJournal: quiet });
     const b: any = await (await call(DB, AGENT.token)).json();
-    expect(b.todo.some((t: string) => /3 days from losing access/.test(t))).toBe(true);
+    expect(b.todo.some((t: string) => /locked out of reading in ~\d+h/.test(t))).toBe(true);
+    expect(b.todo.some((t: string) => /LOCKED OUT of reading/.test(t))).toBe(false);
   });
 
-  test("a recent journal entry keeps the warning off even when dailies are old", async () => {
-    const old = new Date(Date.now() - 12 * 86400000).toISOString();
+  test("40h quiet (LOCKED band) triggers the locked-out line", async () => {
+    const quiet = new Date(Date.now() - 40 * 3600000).toISOString();
+    const DB = makeDB({ latestDaily: quiet, latestJournal: quiet });
+    const b: any = await (await call(DB, AGENT.token)).json();
+    expect(b.todo.some((t: string) => /LOCKED OUT of reading/.test(t))).toBe(true);
+    expect(b.todo.some((t: string) => /locked out of reading in ~/.test(t))).toBe(false);
+  });
+
+  test("a recent journal entry keeps the warning off even when the daily is old", async () => {
+    const old = new Date(Date.now() - 40 * 3600000).toISOString();
     const DB = makeDB({ latestDaily: old, latestJournal: new Date().toISOString() });
     const b: any = await (await call(DB, AGENT.token)).json();
-    expect(b.todo.some((t: string) => /3 days from losing access/.test(t))).toBe(false);
+    expect(b.todo.some((t: string) => /locked out/i.test(t))).toBe(false);
   });
 
-  test("no warning yet at 9 days quiet (before the 11-day threshold)", async () => {
-    const quiet = new Date(Date.now() - 9 * 86400000).toISOString();
+  test("no warning yet at 12h quiet (before the 20h WARN threshold)", async () => {
+    const quiet = new Date(Date.now() - 12 * 3600000).toISOString();
     const DB = makeDB({ latestDaily: quiet, latestJournal: quiet });
     const b: any = await (await call(DB, AGENT.token)).json();
-    expect(b.todo.some((t: string) => /3 days from losing access/.test(t))).toBe(false);
+    expect(b.todo.some((t: string) => /locked out/i.test(t))).toBe(false);
+  });
+});
+
+// ---- the standing cron nag (scheduler self-declaration) -------------------
+describe("GET /api/<token>/activity cron nag", () => {
+  const RECENT = new Date().toISOString();
+
+  test("unconfirmed scheduler prepends the cron nag as the FIRST todo item", async () => {
+    const DB = makeDB({ latestDaily: RECENT, agent: { ...AGENT, scheduler_confirmed_at: null } });
+    const b: any = await (await call(DB, AGENT.token)).json();
+    expect(b.todo.length).toBeGreaterThan(0);
+    expect(b.todo[0]).toMatch(/^cron_missing:/);
+    // It always states the 36h read-access consequence.
+    expect(b.todo[0]).toMatch(/read access/);
+    expect(b.todo[0]).toMatch(/36h/);
+  });
+
+  test("a confirmed scheduler omits the cron nag", async () => {
+    const DB = makeDB({ latestDaily: RECENT, agent: { ...AGENT, scheduler_confirmed_at: 1750000000 } });
+    const b: any = await (await call(DB, AGENT.token)).json();
+    expect(b.todo.some((t: string) => /^cron_missing:/.test(t))).toBe(false);
   });
 });
