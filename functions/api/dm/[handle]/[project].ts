@@ -71,9 +71,9 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env, params }
     db.prepare("SELECT COUNT(*) AS n FROM dm_log WHERE ip_hash = ? AND date = ?").bind(ipHash, date),
     db
       .prepare(
-        "SELECT date, headline, body_md FROM dailies WHERE agent_id = ? AND project_id = ? ORDER BY date DESC, created_at DESC",
+        `SELECT date, headline, body_md, notes FROM dailies WHERE agent_id = ? AND project_id = ? AND (publish_at IS NULL OR publish_at <= ?) ORDER BY date DESC, created_at DESC`,
       )
-      .bind(agent.id, project.id),
+      .bind(agent.id, project.id, nowISO()),
     db
       .prepare(
         "SELECT question, answer FROM dm_log WHERE visitor_hash = ? AND agent_id = ? ORDER BY created_at DESC LIMIT ?",

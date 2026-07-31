@@ -16,11 +16,11 @@ const AGENT = { id: 2, handle: "yuka", display_name: "Yuka", bio: null, token: M
 function makeDB(seed: {
   projects?: Array<{ id: number; agent_id: number; name: string; slug: string }>;
   tokens?: Array<{ id: number; project_id: number; token: string; created_at: string; last_used_at: string | null; revoked_at: string | null }>;
-  dailyDistinctToday?: number[]; // distinct IFNULL(project_id,-1) buckets already posted today
+  dailiesToday?: number; // how many beats already CREATED today (the daily-create cap tally)
 } = {}) {
   const projects = (seed.projects ?? []).map((p) => ({ ...p }));
   const tokens = (seed.tokens ?? []).map((t) => ({ ...t }));
-  const distinct = new Set(seed.dailyDistinctToday ?? []);
+  let createdToday = seed.dailiesToday ?? 0;
   let nextProjId = (projects.reduce((m, p) => Math.max(m, p.id), 0) || 0) + 1;
   let nextTokId = (tokens.reduce((m, t) => Math.max(m, t.id), 0) || 0) + 1;
   const log: { tokenInserts: any[]; dailyInserts: any[]; tokenUpdates: any[] } = {
@@ -81,15 +81,15 @@ function makeDB(seed: {
             const t = tokens.find((x) => x.id === tid && x.project_id === pid);
             return (t ? { id: t.id, revoked_at: t.revoked_at } : null) as T | null;
           }
+          // dailiesCreatedToday (the daily-create cap tally): COUNT of today's rows.
+          if (/COUNT\(\*\) AS n FROM dailies WHERE agent_id = \? AND date/.test(sql)) {
+            return { n: createdToday } as T;
+          }
           // image lookup (postDaily) -> none
           if (/FROM images WHERE id/.test(sql)) return null;
           return null;
         },
         async all<T>(): Promise<{ results: T[] }> {
-          // distinctProjectsToday
-          if (/SELECT DISTINCT IFNULL\(project_id, -1\) AS pid FROM dailies/.test(sql)) {
-            return { results: [...distinct].map((pid) => ({ pid })) } as any;
-          }
           // listProjectTokens
           if (/SELECT id, token, created_at, last_used_at, revoked_at FROM project_tokens WHERE project_id/.test(sql)) {
             const pid = bound[0] as number;
@@ -114,7 +114,6 @@ function makeDB(seed: {
             const id = nextTokId++;
             tokens.push({ id, project_id, token, created_at, last_used_at: null, revoked_at: null });
             log.tokenInserts.push({ id, project_id, token });
-            distinct.add(project_id); // not strictly needed; keeps stores coherent
             return { meta: { last_row_id: id } };
           }
           if (/UPDATE project_tokens SET revoked_at/.test(sql)) {
@@ -128,8 +127,7 @@ function makeDB(seed: {
           if (/UPDATE project_tokens SET last_used_at/.test(sql)) return { meta: { changes: 1 } };
           if (/INSERT INTO dailies/.test(sql)) {
             log.dailyInserts.push(bound);
-            const pid = (bound[5] as number | null) ?? -1;
-            distinct.add(pid);
+            createdToday += 1;
             return { meta: { last_row_id: 100 } };
           }
           if (/UPDATE agents SET last_posted_at/.test(sql)) return { meta: {} };
@@ -296,12 +294,13 @@ describe("write-only POST /api/p/<gzp>/daily", () => {
     expect(b.message).toMatch(/human/i);
   });
 
-  test("daily_cap: 429 on the 13th distinct project of the day", async () => {
-    // 12 distinct buckets already posted today (none is the forced project 5).
+  test("daily_cap: 429 on the 9th beat of the day (8 already created)", async () => {
+    // 8 beats already CREATED today: the create cap (milestones coexist, so the cap is
+    // a flat per-day count, not a distinct-project rule).
     const DB = makeDB({
       projects: [{ id: 5, agent_id: 2, name: "Yuka", slug: "yuka" }],
       tokens: [{ id: 1, project_id: 5, token: gzp, created_at: "x", last_used_at: null, revoked_at: null }],
-      dailyDistinctToday: [101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112],
+      dailiesToday: 8,
     });
     const r = await pDailyPost({ env: { DB } as any, request: pDailyReq(gzp, { headline: "I shipped x, see src/a.ts" }), params: { ptoken: gzp } } as any);
     expect(r.status).toBe(429);

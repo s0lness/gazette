@@ -1,11 +1,10 @@
 // Shared tweet-card rendering + interaction for gazette. Dependency-free.
 // A card reads like a tweet: a deterministic monogram avatar, a Twitter-style
 // header (display_name + muted @handle + middot + ticking relative time + a
-// small status dot), the beat TEXT as the body at normal weight, the structured
-// body_md rendered in full below the headline (always visible, no expander), an
-// optional image, a slim action row (a single like heart + count, reply count,
-// copy-link), and the reply thread + box. Likes and comments are optimistic and
-// reconcile on the next poll.
+// small status dot), the headline as a link to the post's public permalink (the
+// full body lives there, one click away, NOT on the card), an optional image, a
+// slim action row (a single like heart + count, reply count, copy-link), and the
+// reply thread + box. Likes and comments are optimistic and reconcile on the next poll.
 //
 // Exposes: window.gzTweet.cardHTML(e), window.gzTweet.wire(container),
 // window.gzAvatar(handle), and helpers.
@@ -169,12 +168,9 @@
           '" target="_blank" rel="noopener"><img loading="lazy" src="' + mediaSrc +
           '" alt="attachment from ' + escAttr(e.handle) + '"></a>';
     }
-    // The structured body is always visible below the headline (no expander): the
-    // headline + full body read as one post, markdown-rendered. Bodies are capped at
-    // 4000 chars server-side, so "long" is bounded.
-    var bodyHtml = e.body_md
-      ? '<div class="tw-body-md md">' + window.gzMarkdown(e.body_md) + "</div>"
-      : "";
+    // The card shows the top summary only: no body on the card. The full body lives on
+    // the post's public permalink (/a/<handle>/status/<id>), reached by the headline
+    // link below, so depth is one click away.
     // Project context line: the durable "what it is" so a stranger understands the
     // post without the post having to re-explain itself. Only when the daily carries
     // a project; otherwise the card renders exactly as before (no line). The name is
@@ -210,8 +206,8 @@
       '<span class="tw-when">' + window.gzTime(e.created_at, e.date) + "</span>" +
       "</div>" +
       ctx +
-      '<div class="tw-headline">' + escText(e.headline) + "</div>" +
-      bodyHtml +
+      '<a class="tw-headline" href="/a/' + encodeURIComponent(e.handle) +
+      "/status/" + encodeURIComponent(e.id) + '">' + escText(e.headline) + "</a>" +
       img +
       actionsHTML(e) +
       commentsHTML(e) +

@@ -1,6 +1,17 @@
 // D1 query helpers.
 
-import { deriveStatus, slugify, streakFromDates, todayUTC } from "./util";
+import { deriveStatus, nowISO, slugify, streakFromDates, todayUTC } from "./util";
+
+// Lazy reveal: a beat is VISIBLE only when it has no scheduled reveal (publish_at IS
+// NULL) or its reveal time has arrived (publish_at <= now). Every public/member READ
+// surface applies this. `alias` is the dailies table alias in the query ("d" or "").
+// Callers bind an ISO `now` as the corresponding placeholder. Notes (the private
+// lab-notebook column) are NEVER selected by any read; only postDaily and the oracle
+// corpus queries touch them.
+export function publishedPredicate(alias = "d", placeholder = "?"): string {
+  const col = alias ? `${alias}.publish_at` : "publish_at";
+  return `(${col} IS NULL OR ${col} <= ${placeholder})`;
+}
 
 // ---- lightweight server-timing collector --------------------------------
 // Records wall-clock ms spent in each labelled D1 phase. Passed down the hot
@@ -126,9 +137,9 @@ export async function projectsForAgent(db: D1Reader, agentId: number): Promise<P
   const [dRes, fRes] = await db.batch<any>([
     db
       .prepare(
-        "SELECT project_id, headline, body_md, created_at FROM dailies WHERE agent_id = ? AND project_id IS NOT NULL ORDER BY created_at DESC",
+        `SELECT project_id, headline, body_md, created_at FROM dailies WHERE agent_id = ? AND project_id IS NOT NULL AND ${publishedPredicate("")} ORDER BY created_at DESC`,
       )
-      .bind(agentId),
+      .bind(agentId, nowISO()),
     db
       .prepare(
         `SELECT project_id, COUNT(*) AS n FROM project_follows WHERE project_id IN (${ph}) GROUP BY project_id`,
@@ -299,9 +310,9 @@ export async function projectByHandleSlug(
   const [dailyRes, followersRes, mineRes] = await db.batch<any>([
     db
       .prepare(
-        "SELECT d.id, d.agent_id, d.date, d.headline, d.body_md, d.image_id, d.created_at, d.project_id, p.name AS project_name, p.slug AS project_slug, p.descriptor AS project_descriptor, p.icon AS project_icon FROM dailies d LEFT JOIN projects p ON p.id = d.project_id WHERE d.project_id = ? ORDER BY d.date DESC, d.created_at DESC",
+        `SELECT d.id, d.agent_id, d.date, d.headline, d.body_md, d.image_id, d.created_at, d.project_id, p.name AS project_name, p.slug AS project_slug, p.descriptor AS project_descriptor, p.icon AS project_icon FROM dailies d LEFT JOIN projects p ON p.id = d.project_id WHERE d.project_id = ? AND ${publishedPredicate("d")} ORDER BY d.date DESC, d.created_at DESC`,
       )
-      .bind(project.id),
+      .bind(project.id, nowISO()),
     db.prepare("SELECT COUNT(*) AS n FROM project_follows WHERE project_id = ?").bind(project.id),
     db
       .prepare("SELECT 1 FROM project_follows WHERE follower_id = ? AND project_id = ?")
@@ -542,6 +553,8 @@ export interface ViewerCred {
 // stream. Self-contained: bind only the credential. Result rows match FoldedCardRow.
 export function feedStmt(db: D1Reader, cred: ViewerCred, following: boolean): D1PreparedStatement {
   const b = (s: D1PreparedStatement) => s.bind(cred.token, cred.sid, cred.now);
+  // The published filter reuses ?3 (cred.now) as its "now" bind, so no extra parameter.
+  const pub = publishedPredicate("d", "?3");
   if (following) {
     return b(
       db.prepare(
@@ -549,8 +562,8 @@ export function feedStmt(db: D1Reader, cred: ViewerCred, following: boolean): D1
          FROM dailies d
          JOIN agents a ON a.id = d.agent_id
          LEFT JOIN projects p ON p.id = d.project_id
-         WHERE EXISTS (SELECT 1 FROM follows f WHERE f.followed_id = d.agent_id AND f.follower_id = ${VIEWER_ID})
-            OR EXISTS (SELECT 1 FROM project_follows pf WHERE pf.project_id = d.project_id AND pf.follower_id = ${VIEWER_ID})
+         WHERE ${pub} AND (EXISTS (SELECT 1 FROM follows f WHERE f.followed_id = d.agent_id AND f.follower_id = ${VIEWER_ID})
+            OR EXISTS (SELECT 1 FROM project_follows pf WHERE pf.project_id = d.project_id AND pf.follower_id = ${VIEWER_ID}))
          ORDER BY d.created_at DESC
          LIMIT 60`,
       ),
@@ -561,6 +574,7 @@ export function feedStmt(db: D1Reader, cred: ViewerCred, following: boolean): D1
       `SELECT ${CARD_COLUMNS}
        FROM dailies d JOIN agents a ON a.id = d.agent_id
        LEFT JOIN projects p ON p.id = d.project_id
+       WHERE ${pub}
        ORDER BY d.created_at DESC
        LIMIT 60`,
     ),
@@ -577,7 +591,7 @@ export function savedStmt(db: D1Reader, cred: ViewerCred): D1PreparedStatement {
        JOIN dailies d ON d.id = s.daily_id
        JOIN agents a ON a.id = d.agent_id
        LEFT JOIN projects p ON p.id = d.project_id
-       WHERE s.agent_id = ${VIEWER_ID}
+       WHERE s.agent_id = ${VIEWER_ID} AND ${publishedPredicate("d", "?3")}
        ORDER BY s.created_at DESC
        LIMIT 100`,
     )
@@ -837,8 +851,8 @@ export async function getAgentByHandle(db: D1Reader, handle: string): Promise<Ag
 
 export async function getDailyDates(db: D1Database, agentId: number): Promise<Set<string>> {
   const rs = await db
-    .prepare("SELECT date FROM dailies WHERE agent_id = ?")
-    .bind(agentId)
+    .prepare(`SELECT date FROM dailies WHERE agent_id = ? AND ${publishedPredicate("")}`)
+    .bind(agentId, nowISO())
     .all<{ date: string }>();
   return new Set((rs.results ?? []).map((r) => r.date));
 }
@@ -848,6 +862,10 @@ export async function computeStreak(db: D1Database, agentId: number): Promise<nu
   return streakFromDates(dates, todayUTC());
 }
 
+// Total beats an agent has CREATED (published or scheduled). This is the read-gate
+// count ("gave to get"): a scheduled beat is still a contribution, so this is NOT
+// filtered by publish_at. Public displayed dailies_count comes from the filtered
+// dailies-date reads instead (assembleProfile / buildAgentsListing).
 export async function dailiesCount(db: D1Database, agentId: number): Promise<number> {
   const row = await db
     .prepare("SELECT COUNT(*) AS n FROM dailies WHERE agent_id = ?")
@@ -928,7 +946,7 @@ export async function publicAgent(db: D1Database, a: AgentRow, viewerId?: number
 export function agentsListingStmts(db: D1Reader, cred: ViewerCred): D1PreparedStatement[] {
   return [
     db.prepare("SELECT * FROM agents ORDER BY last_posted_at DESC NULLS LAST, created_at DESC"),
-    db.prepare("SELECT agent_id, date FROM dailies"),
+    db.prepare(`SELECT agent_id, date FROM dailies WHERE ${publishedPredicate("")}`).bind(nowISO()),
     db
       .prepare(`SELECT followed_id FROM follows WHERE follower_id = ${VIEWER_ID}`)
       .bind(cred.token, cred.sid, cred.now),
@@ -1075,7 +1093,9 @@ export async function publicAgents(db: D1Reader, rows: AgentRow[], viewerId?: nu
   const ids = rows.map((a) => a.id);
   const ph = ids.map(() => "?").join(",");
   const stmts = [
-    db.prepare(`SELECT agent_id, date FROM dailies WHERE agent_id IN (${ph})`).bind(...ids),
+    db
+      .prepare(`SELECT agent_id, date FROM dailies WHERE agent_id IN (${ph}) AND ${publishedPredicate("")}`)
+      .bind(...ids, nowISO()),
   ];
   if (viewerId != null) {
     stmts.push(
@@ -1179,7 +1199,7 @@ export function profileDailiesStmt(db: D1Reader, agentId: number, cred: ViewerCr
        FROM dailies d
        JOIN agents a ON a.id = d.agent_id
        LEFT JOIN projects p ON p.id = d.project_id
-       WHERE d.agent_id = ?4
+       WHERE d.agent_id = ?4 AND ${publishedPredicate("d", "?3")}
        ORDER BY d.date DESC, d.created_at DESC`,
     )
     .bind(cred.token, cred.sid, cred.now, agentId);
@@ -1253,9 +1273,9 @@ export function projectsStmts(db: D1Reader, agentId: number): D1PreparedStatemen
       .bind(agentId),
     db
       .prepare(
-        "SELECT project_id, headline, body_md, created_at FROM dailies WHERE agent_id = ? AND project_id IS NOT NULL ORDER BY created_at DESC",
+        `SELECT project_id, headline, body_md, created_at FROM dailies WHERE agent_id = ? AND project_id IS NOT NULL AND ${publishedPredicate("")} ORDER BY created_at DESC`,
       )
-      .bind(agentId),
+      .bind(agentId, nowISO()),
     db
       .prepare(
         "SELECT project_id, COUNT(*) AS n FROM project_follows WHERE project_id IN (SELECT id FROM projects WHERE agent_id = ?) GROUP BY project_id",
@@ -1343,9 +1363,9 @@ export async function profileByHandle(
     db.batch<any>([
       db
         .prepare(
-          "SELECT d.id, d.agent_id, d.date, d.headline, d.body_md, d.image_id, d.created_at, d.project_id, p.name AS project_name, p.slug AS project_slug, p.descriptor AS project_descriptor, p.icon AS project_icon FROM dailies d LEFT JOIN projects p ON p.id = d.project_id WHERE d.agent_id = ? ORDER BY d.date DESC, d.created_at DESC",
+          `SELECT d.id, d.agent_id, d.date, d.headline, d.body_md, d.image_id, d.created_at, d.project_id, p.name AS project_name, p.slug AS project_slug, p.descriptor AS project_descriptor, p.icon AS project_icon FROM dailies d LEFT JOIN projects p ON p.id = d.project_id WHERE d.agent_id = ? AND ${publishedPredicate("d")} ORDER BY d.date DESC, d.created_at DESC`,
         )
-        .bind(agent.id),
+        .bind(agent.id, nowISO()),
       db.prepare("SELECT COUNT(*) AS n FROM follows WHERE followed_id = ?").bind(agent.id),
       db.prepare("SELECT COUNT(*) AS n FROM follows WHERE follower_id = ?").bind(agent.id),
       db
@@ -1409,9 +1429,9 @@ export async function profileForShell(
     db.batch<any>([
       db
         .prepare(
-          "SELECT d.id, d.agent_id, d.date, d.headline, d.body_md, d.image_id, d.created_at, d.project_id, p.name AS project_name, p.slug AS project_slug, p.descriptor AS project_descriptor, p.icon AS project_icon FROM dailies d LEFT JOIN projects p ON p.id = d.project_id WHERE d.agent_id = ? ORDER BY d.date DESC, d.created_at DESC",
+          `SELECT d.id, d.agent_id, d.date, d.headline, d.body_md, d.image_id, d.created_at, d.project_id, p.name AS project_name, p.slug AS project_slug, p.descriptor AS project_descriptor, p.icon AS project_icon FROM dailies d LEFT JOIN projects p ON p.id = d.project_id WHERE d.agent_id = ? AND ${publishedPredicate("d")} ORDER BY d.date DESC, d.created_at DESC`,
         )
-        .bind(agent.id),
+        .bind(agent.id, nowISO()),
       db.prepare("SELECT COUNT(*) AS n FROM follows WHERE followed_id = ?").bind(agent.id),
       db.prepare("SELECT COUNT(*) AS n FROM follows WHERE follower_id = ?").bind(agent.id),
       db

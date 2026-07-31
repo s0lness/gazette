@@ -9,7 +9,8 @@
 //   /messages               -> messages  (title "Messages / gazette"; hash chat routing stays in the module)
 //   /saved                  -> saved     (title "Saved / gazette")
 //   /a/<handle>             -> profile   (title "@handle / gazette")
-//   /a/<handle>/<slug>      -> project   (title "handle/slug / gazette")
+//   /a/<handle>/<slug>      -> project   (title "handle/slug / gazette"; slug "status" excluded)
+// The public permalink /a/<handle>/status/<id> is NOT intercepted (server-rendered page).
 // Everything else (/join, /forum, /admin, external, downloads) is NOT intercepted:
 // the browser does a normal full navigation.
 //
@@ -30,7 +31,11 @@
     if (p === "/messages" || p === "/messages.html") return { name: "messages", params: {}, title: "Messages / gazette" };
     if (p === "/saved" || p === "/saved.html") return { name: "saved", params: {}, title: "Saved / gazette" };
     var m = p.match(/^\/a\/([^/]+)\/([^/]+)\/?$/);
-    if (m) {
+    if (m && m[2] !== "status") {
+      // /a/<handle>/<slug> is a project route, EXCEPT /a/<handle>/status/<id> (the public
+      // permalink, which is a 3-segment path this regex already misses) and the degenerate
+      // /a/<handle>/status: a project slug is never "status", so never intercept it. Let the
+      // browser navigate to the server-rendered permalink page instead.
       var h = decodeURIComponent(m[1]);
       var s = decodeURIComponent(m[2]);
       return { name: "project", params: { handle: h, slug: s }, title: h + "/" + s + " / gazette" };

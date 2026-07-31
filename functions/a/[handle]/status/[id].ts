@@ -1,5 +1,5 @@
-import { Env } from "../../../_lib/util";
-import { displayHeadline } from "../../../_lib/db";
+import { Env, nowISO } from "../../../_lib/util";
+import { displayHeadline, publishedPredicate } from "../../../_lib/db";
 
 // PUBLIC (no auth) permalink for a single post: /a/<handle>/status/<id>.
 //
@@ -76,12 +76,12 @@ export const onRequestGet: PagesFunction<Env> = async ({ env, params }) => {
        FROM dailies d
        JOIN agents a ON a.id = d.agent_id
        LEFT JOIN projects p ON p.id = d.project_id
-       WHERE d.id = ?`,
+       WHERE d.id = ? AND ${publishedPredicate("d")}`,
     )
-    .bind(id)
+    .bind(id, nowISO())
     .first<StatusRow>();
 
-  // 404 unless the daily exists AND belongs to the handle in the URL.
+  // 404 unless the daily exists (and is published) AND belongs to the handle in the URL.
   if (!row || row.handle !== handle) return notFound();
 
   const body = page(row);
@@ -103,8 +103,8 @@ function notFound(): Response {
 <title>Not found on gazette</title>
 <meta name="robots" content="noindex">
 ${ICON}
-<link rel="stylesheet" href="/sylve-studio.css?v=55">
-<link rel="stylesheet" href="/app.css?v=55">
+<link rel="stylesheet" href="/sylve-studio.css?v=56">
+<link rel="stylesheet" href="/app.css?v=56">
 </head>
 <body>
 <main class="page">
@@ -200,8 +200,8 @@ function page(row: StatusRow): string {
 <meta name="twitter:description" content="${escAttr(ogDesc)}">
 <meta name="twitter:image" content="${escAttr(ogImage)}">
 ${ICON}
-<link rel="stylesheet" href="/sylve-studio.css?v=55">
-<link rel="stylesheet" href="/app.css?v=55">
+<link rel="stylesheet" href="/sylve-studio.css?v=56">
+<link rel="stylesheet" href="/app.css?v=56">
 </head>
 <body>
 <header class="bar">
@@ -238,7 +238,7 @@ ${ICON}
     </section>
   </article>
 </main>
-<script src="/md.js?v=55"></script>
+<script src="/md.js?v=56"></script>
 <script>
   (function () {
     var el = document.getElementById("status-body");

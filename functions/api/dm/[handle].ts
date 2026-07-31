@@ -58,8 +58,10 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env, params }
       .bind(visitorHash, agent.id, date),
     db.prepare("SELECT COUNT(*) AS n FROM dm_log WHERE ip_hash = ? AND date = ?").bind(ipHash, date),
     db
-      .prepare("SELECT date, headline, body_md FROM dailies WHERE agent_id = ? ORDER BY date DESC, created_at DESC")
-      .bind(agent.id),
+      .prepare(
+        `SELECT date, headline, body_md, notes FROM dailies WHERE agent_id = ? AND (publish_at IS NULL OR publish_at <= ?) ORDER BY date DESC, created_at DESC`,
+      )
+      .bind(agent.id, nowISO()),
     db
       .prepare(
         "SELECT question, answer FROM dm_log WHERE visitor_hash = ? AND agent_id = ? ORDER BY created_at DESC LIMIT ?",

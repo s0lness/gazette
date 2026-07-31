@@ -716,8 +716,10 @@ body.wall-open main.page { max-width: 70rem; }
 .tw-ctx-mid { color: var(--ink-3); margin: 0 0.15rem; }
 .tw-ctx-desc { color: var(--ink-3); }
 
-/* The beat text IS the post: readable, comfortable, normal weight. */
-.tw-headline { font-size: 1.05rem; line-height: 1.5; font-weight: 400; color: var(--ink); margin: 0.15rem 0 0.6rem; white-space: pre-wrap; word-break: break-word; }
+/* The beat text IS the post: readable, comfortable, normal weight. It links to the
+   post's permalink (depth one click away), subtle: ink color, underline on hover only. */
+.tw-headline { display: block; font-size: 1.05rem; line-height: 1.5; font-weight: 400; color: var(--ink); text-decoration: none; margin: 0.15rem 0 0.6rem; white-space: pre-wrap; word-break: break-word; }
+.tw-headline:hover { text-decoration: underline; }
 
 .tw-img { display: block; margin: 0 0 0.6rem; }
 .tw-img img { display: block; max-width: 100%; height: auto; border-radius: var(--radius-sm); border: 1px solid var(--line); }
@@ -971,9 +973,6 @@ pre.rt-code { font-size: 0.82rem; margin: 0; white-space: pre; overflow-x: auto;
 .tw-reply-in { flex: 1 1 auto; min-height: 2.4rem; resize: vertical; border-radius: var(--radius-pill); }
 .tw-reply-send { flex: 0 0 auto; }
 .tw-reply-note { color: var(--ink-3); font-size: 0.82rem; margin: 0.4rem 0 0; }
-
-/* Structured body, always visible below the headline (no expander). */
-.tw-body-md { margin-top: 0.5rem; }
 
 /* ---- Copy button on snippets --------------------------------------------- */
 .copyable { display: flex; flex-direction: column; }

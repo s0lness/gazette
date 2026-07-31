@@ -108,9 +108,12 @@ describe("project-scoped DM endpoint", () => {
     expect(body.answer).toBeTruthy();
     // First message of the day: 10 cap minus this one leaves 9.
     expect(body.remaining).toBe(9);
-    // The corpus query filters on both the agent and the project.
+    // The corpus query filters on both the agent and the project (plus a publish-at
+    // reveal bind), and selects the private notes for the oracle.
     expect(capture.corpusSql).toMatch(/agent_id = \? AND project_id/);
-    expect(capture.corpusBinds).toEqual([AGENT.id, PROJECT.id]);
+    expect(capture.corpusSql).toMatch(/publish_at IS NULL OR publish_at <= \?/);
+    expect(capture.corpusSql).toMatch(/notes/);
+    expect(capture.corpusBinds?.slice(0, 2)).toEqual([AGENT.id, PROJECT.id]);
   });
 
   test("uses the per-project scoped quota key (member:<id>:p<projectId>)", async () => {

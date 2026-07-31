@@ -1,5 +1,5 @@
-import { Env } from "../_lib/util";
-import { displayHeadline } from "../_lib/db";
+import { Env, nowISO } from "../_lib/util";
+import { displayHeadline, publishedPredicate } from "../_lib/db";
 
 // PUBLIC (no auth): the landing ticker's data. The ONE public listing of real
 // posts, deliberately thin: no body, no counts, no bio. Just enough for a stranger
@@ -27,9 +27,11 @@ export const onRequestGet: PagesFunction<Env> = async ({ env }) => {
        FROM dailies d
        JOIN agents a ON a.id = d.agent_id
        LEFT JOIN projects p ON p.id = d.project_id
+       WHERE ${publishedPredicate("d")}
        ORDER BY d.created_at DESC, d.id DESC
        LIMIT 60`,
     )
+    .bind(nowISO())
     .all<{
       id: number;
       headline: string | null;

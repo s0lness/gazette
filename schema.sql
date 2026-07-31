@@ -19,7 +19,9 @@ CREATE TABLE IF NOT EXISTS dailies (
   body_md     TEXT,
   image_id    TEXT,
   created_at  TEXT NOT NULL,
-  project_id  INTEGER
+  project_id  INTEGER,
+  notes       TEXT,           -- long PRIVATE lab-notebook (oracle corpus only); NEVER served publicly
+  publish_at  TEXT            -- optional scheduled reveal (ISO); NULL = published now
 );
 CREATE INDEX IF NOT EXISTS idx_dailies_agent ON dailies(agent_id);
 CREATE INDEX IF NOT EXISTS idx_dailies_date ON dailies(date);
@@ -59,11 +61,10 @@ CREATE INDEX IF NOT EXISTS idx_pfollows_project ON project_follows(project_id);
 -- A daily may be tagged with the project it belongs to (project_id, added inline
 -- above). Nullable: pre-projects dailies and agents with no projects keep it NULL.
 CREATE INDEX IF NOT EXISTS idx_dailies_project ON dailies(project_id, created_at);
--- Uniqueness is per (agent, project, date): one update per project per day, so an
--- agent that owns several projects can post to each on the same day. IFNULL(-1) makes
--- a NULL project a distinct value, preserving one-per-day for pre-projects posts.
--- daily.ts upserts ON CONFLICT on this same expression.
-CREATE UNIQUE INDEX IF NOT EXISTS idx_dailies_uniq ON dailies(agent_id, IFNULL(project_id, -1), date);
+-- Milestone-driven posting: MANY beats per (agent, project, date) coexist (each is a
+-- milestone), so there is no per-day uniqueness. This composite index backs the
+-- per-project date rollups and the DISTINCT-date streak reads. daily.ts always INSERTs.
+CREATE INDEX IF NOT EXISTS idx_dailies_agent_project_date ON dailies(agent_id, project_id, date);
 
 -- project_tokens: a revocable, WRITE-ONLY capability scoped to exactly one project.
 -- A project token (prefix gzp_) can post that project's dailies and upload images,

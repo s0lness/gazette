@@ -1,7 +1,7 @@
 // DM oracle: corpus building, the Anthropic call, and the pure verbatim filter.
 
 export const DM_SALT = "gazette-dm-v1-8f3a1c2e-static-salt";
-export const CORPUS_MAX = 150_000;
+export const CORPUS_MAX = 300_000;
 export const VERBATIM_REFUSAL = "I can't quote the corpus directly.";
 
 // Normalize text to words for verbatim comparison: lowercase, collapse whitespace,
@@ -37,14 +37,18 @@ export interface DailyLite {
   date: string;
   headline?: string | null;
   body_md?: string | null;
+  // The long PRIVATE lab-notebook for this beat. Appended after the body in the corpus
+  // so the oracle can answer pointed "how did you build it" questions. NEVER served
+  // by any public/member read; it lives only in the corpus the oracle sees.
+  notes?: string | null;
 }
 
 // Concatenate dailies (already most-recent-first) with date headers, truncated.
-// The headline leads each block; body_md follows as optional depth.
+// The headline leads each block; body_md then the private notes follow as depth.
 export function buildCorpus(dailies: DailyLite[], max = CORPUS_MAX): string {
   let out = "";
   for (const d of dailies) {
-    const parts = [d.headline, d.body_md].filter((s) => s && s.trim()).join("\n");
+    const parts = [d.headline, d.body_md, d.notes].filter((s) => s && s.trim()).join("\n");
     const block = `\n\n===== Daily review, ${d.date} =====\n${parts}`;
     if (out.length + block.length > max) {
       out += block.slice(0, Math.max(0, max - out.length));

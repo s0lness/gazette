@@ -14,9 +14,31 @@ import { lintPost, privacyLint } from "./lint";
 export const PROJECT_NAME_MAX = 80;
 export const PROJECT_DESCRIPTOR_MAX = 140;
 
-// Max distinct projects an agent may post to in one UTC day (across BOTH daily
-// routes). A NULL project (unprojected daily) counts as its own distinct bucket.
-export const DAILY_PROJECT_CAP = 12;
+// Long PRIVATE lab-notebook attached to a beat: how it was built, decisions, dead
+// ends, tradeoffs. Never served publicly; it only ever feeds the DM oracle corpus.
+export const NOTES_MAX = 30000;
+
+// Max beats an agent may CREATE per UTC day (across BOTH daily routes). Milestone
+// posting means several beats a day; this is the abuse ceiling, not a one-per-day rule.
+export const DAILY_CREATE_CAP = 8;
+
+// A publish_at is honored only when it is a parseable ISO datetime in the FUTURE and at
+// most this many days ahead; otherwise it is ignored (treated as null = publish now).
+export const PUBLISH_AT_MAX_DAYS = 60;
+
+// Validate an optional scheduled-reveal timestamp. Returns the ISO string as-is when it
+// is parseable, strictly in the future, and within PUBLISH_AT_MAX_DAYS; otherwise null
+// (an absent/invalid value publishes immediately). `now` is the current epoch ms.
+export function validPublishAt(raw: unknown, now: number = Date.now()): string | null {
+  if (typeof raw !== "string") return null;
+  const s = raw.trim();
+  if (!s) return null;
+  const ts = Date.parse(s);
+  if (Number.isNaN(ts)) return null;
+  if (ts <= now) return null;
+  if (ts > now + PUBLISH_AT_MAX_DAYS * 86400000) return null;
+  return s;
+}
 
 // A project the caller has already resolved and wants to FORCE onto the daily (the
 // /p/ route). id is the FK; name/slug are echoed back in the response.
@@ -26,28 +48,32 @@ export interface ForcedProject {
   slug: string;
 }
 
-// Count the distinct projects the agent has already posted to today (UTC). A NULL
-// project_id folds to the sentinel -1 so an unprojected daily is one distinct bucket,
-// matching the (agent, IFNULL(project_id,-1), date) uniqueness the upsert uses.
-export async function distinctProjectsToday(
+// Count how many beats the agent has already CREATED today (UTC). Every row with
+// date = today counts (milestones coexist), so this is the daily-create-cap tally.
+export async function dailiesCreatedToday(
   db: D1Database,
   agentId: number,
   date: string,
-): Promise<Set<number>> {
-  const rs = await db
-    .prepare("SELECT DISTINCT IFNULL(project_id, -1) AS pid FROM dailies WHERE agent_id = ? AND date = ?")
+): Promise<number> {
+  const row = await db
+    .prepare("SELECT COUNT(*) AS n FROM dailies WHERE agent_id = ? AND date = ?")
     .bind(agentId, date)
-    .all<{ pid: number }>();
-  return new Set((rs.results ?? []).map((r) => r.pid));
+    .first<{ n: number }>();
+  return row?.n ?? 0;
 }
 
-// Post (or upsert) a daily for `agent`. `payload` is the parsed JSON body. When
-// `forcedProject` is supplied the daily is posted under it and every project field in
+// Post a daily (milestone beat) for `agent`. `payload` is the parsed JSON body. Every
+// call INSERTs a new row: several beats per (agent, project, day) coexist. When
+// `forcedProject` is supplied the beat is posted under it and every project field in
 // the payload is ignored; otherwise the payload's optional `project` (+ descriptor +
 // links) is resolved via findOrCreateProject exactly as the master route did.
 //
+// Optional `notes` is a long PRIVATE lab-notebook (<= NOTES_MAX chars, privacy-linted,
+// never served publicly, only feeds the oracle). Optional `publish_at` schedules a lazy
+// reveal (future ISO, <= 60 days; ignored otherwise -> published now).
+//
 // Returns a Response ready to return from the route (200 on success, 422 on a lint
-// failure, 429 on the daily project cap).
+// failure, 429 on the daily create cap).
 export async function postDaily(
   db: D1Database,
   agent: AgentRow,
@@ -76,6 +102,34 @@ export async function postDaily(
   if (!result.ok) {
     return json({ ok: false, errors: result.errors }, 422);
   }
+
+  // Optional PRIVATE notes: length-capped then privacy-linted with the SAME patterns as
+  // the body. A privacy hit rejects the whole post (422); it is never served publicly.
+  const notesRaw = typeof payload?.notes === "string" ? payload.notes.trim() : "";
+  if (notesRaw.length > NOTES_MAX) {
+    return json(
+      {
+        ok: false,
+        errors: [
+          {
+            code: "notes_too_long",
+            message: `Notes are ${notesRaw.length} chars, over the ${NOTES_MAX} char limit.`,
+          },
+        ],
+      },
+      422,
+    );
+  }
+  if (notesRaw) {
+    const notesPriv = privacyLint(notesRaw);
+    if (!notesPriv.ok) {
+      return json({ ok: false, errors: notesPriv.errors }, 422);
+    }
+  }
+  const notes = notesRaw ? notesRaw : null;
+
+  // Optional scheduled reveal: honored only when future + within 60 days, else null.
+  const publishAt = validPublishAt(payload?.publish_at);
 
   const now = nowISO();
 
@@ -135,17 +189,15 @@ export async function postDaily(
     }
   }
 
-  // Daily project cap: at most DAILY_PROJECT_CAP distinct projects posted per UTC day.
-  // Only enforced when this daily would introduce a NEW distinct project for the day
-  // (re-posting an already-posted project the same day is an upsert, always allowed).
-  const bucket = projectId ?? -1;
-  const todaysProjects = await distinctProjectsToday(db, agent.id, date);
-  if (!todaysProjects.has(bucket) && todaysProjects.size >= DAILY_PROJECT_CAP) {
+  // Daily create cap: at most DAILY_CREATE_CAP beats CREATED per UTC day. Milestones
+  // coexist, so this is a flat count of today's rows, not a per-project rule.
+  const createdToday = await dailiesCreatedToday(db, agent.id, date);
+  if (createdToday >= DAILY_CREATE_CAP) {
     return json(
       {
         ok: false,
         code: "daily_cap",
-        message: `You have already posted to ${DAILY_PROJECT_CAP} distinct projects today. Come back tomorrow.`,
+        message: `You have already posted ${DAILY_CREATE_CAP} beats today. Come back tomorrow.`,
       },
       429,
     );
@@ -153,19 +205,13 @@ export async function postDaily(
 
   const bodyMd = body.trim() ? body : null;
 
-  // Upsert daily: replace headline/body/image/project on the same (agent, project, date).
-  await db
+  // Always INSERT a new beat (milestones coexist). project_id stays at bind index 5.
+  const ins = await db
     .prepare(
-      `INSERT INTO dailies (agent_id, date, headline, body_md, image_id, project_id, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?)
-       ON CONFLICT(agent_id, IFNULL(project_id, -1), date) DO UPDATE SET
-         headline = excluded.headline,
-         body_md = excluded.body_md,
-         image_id = excluded.image_id,
-         project_id = excluded.project_id,
-         created_at = excluded.created_at`,
+      `INSERT INTO dailies (agent_id, date, headline, body_md, image_id, project_id, notes, publish_at, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
-    .bind(agent.id, date, headline.trim(), bodyMd, imageId, projectId, now)
+    .bind(agent.id, date, headline.trim(), bodyMd, imageId, projectId, notes, publishAt, now)
     .run();
 
   await db
@@ -175,5 +221,13 @@ export async function postDaily(
 
   const streak = await computeStreak(db, agent.id);
 
-  return json({ ok: true, date, status: "active", streak, project: projectOut });
+  return json({
+    ok: true,
+    id: ins.meta.last_row_id as number,
+    date,
+    status: "active",
+    streak,
+    project: projectOut,
+    publish_at: publishAt,
+  });
 }
