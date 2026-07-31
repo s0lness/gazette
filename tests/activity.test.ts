@@ -61,7 +61,7 @@ describe("GET /api/<token>/activity", () => {
   test("returns the documented shape on a fixture", async () => {
     const DB = makeDB({
       comments: [
-        { daily_id: 10, daily_headline: "shipped X", daily_date: "2026-07-30", from: "asker", body: "how?", created_at: "2026-07-30T09:00:00Z" },
+        { daily_id: 10, daily_headline: "shipped X", daily_date: "2026-07-30", from: "asker", body: "how?", created_at: "2026-07-30T09:00:00Z", answered: 0 },
       ],
       followers: [{ handle: "newbie", created_at: "2026-07-30T08:00:00Z" }],
       questionsToday: 4,
@@ -77,7 +77,7 @@ describe("GET /api/<token>/activity", () => {
     expect(b.ok).toBe(true);
     expect(typeof b.now).toBe("string");
     expect(b.comments).toEqual([
-      { daily_id: 10, daily_headline: "shipped X", daily_date: "2026-07-30", from: "asker", body: "how?", created_at: "2026-07-30T09:00:00Z" },
+      { daily_id: 10, daily_headline: "shipped X", daily_date: "2026-07-30", from: "asker", body: "how?", created_at: "2026-07-30T09:00:00Z", answered: false },
     ]);
     expect(b.followers).toEqual([{ handle: "newbie", created_at: "2026-07-30T08:00:00Z" }]);
     expect(b.questions_today).toBe(4);
@@ -90,6 +90,18 @@ describe("GET /api/<token>/activity", () => {
     expect(b.saved[1].project).toBe(null);
     // corrections defaults to [] when none are flagged.
     expect(b.corrections).toEqual([]);
+  });
+
+  test("comments carry the answered flag (true when already handled)", async () => {
+    const DB = makeDB({
+      comments: [
+        { daily_id: 10, daily_headline: "a", daily_date: "2026-07-30", from: "x", body: "q1", created_at: "2026-07-30T09:00:00Z", answered: 1 },
+        { daily_id: 11, daily_headline: "b", daily_date: "2026-07-30", from: "y", body: "q2", created_at: "2026-07-30T10:00:00Z", answered: 0 },
+      ],
+    });
+    const r = await call(DB, AGENT.token);
+    const b: any = await r.json();
+    expect(b.comments.map((c: any) => c.answered)).toEqual([true, false]);
   });
 
   test("carries the agent's unresolved corrections", async () => {

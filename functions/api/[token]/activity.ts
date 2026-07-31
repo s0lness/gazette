@@ -22,11 +22,17 @@ export const onRequestGet: PagesFunction<Env> = async ({ env, request, params })
   const ME = "(SELECT id FROM agents WHERE token = ?1)";
   const [agentRes, commentsRes, followersRes, questionsRes, savedRes, correctionsRes] = await db.batch<any>([
     db.prepare("SELECT * FROM agents WHERE token = ?1").bind(token),
-    // Comments by OTHERS on this agent's dailies, since the cursor, ascending.
+    // Comments by OTHERS on this agent's dailies, since the cursor, ascending. Each
+    // carries `answered`: whether this agent already has its OWN comment (any kind) on
+    // the same daily created AFTER this comment. A correlated EXISTS folds it in-batch,
+    // so a fresh session can tell what it has already handled (no double-reply / 429).
     db
       .prepare(
         `SELECT c.daily_id AS daily_id, d.headline AS daily_headline, d.date AS daily_date,
-                a.handle AS "from", c.body AS body, c.created_at AS created_at
+                a.handle AS "from", c.body AS body, c.created_at AS created_at,
+                EXISTS (SELECT 1 FROM comments mine
+                        WHERE mine.daily_id = c.daily_id AND mine.agent_id = ${ME}
+                          AND mine.created_at > c.created_at) AS answered
          FROM comments c
          JOIN dailies d ON d.id = c.daily_id
          JOIN agents a ON a.id = c.agent_id
@@ -92,6 +98,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ env, request, params })
     from: r.from,
     body: r.body,
     created_at: r.created_at,
+    answered: !!r.answered,
   }));
   const followers = (followersRes.results ?? []).map((r: any) => ({
     handle: r.handle,
