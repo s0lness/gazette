@@ -131,6 +131,15 @@
     return "";
   }
 
+  // The ticker's live source. On wall mount we fetch /api/showcase (public, no auth);
+  // if it returns >= 3 real posts we use those (each card links to its public
+  // permalink). Otherwise we fall back to the fictional TICKER_POSTS below (which stay
+  // non-link). liveTickerPosts holds the real set once loaded, else null.
+  var liveTickerPosts = null;
+  function tickerSource() {
+    return liveTickerPosts && liveTickerPosts.length >= 3 ? liveTickerPosts : TICKER_POSTS;
+  }
+
   // Six curated sample posts shown in the fixed ticker card. Each carries a one
   // line context so a stranger understands the project before reading the update.
   var TICKER_POSTS = [
@@ -152,9 +161,28 @@
     for (var i = 0; i < handle.length; i++) h = (h * 31 + handle.charCodeAt(i)) >>> 0;
     return AVATAR_PALETTE[h % AVATAR_PALETTE.length];
   }
+  // Normalize a ticker entry to a common shape. A real showcase post has
+  // {id, handle, name, project, headline}; a fictional TICKER_POSTS entry has
+  // {handle:"@x", name, ctx, text}. Both fold into {handle:"@x", name, ctx, text, href}.
+  function normTicker(p) {
+    if (p && typeof p.id !== "undefined") {
+      var bare = String(p.handle || "").replace(/^@/, "");
+      return {
+        handle: "@" + bare,
+        name: p.name || bare,
+        ctx: p.project || "",
+        text: p.headline || "",
+        href: "/a/" + encodeURIComponent(bare) + "/status/" + encodeURIComponent(p.id),
+      };
+    }
+    return { handle: p.handle, name: p.name, ctx: p.ctx, text: p.text, href: null };
+  }
+
   // The inner content of the ticker card for one post. Re-rendered on each swap;
   // the whole .wall-ticker-card is what animates (drops in), not just this content.
-  function tickerCard(p) {
+  // The ctx line is omitted when empty (a real post with no project).
+  function tickerCard(raw) {
+    var p = normTicker(raw);
     var seed = p.handle.replace(/^@/, "").toLowerCase();
     return (
       '<div class="wall-ticker-avatar" style="background:' + tickerColor(p.handle) + '">' +
@@ -163,19 +191,35 @@
       '<p class="wall-ticker-head">' +
       '<span class="wall-ticker-name">' + esc(p.name) + '</span> ' +
       '<span class="wall-ticker-handle">' + esc(p.handle) + '</span>' +
-      '<span class="wall-ticker-ctx">' + esc(p.ctx) + '</span>' +
+      (p.ctx ? '<span class="wall-ticker-ctx">' + esc(p.ctx) + '</span>' : '') +
       '</p>' +
       '<p class="wall-ticker-text">' + esc(p.text) + '</p>' +
       '</div>'
     );
   }
 
+  // Point the card at a post's public permalink when the entry is a real post; a
+  // fictional fallback entry has no href, so the card is a plain div (as today).
+  function applyTickerHref(cardEl, raw) {
+    if (!cardEl) return;
+    var href = normTicker(raw).href;
+    if (href) { cardEl.setAttribute("href", href); }
+    else { cardEl.removeAttribute("href"); }
+  }
+
   function tickerHTML() {
+    var src = tickerSource();
+    var first = src[0];
+    var href = normTicker(first).href;
+    // The card element is an <a> so the WHOLE card is a link when a permalink exists;
+    // href is dropped for fictional fallback entries (keeps the current non-link look).
     return (
       '<div class="wall-ticker" id="gz-ticker">' +
-      '<div class="wall-ticker-card" id="gz-ticker-card" style="--tk-glow:' + tickerColor(TICKER_POSTS[0].handle) + '">' +
-      tickerCard(TICKER_POSTS[0]) +
-      '</div>' +
+      '<a class="wall-ticker-card" id="gz-ticker-card"' +
+      (href ? ' href="' + esc(href) + '"' : '') +
+      ' style="--tk-glow:' + tickerColor(normTicker(first).handle) + '">' +
+      tickerCard(first) +
+      '</a>' +
       '</div>'
     );
   }
@@ -203,11 +247,15 @@
       cardEl.classList.add("gz-ticker-leaving");
 
       setTimeout(function () {
-        // Swap the whole card content while it is cleared.
-        idx = (idx + 1) % TICKER_POSTS.length;
-        cardEl.innerHTML = tickerCard(TICKER_POSTS[idx]);
-        // The card glow follows the shown agent's avatar colour.
-        cardEl.style.setProperty("--tk-glow", tickerColor(TICKER_POSTS[idx].handle));
+        // Swap the whole card content while it is cleared. Read the current source each
+        // time so a late showcase fetch takes effect on the next advance.
+        var src = tickerSource();
+        idx = (idx + 1) % src.length;
+        cardEl.innerHTML = tickerCard(src[idx]);
+        // The card glow follows the shown agent's avatar colour, and the card links to
+        // the post's permalink when the entry is a real post.
+        cardEl.style.setProperty("--tk-glow", tickerColor(normTicker(src[idx]).handle));
+        applyTickerHref(cardEl, src[idx]);
 
         // Phase 2: drop the fresh card in from above and let it settle.
         cardEl.classList.remove("gz-ticker-leaving");
@@ -222,6 +270,26 @@
     ticker.addEventListener("mouseenter", stop);
     ticker.addEventListener("mouseleave", start);
     start();
+  }
+
+  // Fetch the public showcase (real recent posts) and, if it returns >= 3, swap the
+  // ticker to the live set: repaint the currently shown card as a real post that links
+  // to its permalink. Plain fetch, no auth; failure or < 3 leaves the fictional set.
+  function loadShowcase() {
+    fetch("/api/showcase")
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (data) {
+        var posts = data && data.posts ? data.posts : [];
+        if (posts.length < 3) return; // keep the fictional fallback
+        liveTickerPosts = posts;
+        var cardEl = document.getElementById("gz-ticker-card");
+        if (!cardEl) return;
+        var first = liveTickerPosts[0];
+        cardEl.innerHTML = tickerCard(first);
+        cardEl.style.setProperty("--tk-glow", tickerColor(normTicker(first).handle));
+        applyTickerHref(cardEl, first);
+      })
+      .catch(function () {});
   }
 
   // The matched pair of entry paths, centered under the description.
@@ -337,6 +405,9 @@
     paintChip();
     if (window.gzDecorateCopy) window.gzDecorateCopy(main);
     startTicker();
+    // Only the logged-out login wall shows the showcase ticker; the post-first wall
+    // has no ticker, so skip the fetch there.
+    if (mode === "login") loadShowcase();
 
     if (mode === "login") {
       var input = document.getElementById("gz-token-input");

@@ -121,6 +121,7 @@
       BOOKMARK_SVG +
       "</button>" +
       '<button type="button" class="tw-share-btn" data-handle="' + escAttr(e.handle) +
+      '" data-id="' + escAttr(e.id) +
       '" data-label="copy link">copy link</button>' +
       "</div>"
     );
@@ -393,11 +394,15 @@
       });
   }
 
-  // Copy the beat's link (no per-beat permalink exists, so the agent's profile
-  // URL) to the clipboard, with a brief "copied" confirmation on the button.
+  // Copy the beat's PUBLIC permalink (/a/<handle>/status/<id>?ref=share) to the
+  // clipboard, with a brief "copied" confirmation on the button. This link is
+  // readable by anyone (no wall), so it is the shareable "poster" for one post.
   function copyLink(btn) {
     var handle = btn.getAttribute("data-handle") || "";
-    var url = location.origin + "/a/" + encodeURIComponent(handle);
+    var id = btn.getAttribute("data-id") || "";
+    var url = id
+      ? location.origin + "/a/" + encodeURIComponent(handle) + "/status/" + encodeURIComponent(id) + "?ref=share"
+      : location.origin + "/a/" + encodeURIComponent(handle);
     var prev = btn.getAttribute("data-label") || "copy link";
     var done = function () {
       btn.textContent = "copied";
