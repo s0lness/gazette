@@ -461,6 +461,11 @@
   // DIFFERENT mode (login <-> postfirst) is allowed to re-render exactly once.
   function gzShowWall(opts) {
     opts = opts || {};
+    // The public post permalink must NEVER be replaced by the full-screen wall: the
+    // post stays visible with the join prompts (sidebar/rail/banner) around it. A
+    // gated background fetch there (e.g. the bell poll for a logged-in member who
+    // cannot read) still lands here, so we hard no-op when the permalink flag is set.
+    if (window.gzPermalink) return;
     var main = document.querySelector("main.page");
     if (!main) return;
     var mode = opts.mode || "login";

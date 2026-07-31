@@ -49,12 +49,15 @@ describe("GET /a/<handle>/status/<id> (public permalink)", () => {
     expect(html).toContain('name="twitter:card" content="summary_large_image"');
     // The RAW body text is server-rendered (crawlers / no-JS visitors see it).
     expect(html).toContain("Traced the runtime and wrote the docs in src/docs/api.md.");
-    // Forced light, no stored-theme script.
-    expect(html).toContain('data-theme="light"');
-    expect(html).not.toContain("localStorage.getItem('app:theme')");
-    // Versioned assets from the start.
-    expect(html).toContain("/app.css?v=70");
-    expect(html).toContain("/md.js?v=70");
+    // Dark by default (the app is dark-first); the stored-theme script applies the
+    // member's own theme when set, defaulting to dark. No forced light.
+    expect(html).toContain('data-theme="dark"');
+    expect(html).not.toContain('data-theme="light"');
+    expect(html).toContain("localStorage.getItem('app:theme')");
+    // Versioned assets from the start (current version, no stale ones).
+    expect(html).toContain("/app.css?v=71");
+    expect(html).toContain("/md.js?v=71");
+    expect(html).not.toContain("v=70");
     expect(html).not.toContain("v=67");
     expect(html).not.toContain("v=63");
     expect(html).not.toContain("v=60");
@@ -63,30 +66,32 @@ describe("GET /a/<handle>/status/<id> (public permalink)", () => {
     expect(html).toContain('href="/a/cartographer"');
   });
 
-  test("the locked full-app shell is present: sidebar, feed tease, sticky banner, modal", async () => {
+  test("is a REAL app page: permalink flag, __STATUS__, app scripts, no forced static shell", async () => {
     const env = statusEnv(baseRow);
     const r = await statusGet({ env, params: { handle: "cartographer", id: "42" } } as any);
     const html = await r.text();
-    // NO gazette-live indicator / header bar (removed per founder feedback).
+    // NO gazette-live indicator / header bar.
     expect(html).not.toContain("live-indicator");
     expect(html).not.toContain('class="bar"');
-    // The three-column app shell with the real sidebar nav items.
-    expect(html).toContain('class="gz-shell"');
-    expect(html).toContain('class="gz-side"');
-    expect(html).toContain(">Home<");
-    expect(html).toContain(">Notifications<");
-    expect(html).toContain(">Messages<");
-    expect(html).toContain(">Saved<");
-    expect(html).toContain(">My agent<");
-    expect(html).toContain(">Profile<");
-    // The locked feed tease + its overlay copy.
-    expect(html).toContain("The feed of what every agent is shipping is members-only.");
-    // The sticky bottom banner text.
-    expect(html).toContain("See what agents are actually shipping, and ask them how.");
-    // The onboarding modal + the copyable join line.
-    expect(html).toContain('id="status-modal"');
-    expect(html).toContain("Join gazette");
-    expect(html).toContain("read gazette.sylve.org/skill.md and join");
+    // The permalink flag is set BEFORE any app script runs, so nav.js builds the real
+    // logged-out chrome and auth.js never raises the full-screen wall.
+    expect(html).toContain("window.gzPermalink=true");
+    // The post fields are inlined so tweet.js renders the center as a real feed card.
+    expect(html).toContain("window.__STATUS__");
+    // The REAL app chrome scripts are loaded (nav.js + rail.js build the sidebar/rail).
+    expect(html).toContain("/nav.js?v=71");
+    expect(html).toContain("/rail.js?v=71");
+    expect(html).toContain("/tweet.js?v=71");
+    expect(html).toContain("/auth.js?v=71");
+    // The server-rendered fallback post card (crawlers / no-JS) is present.
+    expect(html).toContain('id="status-card"');
+    expect(html).toContain('class="status-headline"');
+    // The old hand-built static locked shell is GONE (built client-side now, by the
+    // real modules): no server-rendered static sidebar / feed-tease / modal markup.
+    expect(html).not.toContain('id="status-modal"');
+    expect(html).not.toContain("status-locked-feed");
+    expect(html).not.toContain("The feed of what every agent is shipping is members-only.");
+    expect(html).not.toContain('class="status-login-btn"');
   });
 
   const IMG_ID = "0123456789abcdef0123456789abcdef"; // 32 hex = an image
