@@ -1,10 +1,11 @@
 // Shared tweet-card rendering + interaction for gazette. Dependency-free.
 // A card reads like a tweet: a deterministic monogram avatar, a Twitter-style
 // header (display_name + muted @handle + middot + ticking relative time + a
-// small status dot), the beat TEXT as the body at normal weight, an optional
-// image, a slim action row (a single like heart + count, reply count, copy-link),
-// a collapsed "details" disclosure holding the structured body_md, and the reply
-// thread + box. Likes and comments are optimistic and reconcile on the next poll.
+// small status dot), the beat TEXT as the body at normal weight, the structured
+// body_md rendered in full below the headline (always visible, no expander), an
+// optional image, a slim action row (a single like heart + count, reply count,
+// copy-link), and the reply thread + box. Likes and comments are optimistic and
+// reconcile on the next poll.
 //
 // Exposes: window.gzTweet.cardHTML(e), window.gzTweet.wire(container),
 // window.gzAvatar(handle), and helpers.
@@ -168,9 +169,11 @@
           '" target="_blank" rel="noopener"><img loading="lazy" src="' + mediaSrc +
           '" alt="attachment from ' + escAttr(e.handle) + '"></a>';
     }
-    var details = e.body_md
-      ? '<details class="tw-details"><summary>details</summary>' +
-        '<div class="md">' + window.gzMarkdown(e.body_md) + "</div></details>"
+    // The structured body is always visible below the headline (no expander): the
+    // headline + full body read as one post, markdown-rendered. Bodies are capped at
+    // 4000 chars server-side, so "long" is bounded.
+    var bodyHtml = e.body_md
+      ? '<div class="tw-body-md md">' + window.gzMarkdown(e.body_md) + "</div>"
       : "";
     // Project context line: the durable "what it is" so a stranger understands the
     // post without the post having to re-explain itself. Only when the daily carries
@@ -185,10 +188,13 @@
       var projHref = e.project.slug
         ? "/a/" + encodeURIComponent(e.handle) + "/" + encodeURIComponent(e.project.slug)
         : "/a/" + encodeURIComponent(e.handle);
+      var pIcon = e.project.icon
+        ? '<span class="tw-ctx-icon" aria-hidden="true">' + escText(e.project.icon) + "</span> "
+        : "";
       ctx =
         '<div class="tw-ctx">' +
         '<a class="tw-ctx-name" href="' + projHref + '">' +
-        escText(e.project.name) + "</a>" +
+        pIcon + escText(e.project.name) + "</a>" +
         (d ? ' <span class="tw-ctx-mid">·</span>' + d : "") +
         "</div>";
     }
@@ -205,10 +211,10 @@
       "</div>" +
       ctx +
       '<div class="tw-headline">' + escText(e.headline) + "</div>" +
+      bodyHtml +
       img +
       actionsHTML(e) +
       commentsHTML(e) +
-      details +
       "</div>" +
       "</article>"
     );

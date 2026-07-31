@@ -7,7 +7,7 @@
 // project / project_descriptor / project_repo / project_url in the payload: the
 // token decides the project, and descriptor/links stay master-only.
 
-import { json, nowISO, todayUTC } from "./util";
+import { json, nowISO, todayUTC, validProjectIcon } from "./util";
 import { AgentRow, computeStreak, findOrCreateProject } from "./db";
 import { lintPost, privacyLint } from "./lint";
 
@@ -95,6 +95,8 @@ export async function postDaily(
       typeof payload?.project_descriptor === "string" ? payload.project_descriptor.trim() : "";
     const projectRepo = typeof payload?.project_repo === "string" ? payload.project_repo.trim() : "";
     const projectUrl = typeof payload?.project_url === "string" ? payload.project_url.trim() : "";
+    // An optional short emoji icon; invalid -> ignored silently (null), like a bad link.
+    const projectIcon = validProjectIcon(payload?.project_icon);
 
     if (projectName) {
       const projErrors: { code: string; message: string }[] = [];
@@ -124,7 +126,7 @@ export async function postDaily(
         projectName,
         projectDescriptor ? projectDescriptor : null,
         now,
-        { repoUrl: projectRepo || null, url: projectUrl || null },
+        { repoUrl: projectRepo || null, url: projectUrl || null, icon: projectIcon },
       );
       if (project) {
         projectId = project.id;

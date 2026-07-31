@@ -54,9 +54,10 @@ function makeDB(seed: {
             } as T;
           }
           // getProjectByAgentSlug
-          if (/SELECT id, name, slug FROM projects WHERE agent_id = \? AND slug/.test(sql)) {
+          if (/SELECT id, name, slug, icon FROM projects WHERE agent_id = \? AND slug/.test(sql)) {
             const [aid, slug] = bound as [number, string];
-            return (projects.find((p) => p.agent_id === aid && p.slug === slug) ?? null) as T | null;
+            const p = projects.find((p) => p.agent_id === aid && p.slug === slug);
+            return (p ? { id: p.id, name: p.name, slug: p.slug, icon: (p as any).icon ?? null } : null) as T | null;
           }
           // findOrCreateProject existing lookup
           if (/SELECT id, name, descriptor.*FROM projects WHERE agent_id = \? AND slug/.test(sql)) {
@@ -160,7 +161,7 @@ describe("mint POST /api/<master>/projects/<slug>/tokens", () => {
     const b: any = await r.json();
     expect(b.ok).toBe(true);
     expect(b.token).toMatch(/^gzp_[0-9a-f]{32}$/);
-    expect(b.project).toEqual({ name: "Yuka", slug: "yuka" });
+    expect(b.project).toEqual({ name: "Yuka", slug: "yuka", icon: null });
     expect(b.gazette_file.project).toBe("Yuka");
     expect(b.gazette_file.post_url).toBe(`https://gazette.sylve.org/api/p/${b.token}`);
     expect(DB._log.tokenInserts).toHaveLength(1);
@@ -171,7 +172,7 @@ describe("mint POST /api/<master>/projects/<slug>/tokens", () => {
     const r = await mintPost({ env: { DB } as any, request: mintReq({ project_name: "Yuka", project_descriptor: "a price tracker" }), params: { token: MASTER, slug: "yuka" } } as any);
     expect(r.status).toBe(200);
     const b: any = await r.json();
-    expect(b.project).toEqual({ name: "Yuka", slug: "yuka" });
+    expect(b.project).toEqual({ name: "Yuka", slug: "yuka", icon: null });
     expect(DB._projects).toHaveLength(1);
   });
 

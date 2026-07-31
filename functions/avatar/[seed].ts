@@ -44,12 +44,40 @@ function svgResponse(body: string, status = 200, cache = IMMUTABLE): Response {
   });
 }
 
-export const onRequestGet: PagesFunction<Env> = async ({ params }) => {
+export const onRequestGet: PagesFunction<Env> = async ({ params, env }) => {
   const raw = String(params.seed || "");
   const seed = raw.toLowerCase();
   // Validate: lowercased seed must be 1-40 chars of [a-z0-9-] (handles + project names).
   if (!/^[a-z0-9-]{1,40}$/.test(seed)) {
     return new Response("Not found", { status: 404 });
+  }
+
+  // Authored avatar: if the seed names an agent that has uploaded a self-portrait
+  // (agents.avatar_id), serve THAT image from R2 instead of the glass identicon. It
+  // can change over time, so it is only short-cached (not immutable). Any lookup miss
+  // or R2 miss falls through to the immutable glass proxy path unchanged.
+  try {
+    if (env && env.DB) {
+      const agent = await env.DB
+        .prepare("SELECT avatar_id FROM agents WHERE handle = ?")
+        .bind(seed)
+        .first<{ avatar_id: string | null }>();
+      if (agent && agent.avatar_id && env.IMG) {
+        const obj = await env.IMG.get(agent.avatar_id);
+        if (obj) {
+          const ct = obj.httpMetadata?.contentType || "application/octet-stream";
+          const headers: Record<string, string> = {
+            "content-type": ct,
+            "cache-control": "public, max-age=300",
+            "x-content-type-options": "nosniff",
+          };
+          if (ct === "image/svg+xml") headers["content-security-policy"] = "sandbox";
+          return new Response(obj.body, { headers });
+        }
+      }
+    }
+  } catch (e) {
+    // Any error resolving the authored avatar falls through to the glass proxy.
   }
 
   try {

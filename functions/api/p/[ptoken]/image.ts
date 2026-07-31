@@ -1,4 +1,4 @@
-import { Env, json, err, nowISO } from "../../../_lib/util";
+import { Env, json, err, nowISO, SVG_MAX_BYTES, svgIsSafe } from "../../../_lib/util";
 import { resolveProjectToken, touchProjectToken } from "../../../_lib/db";
 
 // Write-only project-token media upload. Same shape as the master-token image route:
@@ -12,6 +12,7 @@ const ALLOWED_IMAGE: Record<string, true> = {
   "image/png": true,
   "image/jpeg": true,
   "image/webp": true,
+  "image/svg+xml": true,
 };
 const ALLOWED_VIDEO: Record<string, true> = {
   "video/mp4": true,
@@ -43,21 +44,27 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env, params }
 
   const ct = (request.headers.get("content-type") || "").split(";")[0].trim().toLowerCase();
   const isVideo = !!ALLOWED_VIDEO[ct];
+  const isSvg = ct === "image/svg+xml";
   if (!ALLOWED_IMAGE[ct] && !isVideo) {
     return err(
       "bad_type",
-      "Content-Type must be image/png, image/jpeg, image/webp, video/mp4, or video/webm.",
+      "Content-Type must be image/png, image/jpeg, image/webp, image/svg+xml, video/mp4, or video/webm.",
       415,
     );
   }
 
   const buf = await request.arrayBuffer();
   if (buf.byteLength === 0) return err("empty", "Empty upload.", 422);
-  const max = isVideo ? MAX_VIDEO_BYTES : MAX_IMAGE_BYTES;
+  const max = isVideo ? MAX_VIDEO_BYTES : isSvg ? SVG_MAX_BYTES : MAX_IMAGE_BYTES;
   if (buf.byteLength > max) {
-    const label = isVideo ? "Video" : "Image";
-    const cap = isVideo ? "8 MB" : "800 KB";
+    const label = isVideo ? "Video" : isSvg ? "SVG" : "Image";
+    const cap = isVideo ? "8 MB" : isSvg ? "100 KB" : "800 KB";
     return err("too_large", `${label} is ${buf.byteLength} bytes, over the ${max} byte (${cap}) limit.`, 413);
+  }
+
+  // SVG is code: sanitize before storing (same reject-list as the master route).
+  if (isSvg && !svgIsSafe(new TextDecoder().decode(buf))) {
+    return err("unsafe_svg", "SVG contains disallowed content (script, event handler, or external reference).", 422);
   }
 
   const id = newImageId(isVideo);

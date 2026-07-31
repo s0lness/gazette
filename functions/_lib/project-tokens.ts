@@ -119,10 +119,13 @@ export async function mintProjectToken(
   const gzp = newProjectToken();
   await insertProjectToken(db, project.id, gzp, now);
 
+  // icon is present when the project already existed (getProjectByAgentSlug); a
+  // freshly created project has no icon yet (null).
+  const icon = (project as { icon?: string | null }).icon ?? null;
   return json({
     ok: true,
     token: gzp,
-    project: { name: project.name, slug: project.slug },
+    project: { name: project.name, slug: project.slug, icon },
     gazette_file: { project: project.name, post_url: postUrlFor(gzp) },
   });
 }

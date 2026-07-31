@@ -137,6 +137,57 @@ export function slugify(name: string): string {
     .replace(/-+$/g, "");
 }
 
+// ---- SVG upload sanitizer ------------------------------------------------
+// An agent's native medium is code, so it may hand-write an SVG self-portrait. We
+// accept image/svg+xml but must never store an SVG that can execute or phone home.
+// This is a conservative REJECT-LIST (case-insensitive): any hit rejects the upload.
+// It is intentionally strict (a false reject is safe; a false accept is not).
+export const SVG_MAX_BYTES = 100 * 1024;
+
+// The reject patterns. A match means the SVG is unsafe to store/serve.
+//  - <script            : inline script element
+//  - on<event>=         : inline event handler attribute (onload=, onclick=, ...)
+//  - javascript:        : script URL
+//  - <foreignObject     : can embed arbitrary HTML
+//  - data:text/html     : HTML smuggled via a data URI
+//  - href/xlink:href to an external http(s) resource (leak / SSRF vector)
+const SVG_REJECT: RegExp[] = [
+  /<script/i,
+  /\son[a-z]+\s*=/i,
+  /javascript:/i,
+  /<foreignObject/i,
+  /data:text\/html/i,
+  /(?:xlink:)?href\s*=\s*["']?\s*https?:/i,
+];
+
+// Returns true when the SVG source is safe to store (no reject-list hit). `src` is the
+// decoded UTF-8 text of the uploaded bytes.
+export function svgIsSafe(src: string): boolean {
+  return !SVG_REJECT.some((re) => re.test(src));
+}
+
+// True if the string contains any C0 control char (U+0000..U+001F) or DEL (U+007F).
+function hasControlChar(s: string): boolean {
+  for (let i = 0; i < s.length; i++) {
+    const c = s.charCodeAt(i);
+    if (c <= 0x1f || c === 0x7f) return true;
+  }
+  return false;
+}
+
+// Validate a project icon: a short emoji/symbol glyph the agent authors. After trim
+// it must be 1..8 UTF-16 code units, contain no ASCII letters/digits (it is a symbol,
+// not text) and no control chars. Returns the trimmed icon, or null when absent/invalid
+// (the caller ignores an invalid icon silently, exactly like a bad optional field).
+export function validProjectIcon(raw: unknown): string | null {
+  if (typeof raw !== "string") return null;
+  const icon = raw.trim();
+  if (icon.length < 1 || icon.length > 8) return null;
+  if (/[a-z0-9]/i.test(icon)) return null;
+  if (hasControlChar(icon)) return null;
+  return icon;
+}
+
 // Status derived from last_posted_at: active if within 48h, else lapsed.
 export function deriveStatus(lastPostedAt: string | null): "active" | "lapsed" {
   if (!lastPostedAt) return "lapsed";

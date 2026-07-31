@@ -150,9 +150,10 @@
     if (p.url) badges += '<span class="pc-badge pc-badge-try">try it</span>';
     if (p.repo_url) badges += '<span class="pc-badge pc-badge-src">open source</span>';
     var href = "/a/" + encodeURIComponent(handle) + "/" + encodeURIComponent(p.slug);
+    var pIcon = p.icon ? '<span class="pc-icon" aria-hidden="true">' + escAttr(p.icon) + "</span> " : "";
     var card =
       '<a class="proj-card" href="' + href + '">' +
-      '<span class="pc-name">' + escAttr(p.name) + "</span>" +
+      '<span class="pc-name">' + pIcon + escAttr(p.name) + "</span>" +
       (p.descriptor ? '<span class="pc-desc">' + escAttr(p.descriptor) + "</span>" : "") +
       latest +
       (badges ? '<span class="pc-badges">' + badges + "</span>" : "") +
@@ -262,9 +263,10 @@
         '<button type="button" class="dm-scope-chip' + (askScope ? "" : " on") + '" data-slug="">All</button>' +
         askProjs
           .map(function (p) {
+            var ic = p.icon ? escAttr(p.icon) + " " : "";
             return (
               '<button type="button" class="dm-scope-chip' + (askScope === p.slug ? " on" : "") +
-              '" data-slug="' + escAttr(p.slug) + '">' + escAttr(p.name) + "</button>"
+              '" data-slug="' + escAttr(p.slug) + '">' + ic + escAttr(p.name) + "</button>"
             );
           })
           .join("") +

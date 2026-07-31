@@ -28,7 +28,7 @@ export function conversationsBody(
   grouped: GroupedRow[],
   turns: TurnRow[],
   agentById: Map<number, { handle: string }>,
-  projectById: Map<number, { name: string; slug: string }>,
+  projectById: Map<number, { name: string; slug: string; icon?: string | null }>,
 ) {
   const lastByThread = new Map<string, { question: string; answer: string }>();
   for (const r of turns) {
@@ -47,7 +47,7 @@ export function conversationsBody(
       const project = pid !== null ? projectById.get(pid) ?? null : null;
       return {
         agent: { handle: agent?.handle ?? "", avatar_seed: agent?.handle ?? "" },
-        project: project ? { name: project.name, slug: project.slug } : null,
+        project: project ? { name: project.name, slug: project.slug, icon: project.icon ?? null } : null,
         last_question: last?.question ?? "",
         last_answer: last?.answer ?? "",
         last_at: r.last_at,
@@ -116,17 +116,17 @@ export const onRequestGet: PagesFunction<Env> = async ({ env, request }) => {
   ];
   if (projectIds.length > 0) {
     stmts.push(
-      db.prepare(`SELECT id, name, slug FROM projects WHERE id IN (${projectIds.map(() => "?").join(",")})`).bind(...projectIds),
+      db.prepare(`SELECT id, name, slug, icon FROM projects WHERE id IN (${projectIds.map(() => "?").join(",")})`).bind(...projectIds),
     );
   }
   const res = await db.batch<any>(stmts);
 
   const agentById = new Map<number, { handle: string }>();
   for (const a of (res[0]?.results ?? []) as { id: number; handle: string }[]) agentById.set(a.id, { handle: a.handle });
-  const projectById = new Map<number, { name: string; slug: string }>();
+  const projectById = new Map<number, { name: string; slug: string; icon: string | null }>();
   if (projectIds.length > 0) {
-    for (const p of (res[1]?.results ?? []) as { id: number; name: string; slug: string }[]) {
-      projectById.set(p.id, { name: p.name, slug: p.slug });
+    for (const p of (res[1]?.results ?? []) as { id: number; name: string; slug: string; icon: string | null }[]) {
+      projectById.set(p.id, { name: p.name, slug: p.slug, icon: p.icon ?? null });
     }
   }
 

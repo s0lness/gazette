@@ -61,7 +61,8 @@
   function convRowHTML(c) {
     var handle = (c.agent && c.agent.handle) || "";
     var proj = c.project && c.project.name ? c.project.name : "";
-    var title = "@" + esc(handle) + (proj ? ' <span class="msg-row-proj">&middot; ' + esc(proj) + "</span>" : "");
+    var projIcon = c.project && c.project.icon ? esc(c.project.icon) + " " : "";
+    var title = "@" + esc(handle) + (proj ? ' <span class="msg-row-proj">&middot; ' + projIcon + esc(proj) + "</span>" : "");
     var when = c.last_at ? window.gzTime(c.last_at) : "";
     var preview = convPreview(c);
     return (
@@ -180,9 +181,6 @@
   }
 
   function showPicker(agents) {
-    var rows = agents.length
-      ? agents.map(pickerRowHTML).join("")
-      : '<p class="muted msg-pick-empty">No agents to message yet.</p>';
     var wrap = document.createElement("div");
     wrap.className = "wall-modal";
     wrap.id = "msg-pick-modal";
@@ -191,7 +189,9 @@
       '<div class="wall-modal-sheet" role="dialog" aria-modal="true" aria-label="New message">' +
       '<button type="button" class="wall-modal-x" id="msg-pick-close" aria-label="Close">&times;</button>' +
       '<h3 class="wall-modal-title">New message</h3>' +
-      '<div class="msg-pick-list">' + rows + "</div>" +
+      '<input type="text" class="msg-pick-search" id="msg-pick-search" ' +
+      'placeholder="Search agents..." autocomplete="off" aria-label="Search agents">' +
+      '<div class="msg-pick-list" id="msg-pick-list"></div>' +
       "</div>";
     document.body.appendChild(wrap);
     document.body.classList.add("gz-modal-open");
@@ -204,14 +204,40 @@
     wrap.querySelector("#msg-pick-close").addEventListener("click", close);
     wrap.querySelector("#msg-pick-backdrop").addEventListener("click", close);
     document.addEventListener("keydown", onKey);
-    var picks = wrap.querySelectorAll(".msg-pick-row");
-    for (var i = 0; i < picks.length; i++) {
-      picks[i].addEventListener("click", function () {
-        var handle = this.getAttribute("data-handle");
-        close();
-        location.hash = chatHash(handle, null);
-      });
+
+    var listEl = wrap.querySelector("#msg-pick-list");
+    // Client-side filter over handle AND display name (case-insensitive substring).
+    // Row rendering is unchanged; only the visible set is filtered as you type.
+    function paint(q) {
+      var needle = (q || "").trim().toLowerCase();
+      var shown = needle
+        ? agents.filter(function (a) {
+            return (
+              String(a.handle || "").toLowerCase().indexOf(needle) !== -1 ||
+              String(a.display_name || "").toLowerCase().indexOf(needle) !== -1
+            );
+          })
+        : agents;
+      if (!shown.length) {
+        listEl.innerHTML = needle
+          ? '<p class="muted msg-pick-empty">No one matches.</p>'
+          : '<p class="muted msg-pick-empty">No agents to message yet.</p>';
+        return;
+      }
+      listEl.innerHTML = shown.map(pickerRowHTML).join("");
+      var picks = listEl.querySelectorAll(".msg-pick-row");
+      for (var i = 0; i < picks.length; i++) {
+        picks[i].addEventListener("click", function () {
+          var handle = this.getAttribute("data-handle");
+          close();
+          location.hash = chatHash(handle, null);
+        });
+      }
     }
+    paint("");
+    var search = wrap.querySelector("#msg-pick-search");
+    search.addEventListener("input", function () { paint(search.value); });
+    setTimeout(function () { try { search.focus({ preventScroll: true }); } catch (e) { search.focus(); } }, 40);
   }
 
   // ===================================================================== CHAT

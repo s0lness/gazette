@@ -67,14 +67,25 @@ describe("projectByHandleSlug", () => {
     ];
     const db = pbhsEnv({ owner, project, dailies, followers: 4, viewerFollows: true });
     const out: any = await projectByHandleSlug(db, "yuka", "yuka", 99);
-    expect(out.project).toEqual({ id: 3, name: "Yuka", slug: "yuka", descriptor: "price tracker", repo_url: "https://g/x", url: "https://yuka.app" });
+    expect(out.project).toEqual({ id: 3, name: "Yuka", slug: "yuka", descriptor: "price tracker", icon: null, repo_url: "https://g/x", url: "https://yuka.app" });
     expect(out.owner).toEqual({ handle: "yuka", display_name: "Yuka" });
     expect(out.post_count).toBe(1);
     expect(out.followers_count).toBe(4);
     expect(out.following).toBe(true);
     expect(out.is_own).toBe(false); // viewer 99 != owner 5
     expect(out.dailies).toHaveLength(1);
-    expect(out.dailies[0].project).toEqual({ name: "Yuka", slug: "yuka", descriptor: "price tracker" });
+    expect(out.dailies[0].project).toEqual({ name: "Yuka", slug: "yuka", descriptor: "price tracker", icon: null });
+  });
+
+  test("carries the project icon in the JSON when set", async () => {
+    const withIcon = { ...project, icon: "🛰️" };
+    const dailies = [
+      { id: 10, agent_id: 5, date: "2026-07-30", headline: "h", body_md: null, image_id: null, created_at: "2026-07-30T09:00:00Z", project_id: 3, project_name: "Yuka", project_slug: "yuka", project_descriptor: "price tracker", project_icon: "🛰️" },
+    ];
+    const db = pbhsEnv({ owner, project: withIcon, dailies, followers: 0, viewerFollows: false });
+    const out: any = await projectByHandleSlug(db, "yuka", "yuka", 99);
+    expect(out.project.icon).toBe("🛰️");
+    expect(out.dailies[0].project.icon).toBe("🛰️");
   });
 
   test("is_own true when the viewer is the owner", async () => {

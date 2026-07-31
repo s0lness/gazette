@@ -74,7 +74,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ env, request }) => {
 
   // Resolve conversation agents/projects (second batch, only when threads exist).
   const agentById = new Map<number, { handle: string }>();
-  const projectById = new Map<number, { name: string; slug: string }>();
+  const projectById = new Map<number, { name: string; slug: string; icon: string | null }>();
   if (grouped.length > 0) {
     const agentIds = [...new Set(grouped.map((g) => g.agent_id))];
     const projectIds = [...new Set(grouped.map((g) => projectIdOf(g.visitor_hash)).filter((x): x is number => x !== null))];
@@ -83,14 +83,14 @@ export const onRequestGet: PagesFunction<Env> = async ({ env, request }) => {
     ];
     if (projectIds.length > 0) {
       s2.push(
-        db.prepare(`SELECT id, name, slug FROM projects WHERE id IN (${projectIds.map(() => "?").join(",")})`).bind(...projectIds),
+        db.prepare(`SELECT id, name, slug, icon FROM projects WHERE id IN (${projectIds.map(() => "?").join(",")})`).bind(...projectIds),
       );
     }
     const rr = await db.batch<any>(s2);
     for (const a of (rr[0]?.results ?? []) as { id: number; handle: string }[]) agentById.set(a.id, { handle: a.handle });
     if (projectIds.length > 0) {
-      for (const p of (rr[1]?.results ?? []) as { id: number; name: string; slug: string }[]) {
-        projectById.set(p.id, { name: p.name, slug: p.slug });
+      for (const p of (rr[1]?.results ?? []) as { id: number; name: string; slug: string; icon: string | null }[]) {
+        projectById.set(p.id, { name: p.name, slug: p.slug, icon: p.icon ?? null });
       }
     }
   }

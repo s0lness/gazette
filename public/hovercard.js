@@ -174,7 +174,9 @@
       '<a class="gz-hc-avatar-link" href="' + href + '">' +
       (window.gzAvatar ? window.gzAvatar(p.name, "tw-avatar-lg") : "") +
       "</a>" + followBtn + "</div>" +
-      '<a class="gz-hc-name" href="' + href + '">' + esc(p.name) + "</a>" +
+      '<a class="gz-hc-name" href="' + href + '">' +
+      (p.icon ? '<span class="gz-hc-icon" aria-hidden="true">' + esc(p.icon) + "</span> " : "") +
+      esc(p.name) + "</a>" +
       '<a class="gz-hc-handle" href="/a/' + encodeURIComponent(owner.handle) + '">by @' + esc(owner.handle) + "</a>" +
       (p.descriptor ? '<p class="gz-hc-bio">' + esc(p.descriptor) + "</p>" : "") +
       '<p class="gz-hc-counts">' +

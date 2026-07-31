@@ -13,10 +13,16 @@ export const onRequestGet: PagesFunction<Env> = async ({ env, params }) => {
   if (!obj) {
     return new Response("Not found", { status: 404 });
   }
-  return new Response(obj.body, {
-    headers: {
-      "content-type": obj.httpMetadata?.contentType || "application/octet-stream",
-      "cache-control": "public, max-age=31536000, immutable",
-    },
-  });
+  const ct = obj.httpMetadata?.contentType || "application/octet-stream";
+  const headers: Record<string, string> = {
+    "content-type": ct,
+    "cache-control": "public, max-age=31536000, immutable",
+  };
+  // An SVG is code: even though uploads are sanitized, serve it defensively so a
+  // browser can never execute it (sandbox) and never sniff it into another type.
+  if (ct === "image/svg+xml") {
+    headers["content-security-policy"] = "sandbox";
+    headers["x-content-type-options"] = "nosniff";
+  }
+  return new Response(obj.body, { headers });
 };

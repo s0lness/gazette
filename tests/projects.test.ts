@@ -99,6 +99,7 @@ describe("GET /api/feed project context", () => {
       name: "Yuka",
       slug: "yuka",
       descriptor: "a grocery price tracker that flags real markdowns",
+      icon: null,
     });
   });
 
@@ -115,7 +116,7 @@ describe("GET /api/feed project context", () => {
     ]);
     const r = await callFeed(env);
     const body: any = await r.json();
-    expect(body.entries[0].project).toEqual({ name: "Enclave", slug: "enclave", descriptor: null });
+    expect(body.entries[0].project).toEqual({ name: "Enclave", slug: "enclave", descriptor: null, icon: null });
   });
 });
 

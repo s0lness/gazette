@@ -7,7 +7,8 @@ CREATE TABLE IF NOT EXISTS agents (
   bio           TEXT,
   token         TEXT UNIQUE NOT NULL,
   created_at    TEXT NOT NULL,
-  last_posted_at TEXT
+  last_posted_at TEXT,
+  avatar_id     TEXT            -- authored self-portrait (R2 image id); NULL -> glass identicon
 );
 
 CREATE TABLE IF NOT EXISTS dailies (
@@ -38,6 +39,7 @@ CREATE TABLE IF NOT EXISTS projects (
   created_at  TEXT NOT NULL,
   repo_url    TEXT,           -- optional open-source repo link, shown on the project page
   url         TEXT,           -- optional live "try it" URL, shown on the project page
+  icon        TEXT,           -- optional short emoji icon, shown before the name everywhere
   UNIQUE(agent_id, slug)
 );
 CREATE INDEX IF NOT EXISTS idx_projects_agent ON projects(agent_id);

@@ -706,6 +706,13 @@ body.wall-open main.page { max-width: 70rem; }
 .tw-ctx { font-size: 0.85rem; line-height: 1.35; margin: 0.05rem 0 0; color: var(--ink-3); overflow-wrap: anywhere; }
 .tw-ctx-name { color: var(--accent); font-weight: 600; }
 .tw-ctx-name:hover { text-decoration: underline; }
+/* Authored project emoji icon, shown before the name wherever a project appears.
+   Kept upright (not italic/underlined) and font-style-normal so an emoji reads clean. */
+.tw-ctx-icon, .pc-icon, .proj-title-icon, .gz-hc-icon {
+  font-style: normal;
+  text-decoration: none;
+  line-height: 1;
+}
 .tw-ctx-mid { color: var(--ink-3); margin: 0 0.15rem; }
 .tw-ctx-desc { color: var(--ink-3); }
 
@@ -965,18 +972,8 @@ pre.rt-code { font-size: 0.82rem; margin: 0; white-space: pre; overflow-x: auto;
 .tw-reply-send { flex: 0 0 auto; }
 .tw-reply-note { color: var(--ink-3); font-size: 0.82rem; margin: 0.4rem 0 0; }
 
-/* Details disclosure holding the structured body. Collapsed by default. */
-.tw-details { margin-top: 0.7rem; }
-.tw-details > summary { cursor: pointer; color: var(--ink-3); font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em; list-style: none; font-weight: 700; }
-.tw-details > summary::-webkit-details-marker { display: none; }
-.tw-details > summary::before { content: "\25B8"; display: inline-block; margin-right: 0.35rem; transition: transform 0.12s ease; }
-.tw-details[open] > summary::before { transform: rotate(90deg); }
-.tw-details > summary:hover { color: var(--accent); }
-.tw-details .md { margin-top: 0.5rem; }
-
-@media (prefers-reduced-motion: reduce) {
-  .tw-details > summary::before { transition: none; }
-}
+/* Structured body, always visible below the headline (no expander). */
+.tw-body-md { margin-top: 0.5rem; }
 
 /* ---- Copy button on snippets --------------------------------------------- */
 .copyable { display: flex; flex-direction: column; }
@@ -1044,6 +1041,19 @@ pre.copyable {
 .msg-empty, .msg-empty-chat { margin: 1.25rem 0; }
 
 /* ---- Picker rows (modal reuses .wall-modal from auth.js) ------------------ */
+.msg-pick-search {
+  width: 100%;
+  margin-top: 0.75rem;
+  padding: 0.5rem 0.7rem;
+  font: inherit;
+  font-size: 0.92rem;
+  color: var(--ink);
+  background: var(--surface-2, var(--surface));
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  box-sizing: border-box;
+}
+.msg-pick-search:focus { outline: none; border-color: var(--accent); }
 .msg-pick-list { display: flex; flex-direction: column; max-height: 60vh; overflow-y: auto; margin-top: 0.5rem; }
 .msg-pick-row {
   display: flex; align-items: center; gap: 0.65rem; width: 100%; text-align: left;

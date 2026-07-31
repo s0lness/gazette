@@ -42,6 +42,7 @@ export interface AgentRow {
   token: string;
   created_at: string;
   last_posted_at: string | null;
+  avatar_id?: string | null;
 }
 
 export interface DailyRow {
@@ -66,6 +67,7 @@ export interface ProjectRow {
   created_at: string;
   repo_url?: string | null;
   url?: string | null;
+  icon?: string | null;
 }
 
 // A daily row plus the LEFT JOIN projects columns (null when unprojected).
@@ -73,6 +75,7 @@ export type ProjectDailyRow = DailyRow & {
   project_name?: string | null;
   project_slug?: string | null;
   project_descriptor?: string | null;
+  project_icon?: string | null;
 };
 
 // The short, durable project context stamped onto a daily/feed card so a stranger
@@ -81,6 +84,7 @@ export interface ProjectContext {
   name: string;
   slug: string;
   descriptor: string | null;
+  icon: string | null;
 }
 
 // The vitrine shape of a project: the durable descriptor plus a cheap rollup of its
@@ -90,6 +94,7 @@ export interface ProjectView {
   name: string;
   slug: string;
   descriptor: string | null;
+  icon: string | null;
   repo_url: string | null;
   url: string | null;
   post_count: number;
@@ -105,7 +110,7 @@ export interface ProjectView {
 export async function projectsForAgent(db: D1Reader, agentId: number): Promise<ProjectView[]> {
   const projRes = await db
     .prepare(
-      "SELECT id, agent_id, name, slug, descriptor, repo_url, url, created_at FROM projects WHERE agent_id = ? ORDER BY created_at ASC, id ASC",
+      "SELECT id, agent_id, name, slug, descriptor, repo_url, url, icon, created_at FROM projects WHERE agent_id = ? ORDER BY created_at ASC, id ASC",
     )
     .bind(agentId)
     .all<ProjectRow>();
@@ -154,6 +159,7 @@ export async function projectsForAgent(db: D1Reader, agentId: number): Promise<P
       name: p.name,
       slug: p.slug,
       descriptor: p.descriptor,
+      icon: p.icon ?? null,
       repo_url: p.repo_url ?? null,
       url: p.url ?? null,
       post_count: e.count,
@@ -178,6 +184,9 @@ export async function projectsForAgent(db: D1Reader, agentId: number): Promise<P
 export interface ProjectLinks {
   repoUrl?: string | null;
   url?: string | null;
+  // Authored emoji icon, already validated by validProjectIcon. Set on create and,
+  // on reuse, overwritten only when a non-empty value is supplied (like descriptor).
+  icon?: string | null;
 }
 
 export async function findOrCreateProject(
@@ -193,11 +202,12 @@ export async function findOrCreateProject(
 
   const repoUrl = typeof links.repoUrl === "string" && links.repoUrl.length > 0 ? links.repoUrl : null;
   const url = typeof links.url === "string" && links.url.length > 0 ? links.url : null;
+  const icon = typeof links.icon === "string" && links.icon.length > 0 ? links.icon : null;
 
   const existing = await db
-    .prepare("SELECT id, name, descriptor, repo_url, url FROM projects WHERE agent_id = ? AND slug = ?")
+    .prepare("SELECT id, name, descriptor, repo_url, url, icon FROM projects WHERE agent_id = ? AND slug = ?")
     .bind(agentId, slug)
-    .first<{ id: number; name: string; descriptor: string | null; repo_url: string | null; url: string | null }>();
+    .first<{ id: number; name: string; descriptor: string | null; repo_url: string | null; url: string | null; icon: string | null }>();
 
   if (existing) {
     // Refine any field for which a differing, non-empty value was supplied. Only the
@@ -216,6 +226,10 @@ export async function findOrCreateProject(
       sets.push("url = ?");
       binds.push(url);
     }
+    if (icon !== null && icon !== existing.icon) {
+      sets.push("icon = ?");
+      binds.push(icon);
+    }
     if (sets.length > 0) {
       await db
         .prepare(`UPDATE projects SET ${sets.join(", ")} WHERE id = ?`)
@@ -227,9 +241,9 @@ export async function findOrCreateProject(
 
   const ins = await db
     .prepare(
-      "INSERT INTO projects (agent_id, name, slug, descriptor, repo_url, url, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+      "INSERT INTO projects (agent_id, name, slug, descriptor, repo_url, url, icon, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
     )
-    .bind(agentId, name, slug, descriptor, repoUrl, url, now)
+    .bind(agentId, name, slug, descriptor, repoUrl, url, icon, now)
     .run();
   return { id: ins.meta.last_row_id as number, name, slug };
 }
@@ -273,7 +287,7 @@ export async function projectByHandleSlug(
 
   const project = await db
     .prepare(
-      "SELECT id, agent_id, name, slug, descriptor, repo_url, url, created_at FROM projects WHERE agent_id = ? AND slug = ?",
+      "SELECT id, agent_id, name, slug, descriptor, repo_url, url, icon, created_at FROM projects WHERE agent_id = ? AND slug = ?",
     )
     .bind(owner.id, slug)
     .first<ProjectRow>();
@@ -285,7 +299,7 @@ export async function projectByHandleSlug(
   const [dailyRes, followersRes, mineRes] = await db.batch<any>([
     db
       .prepare(
-        "SELECT d.id, d.agent_id, d.date, d.headline, d.body_md, d.image_id, d.created_at, d.project_id, p.name AS project_name, p.slug AS project_slug, p.descriptor AS project_descriptor FROM dailies d LEFT JOIN projects p ON p.id = d.project_id WHERE d.project_id = ? ORDER BY d.date DESC, d.created_at DESC",
+        "SELECT d.id, d.agent_id, d.date, d.headline, d.body_md, d.image_id, d.created_at, d.project_id, p.name AS project_name, p.slug AS project_slug, p.descriptor AS project_descriptor, p.icon AS project_icon FROM dailies d LEFT JOIN projects p ON p.id = d.project_id WHERE d.project_id = ? ORDER BY d.date DESC, d.created_at DESC",
       )
       .bind(project.id),
     db.prepare("SELECT COUNT(*) AS n FROM project_follows WHERE project_id = ?").bind(project.id),
@@ -304,6 +318,7 @@ export async function projectByHandleSlug(
       name: project.name,
       slug: project.slug,
       descriptor: project.descriptor,
+      icon: project.icon ?? null,
       repo_url: project.repo_url ?? null,
       url: project.url ?? null,
     },
@@ -494,7 +509,7 @@ const VIEWER_ID =
 // statement is self-contained and batchable alongside auth.
 const CARD_COLUMNS = `d.id, d.agent_id, d.date, d.headline, d.body_md, d.image_id, d.created_at, d.project_id,
         a.handle, a.display_name, a.last_posted_at,
-        p.name AS project_name, p.slug AS project_slug, p.descriptor AS project_descriptor,
+        p.name AS project_name, p.slug AS project_slug, p.descriptor AS project_descriptor, p.icon AS project_icon,
         (SELECT COUNT(*) FROM reactions r WHERE r.kind = 'like' AND r.daily_id = d.id) AS like_count,
         (SELECT COUNT(*) FROM reactions r WHERE r.kind = 'like' AND r.daily_id = d.id AND r.agent_id = ${VIEWER_ID}) AS viewer_liked,
         (SELECT COUNT(*) FROM comments c WHERE c.daily_id = d.id) AS comment_count`;
@@ -507,6 +522,7 @@ export type FoldedCardRow = DailyRow & {
   project_name: string | null;
   project_slug: string | null;
   project_descriptor: string | null;
+  project_icon: string | null;
   like_count: number;
   viewer_liked: number;
   comment_count: number;
@@ -587,7 +603,7 @@ export function cardFromFoldedRow(r: FoldedCardRow) {
     project:
       r.project_id == null || r.project_name == null || r.project_slug == null
         ? null
-        : { name: r.project_name, slug: r.project_slug, descriptor: r.project_descriptor ?? null },
+        : { name: r.project_name, slug: r.project_slug, descriptor: r.project_descriptor ?? null, icon: r.project_icon ?? null },
     display_name: r.display_name ?? null,
   };
 }
@@ -739,11 +755,11 @@ export async function getProjectByAgentSlug(
   db: D1Database,
   agentId: number,
   slug: string,
-): Promise<{ id: number; name: string; slug: string } | null> {
+): Promise<{ id: number; name: string; slug: string; icon: string | null } | null> {
   return db
-    .prepare("SELECT id, name, slug FROM projects WHERE agent_id = ? AND slug = ?")
+    .prepare("SELECT id, name, slug, icon FROM projects WHERE agent_id = ? AND slug = ?")
     .bind(agentId, slug)
-    .first<{ id: number; name: string; slug: string }>();
+    .first<{ id: number; name: string; slug: string; icon: string | null }>();
 }
 
 export async function getAgentById(db: D1Database, id: number): Promise<AgentRow | null> {
@@ -1111,12 +1127,13 @@ type EnrichRow = DailyRow & {
   project_name?: string | null;
   project_slug?: string | null;
   project_descriptor?: string | null;
+  project_icon?: string | null;
 };
 
 // Fold the joined project columns on a row into a ProjectContext or null.
 function projectContext(r: EnrichRow): ProjectContext | null {
   if (r.project_id == null || r.project_name == null || r.project_slug == null) return null;
-  return { name: r.project_name, slug: r.project_slug, descriptor: r.project_descriptor ?? null };
+  return { name: r.project_name, slug: r.project_slug, descriptor: r.project_descriptor ?? null, icon: r.project_icon ?? null };
 }
 
 export async function enrichDailies(
@@ -1187,7 +1204,7 @@ export function cardForProfile(r: FoldedCardRow) {
     project:
       r.project_id == null || r.project_name == null || r.project_slug == null
         ? null
-        : { name: r.project_name, slug: r.project_slug, descriptor: r.project_descriptor ?? null },
+        : { name: r.project_name, slug: r.project_slug, descriptor: r.project_descriptor ?? null, icon: r.project_icon ?? null },
   };
 }
 
@@ -1231,7 +1248,7 @@ export function projectsStmts(db: D1Reader, agentId: number): D1PreparedStatemen
   return [
     db
       .prepare(
-        "SELECT id, agent_id, name, slug, descriptor, repo_url, url, created_at FROM projects WHERE agent_id = ? ORDER BY created_at ASC, id ASC",
+        "SELECT id, agent_id, name, slug, descriptor, repo_url, url, icon, created_at FROM projects WHERE agent_id = ? ORDER BY created_at ASC, id ASC",
       )
       .bind(agentId),
     db
@@ -1278,6 +1295,7 @@ export function assembleProjects(
       name: p.name,
       slug: p.slug,
       descriptor: p.descriptor,
+      icon: p.icon ?? null,
       repo_url: p.repo_url ?? null,
       url: p.url ?? null,
       post_count: e.count,
@@ -1325,7 +1343,7 @@ export async function profileByHandle(
     db.batch<any>([
       db
         .prepare(
-          "SELECT d.id, d.agent_id, d.date, d.headline, d.body_md, d.image_id, d.created_at, d.project_id, p.name AS project_name, p.slug AS project_slug, p.descriptor AS project_descriptor FROM dailies d LEFT JOIN projects p ON p.id = d.project_id WHERE d.agent_id = ? ORDER BY d.date DESC, d.created_at DESC",
+          "SELECT d.id, d.agent_id, d.date, d.headline, d.body_md, d.image_id, d.created_at, d.project_id, p.name AS project_name, p.slug AS project_slug, p.descriptor AS project_descriptor, p.icon AS project_icon FROM dailies d LEFT JOIN projects p ON p.id = d.project_id WHERE d.agent_id = ? ORDER BY d.date DESC, d.created_at DESC",
         )
         .bind(agent.id),
       db.prepare("SELECT COUNT(*) AS n FROM follows WHERE followed_id = ?").bind(agent.id),
@@ -1391,7 +1409,7 @@ export async function profileForShell(
     db.batch<any>([
       db
         .prepare(
-          "SELECT d.id, d.agent_id, d.date, d.headline, d.body_md, d.image_id, d.created_at, d.project_id, p.name AS project_name, p.slug AS project_slug, p.descriptor AS project_descriptor FROM dailies d LEFT JOIN projects p ON p.id = d.project_id WHERE d.agent_id = ? ORDER BY d.date DESC, d.created_at DESC",
+          "SELECT d.id, d.agent_id, d.date, d.headline, d.body_md, d.image_id, d.created_at, d.project_id, p.name AS project_name, p.slug AS project_slug, p.descriptor AS project_descriptor, p.icon AS project_icon FROM dailies d LEFT JOIN projects p ON p.id = d.project_id WHERE d.agent_id = ? ORDER BY d.date DESC, d.created_at DESC",
         )
         .bind(agent.id),
       db.prepare("SELECT COUNT(*) AS n FROM follows WHERE followed_id = ?").bind(agent.id),

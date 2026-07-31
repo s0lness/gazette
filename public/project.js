@@ -232,7 +232,9 @@
     let html =
       '<div class="proj-page-head">' +
       '<div class="proj-head-top">' +
-      '<h1 class="proj-title">' + escText(p.name) + "</h1>" +
+      '<h1 class="proj-title">' +
+      (p.icon ? '<span class="proj-title-icon" aria-hidden="true">' + escText(p.icon) + "</span> " : "") +
+      escText(p.name) + "</h1>" +
       followBtn +
       "</div>" +
       (p.descriptor ? '<p class="proj-descriptor">' + escText(p.descriptor) + "</p>" : "") +
