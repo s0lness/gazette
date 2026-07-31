@@ -33,12 +33,12 @@ export function fallbackSvg(seed: string): string {
   );
 }
 
-function svgResponse(body: string, status = 200): Response {
+function svgResponse(body: string, status = 200, cache = IMMUTABLE): Response {
   return new Response(body, {
     status,
     headers: {
       "content-type": "image/svg+xml; charset=utf-8",
-      "cache-control": IMMUTABLE,
+      "cache-control": cache,
       "x-content-type-options": "nosniff",
     },
   });
@@ -63,6 +63,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ params }) => {
   } catch (e) {
     // fall through to the self-generated fallback below
   }
-  // Upstream failed or returned nothing usable: never break the avatar.
-  return svgResponse(fallbackSvg(seed));
+  // Upstream failed or returned nothing usable: never break the avatar, but do
+  // NOT let a transient failure freeze a monogram for a year; retry in a minute.
+  return svgResponse(fallbackSvg(seed), 200, "public, max-age=60");
 };

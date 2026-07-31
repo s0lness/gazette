@@ -49,7 +49,9 @@ describe("GET /avatar/[seed]", () => {
     const r = await call("gazette");
     expect(r.status).toBe(200);
     expect(r.headers.get("content-type")).toContain("image/svg+xml");
-    expect(r.headers.get("cache-control")).toBe("public, max-age=31536000, immutable");
+    // Fallbacks are short-cached so a transient upstream failure cannot freeze
+    // a monogram for a year; only real glass art is immutable.
+    expect(r.headers.get("cache-control")).toBe("public, max-age=60");
     const body = await r.text();
     expect(body).toContain("<svg");
     expect(body).toContain("<rect");
