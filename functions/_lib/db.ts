@@ -596,6 +596,156 @@ export async function getAgentByToken(db: D1Database, token: string): Promise<Ag
   return db.prepare("SELECT * FROM agents WHERE token = ?").bind(token).first<AgentRow>();
 }
 
+// ---- project tokens (write-only capability, prefix gzp_) -----------------
+
+// A resolved project token: the owning agent, the forced project, and whether the
+// token is revoked. Null when the token is unknown.
+export interface ResolvedProjectToken {
+  agent: AgentRow;
+  project: { id: number; name: string; slug: string };
+  tokenId: number;
+  revoked: boolean;
+}
+
+// Resolve a gzp_ project token to its owning agent + forced project. Returns
+// { revoked: true } when the row exists but has been revoked, so the route can 401
+// with a distinct code. Null when the token is unknown entirely.
+export async function resolveProjectToken(
+  db: D1Database,
+  token: string,
+): Promise<ResolvedProjectToken | null> {
+  const row = await db
+    .prepare(
+      `SELECT pt.id AS token_id, pt.revoked_at AS revoked_at,
+              p.id AS project_id, p.name AS project_name, p.slug AS project_slug, p.agent_id AS agent_id
+       FROM project_tokens pt JOIN projects p ON p.id = pt.project_id
+       WHERE pt.token = ?`,
+    )
+    .bind(token)
+    .first<{
+      token_id: number;
+      revoked_at: string | null;
+      project_id: number;
+      project_name: string;
+      project_slug: string;
+      agent_id: number;
+    }>();
+  if (!row) return null;
+  const agent = await getAgentById(db, row.agent_id);
+  if (!agent) return null;
+  return {
+    agent,
+    project: { id: row.project_id, name: row.project_name, slug: row.project_slug },
+    tokenId: row.token_id,
+    revoked: row.revoked_at !== null,
+  };
+}
+
+// Best-effort last_used_at stamp for a project token (fire-and-forget; the caller
+// should NOT await this on the response hot path).
+export function touchProjectToken(db: D1Database, tokenId: number, now: string): Promise<unknown> {
+  return db
+    .prepare("UPDATE project_tokens SET last_used_at = ? WHERE id = ?")
+    .bind(now, tokenId)
+    .run();
+}
+
+// Count of an agent's projects (for the per-agent project cap on mint).
+export async function projectCountForAgent(db: D1Database, agentId: number): Promise<number> {
+  const row = await db
+    .prepare("SELECT COUNT(*) AS n FROM projects WHERE agent_id = ?")
+    .bind(agentId)
+    .first<{ n: number }>();
+  return row?.n ?? 0;
+}
+
+// Count of ACTIVE (unrevoked) project tokens for a project (the token cap on mint).
+export async function activeProjectTokenCount(db: D1Database, projectId: number): Promise<number> {
+  const row = await db
+    .prepare("SELECT COUNT(*) AS n FROM project_tokens WHERE project_id = ? AND revoked_at IS NULL")
+    .bind(projectId)
+    .first<{ n: number }>();
+  return row?.n ?? 0;
+}
+
+// Insert a new project token row. Returns its new id.
+export async function insertProjectToken(
+  db: D1Database,
+  projectId: number,
+  token: string,
+  now: string,
+): Promise<number> {
+  const ins = await db
+    .prepare("INSERT INTO project_tokens (project_id, token, created_at) VALUES (?, ?, ?)")
+    .bind(projectId, token, now)
+    .run();
+  return ins.meta.last_row_id as number;
+}
+
+// A project token as shown in the list view: preview only, never the full token.
+export interface ProjectTokenListRow {
+  id: number;
+  preview: string;
+  created_at: string;
+  last_used_at: string | null;
+  revoked_at: string | null;
+}
+
+// List a project's tokens (newest first). preview = first 10 chars + a horizontal
+// ellipsis; the full token is never returned after mint.
+export async function listProjectTokens(
+  db: D1Database,
+  projectId: number,
+): Promise<ProjectTokenListRow[]> {
+  const rs = await db
+    .prepare(
+      "SELECT id, token, created_at, last_used_at, revoked_at FROM project_tokens WHERE project_id = ? ORDER BY created_at DESC, id DESC",
+    )
+    .bind(projectId)
+    .all<{ id: number; token: string; created_at: string; last_used_at: string | null; revoked_at: string | null }>();
+  return (rs.results ?? []).map((r) => ({
+    id: r.id,
+    preview: r.token.slice(0, 10) + "…",
+    created_at: r.created_at,
+    last_used_at: r.last_used_at,
+    revoked_at: r.revoked_at,
+  }));
+}
+
+// Revoke a project token by (project, id). Idempotent: only stamps revoked_at when it
+// is still null. Returns true if the token exists for this project (revoked or not).
+export async function revokeProjectToken(
+  db: D1Database,
+  projectId: number,
+  tokenId: number,
+  now: string,
+): Promise<boolean> {
+  const row = await db
+    .prepare("SELECT id, revoked_at FROM project_tokens WHERE id = ? AND project_id = ?")
+    .bind(tokenId, projectId)
+    .first<{ id: number; revoked_at: string | null }>();
+  if (!row) return false;
+  if (row.revoked_at === null) {
+    await db
+      .prepare("UPDATE project_tokens SET revoked_at = ? WHERE id = ? AND revoked_at IS NULL")
+      .bind(now, tokenId)
+      .run();
+  }
+  return true;
+}
+
+// A project by (agent, slug). Null when the agent owns no such project.
+export async function getProjectByAgentSlug(
+  db: D1Database,
+  agentId: number,
+  slug: string,
+): Promise<{ id: number; name: string; slug: string } | null> {
+  return db
+    .prepare("SELECT id, name, slug FROM projects WHERE agent_id = ? AND slug = ?")
+    .bind(agentId, slug)
+    .first<{ id: number; name: string; slug: string }>();
+}
+
 export async function getAgentById(db: D1Database, id: number): Promise<AgentRow | null> {
   return db.prepare("SELECT * FROM agents WHERE id = ?").bind(id).first<AgentRow>();
 }

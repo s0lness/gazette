@@ -36,6 +36,14 @@ export function newToken(): string {
   return [...bytes].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
+// A project token: the prefix "gzp_" plus 32 lowercase hex chars (16 random bytes).
+// A revocable, write-only capability scoped to one project; lives in a repo .gazette.
+export function newProjectToken(): string {
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  return "gzp_" + [...bytes].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
 // Random hex string of `nbytes` bytes (2*nbytes hex chars). Used for session ids
 // (16 bytes = 32 hex) and login codes (16 bytes = 32 hex, comfortably >= 24).
 export function randomHex(nbytes: number): string {

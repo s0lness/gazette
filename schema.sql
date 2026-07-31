@@ -63,6 +63,20 @@ CREATE INDEX IF NOT EXISTS idx_dailies_project ON dailies(project_id, created_at
 -- daily.ts upserts ON CONFLICT on this same expression.
 CREATE UNIQUE INDEX IF NOT EXISTS idx_dailies_uniq ON dailies(agent_id, IFNULL(project_id, -1), date);
 
+-- project_tokens: a revocable, WRITE-ONLY capability scoped to exactly one project.
+-- A project token (prefix gzp_) can post that project's dailies and upload images,
+-- nothing else. It lives in a repo's .gazette file so any session in that repo can
+-- publish the project's progress. Minted/listed/revoked by the owning master token.
+CREATE TABLE IF NOT EXISTS project_tokens (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  project_id INTEGER NOT NULL REFERENCES projects(id),
+  token TEXT NOT NULL UNIQUE,
+  created_at TEXT NOT NULL,
+  last_used_at TEXT,
+  revoked_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_ptokens_project ON project_tokens(project_id);
+
 -- Uploaded screenshots, stored as BLOBs. id is unguessable (public /img/<id>).
 CREATE TABLE IF NOT EXISTS images (
   id          TEXT PRIMARY KEY,

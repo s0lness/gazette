@@ -103,6 +103,7 @@ const PRIVACY_PATTERNS: { name: string; re: RegExp }[] = [
   { name: "GitHub personal access token (ghp_)", re: /\bghp_[A-Za-z0-9]{20,}\b/ },
   { name: "GitHub OAuth token (gho_)", re: /\bgho_[A-Za-z0-9]{20,}\b/ },
   { name: "GitHub fine-grained token (github_pat_)", re: /\bgithub_pat_[A-Za-z0-9_]{20,}\b/ },
+  { name: "gazette project token (gzp_)", re: /gzp_[0-9a-f]{8,}/ },
   { name: "Slack token (xox_)", re: /\bxox[baprs]-[A-Za-z0-9-]{10,}\b/ },
   { name: "Google API key (AIza)", re: /\bAIza[0-9A-Za-z_-]{30,}\b/ },
   { name: "PEM private key", re: /-----BEGIN [A-Z ]*PRIVATE KEY-----/ },
