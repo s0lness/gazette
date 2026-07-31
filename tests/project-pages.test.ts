@@ -168,10 +168,19 @@ function feedEnv(rows: any[]) {
   const viewer = { id: 1, handle: "viewer", token: "tok-viewer" };
   let feedSql = "";
   let feedBinds: unknown[] = [];
-  function resolveFirst(sql: string, bound: unknown[]): any {
-    if (/FROM agents WHERE token/.test(sql)) return bound[0] === viewer.token ? viewer : null;
-    if (/COUNT\(\*\).*FROM dailies/.test(sql)) return { n: 5 };
-    return null;
+  // The feed runs auth + the folded feed statement in ONE db.batch. The feed
+  // statement resolves the viewer id in-SQL from the credential, so it binds the
+  // credential bundle (token, sid, now) rather than a numeric id.
+  function resolveAll(sql: string, bound: unknown[]): { results: any[] } {
+    if (/^SELECT \* FROM agents WHERE token/.test(sql)) {
+      return { results: bound[0] === viewer.token ? [viewer] : [] };
+    }
+    if (/FROM agents a JOIN sessions/.test(sql)) return { results: [] };
+    if (/COUNT\(\*\) AS n FROM dailies WHERE agent_id = \(SELECT/.test(sql)) {
+      return { results: bound[0] === viewer.token ? [{ n: 5 }] : [] };
+    }
+    if (/FROM dailies d/.test(sql)) return { results: rows };
+    return { results: [] };
   }
   const DB: any = {
     withSession() { return DB; },
@@ -179,12 +188,9 @@ function feedEnv(rows: any[]) {
       let bound: unknown[] = [];
       const stmt: any = {
         bind(...args: unknown[]) { bound = args; if (/FROM dailies d/.test(sql)) { feedSql = sql; feedBinds = args; } return stmt; },
-        async first<T>() { return resolveFirst(sql, bound) as T | null; },
-        async all<T>() {
-          if (/FROM dailies d/.test(sql)) return { results: rows } as { results: T[] };
-          return { results: [] } as { results: T[] };
-        },
-        _resolveAll() { return { results: /FROM dailies d/.test(sql) ? rows : [] }; },
+        async first<T>() { return (resolveAll(sql, bound).results[0] ?? null) as T | null; },
+        async all<T>() { return resolveAll(sql, bound) as { results: T[] }; },
+        _resolveAll() { return resolveAll(sql, bound); },
       };
       return stmt;
     },
@@ -204,11 +210,14 @@ describe("GET /api/feed?following=1 union", () => {
     expect(r.status).toBe(200);
     const body: any = await r.json();
     expect(body.entries).toHaveLength(1);
-    // The union query: two EXISTS subqueries (follows OR project_follows), viewer bound twice.
+    // The union query: two EXISTS subqueries (follows OR project_follows). The viewer
+    // id is now resolved inside SQL from the credential, which the statement binds as
+    // (token, sid, now); it appears in the SQL via the VIEWER_ID subquery twice.
     const feed = DB._feed();
     expect(/EXISTS.*FROM follows/.test(feed.sql)).toBe(true);
     expect(/EXISTS.*FROM project_follows/.test(feed.sql)).toBe(true);
-    expect(feed.binds).toEqual([1, 1]);
+    expect(feed.binds[0]).toBe("tok-viewer");
+    expect((feed.sql.match(/SELECT id FROM agents WHERE token/g) ?? []).length).toBeGreaterThanOrEqual(2);
   });
 
   test("the unfollowed feed does NOT use the union query", async () => {

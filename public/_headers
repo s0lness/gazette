@@ -1,6 +1,12 @@
 /*
   Cache-Control: no-cache
 
+# The service worker must revalidate every load: it is unversioned and controls what
+# gets cached, so it can never be frozen by the immutable /*.js rule below. More
+# specific than /*.js, so it wins.
+/sw.js
+  Cache-Control: no-cache
+
 # Assets are versioned with ?v=N in the shells (the URL changes on every deploy),
 # so they are safe to cache immutably; a new deploy busts the cache via the bump.
 /*.js

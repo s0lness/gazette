@@ -4,14 +4,20 @@
 // row (posts, followers). Below: the project's dailies as tweet cards (gzTweet).
 // Reads window.__PROJECT__ if the shell inlined it, else fetches the project JSON.
 // Polls every 12s so a fresh beat or follower count appears without a reload.
+//
+// SPA-lite: exposes window.gzPages.project = { mount(rootEl, params), unmount() }.
+// A direct load uses the shell-inlined window.__PROJECT__ fast path; an SPA
+// navigation paints from gzCache "project:<handle>/<slug>" then fetches. Auto-boots
+// when this page is the document entry.
 (function () {
-  const root = document.getElementById("root");
-  const handle = root.getAttribute("data-handle");
-  const slug = root.getAttribute("data-slug");
+  // Bound per boot.
+  var root = null;
+  var handle = null;
+  var slug = null;
 
-  // The project shell does not load profile.js, so define the same curated
-  // suggested-question provider here when it is not already on window (reuse when
-  // present, else fall back to the identical two evergreen prompts).
+  // The project shell does not load profile.js on a direct load, so define the same
+  // curated suggested-question provider here when it is not already on window (reuse
+  // when present, else fall back to the identical two evergreen prompts).
   if (!window.gzSuggestedQuestions) {
     var SUGGESTED_QUESTIONS = [
       "What's a best practice you have?",
@@ -55,6 +61,7 @@
   let last = null;
   let followInFlight = false;
   let current = null;
+  let poll = null;
 
   function statsRow(p) {
     var posts = p.post_count || 0;
@@ -293,19 +300,81 @@
       if (last === null) root.innerHTML = '<p class="muted">No project "' + escAttr(slug) + '" for @' + escAttr(handle) + '. Yet.</p>';
       return;
     }
+    if (window.gzCache && a) window.gzCache.set("project:" + handle + "/" + slug, a);
     render(a);
   }
 
-  // No token at all: show the login wall immediately, no round trip.
-  if (!window.gzToken()) {
-    window.gzShowWall({ mode: "login" });
-    return;
+  // ---- lifecycle ----------------------------------------------------------
+  function boot() {
+    root = document.getElementById("root");
+    if (!root) return;
+    handle = root.getAttribute("data-handle");
+    slug = root.getAttribute("data-slug");
+
+    // No token at all: show the login wall immediately, no round trip.
+    if (!window.gzToken()) {
+      window.gzShowWall({ mode: "login" });
+      return;
+    }
+    last = null;
+    current = null;
+    followInFlight = false;
+
+    // Fast path: the shell inlined the project (window.__PROJECT__), render immediately.
+    if (window.__PROJECT__) {
+      render(window.__PROJECT__);
+      window.__PROJECT__ = null; // consume once; poll takes over
+    }
+    poll = window.gzLivePoll(load);
   }
 
-  // Fast path: the shell inlined the project (window.__PROJECT__), render immediately.
-  if (window.__PROJECT__) {
-    render(window.__PROJECT__);
-    window.__PROJECT__ = null; // consume once; poll takes over
+  // SPA mount: no inlined project on a client-side nav, so paint from the gzCache
+  // "project:<handle>/<slug>" entry then poll for fresh. The router stamps
+  // data-handle / data-slug on the skeleton so the module reads them uniformly.
+  function mount(centerEl, params) {
+    var h = (params && params.handle) || "";
+    var s = (params && params.slug) || "";
+    // Rebuild the same #root the project shell provides on a direct load.
+    if (centerEl) {
+      centerEl.innerHTML =
+        '<div id="root" data-handle="' + escAttr(h) + '" data-slug="' + escAttr(s) + '">' +
+        '<p class="muted gz-loading">Reading up on ' + escAttr(s) + "...</p></div>";
+    }
+    var cached = window.gzCache ? window.gzCache.get("project:" + h + "/" + s, 10 * 60 * 1000) : null;
+    if (cached) window.__PROJECT__ = cached;
+    boot();
   }
-  window.gzLivePoll(load);
+
+  function unmount() {
+    if (poll && poll.stop) poll.stop();
+    poll = null;
+    root = null;
+    handle = null;
+    slug = null;
+    last = null;
+    current = null;
+  }
+
+  window.gzPages = window.gzPages || {};
+  window.gzPages.project = { mount: mount, unmount: unmount };
+
+  // Auto-boot only when a project shell is THIS document's entry: #root carries both
+  // data-handle and data-slug.
+  function isEntry() {
+    var r = document.getElementById("root");
+    return !!(r && r.getAttribute && r.getAttribute("data-handle") != null && r.getAttribute("data-slug") != null);
+  }
+  function inSpa() {
+    try { return document.documentElement && document.documentElement.getAttribute("data-gz-spa") === "1"; }
+    catch (e) { return false; }
+  }
+  function autoBoot() {
+    if (inSpa()) return;
+    if (isEntry()) boot();
+  }
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", autoBoot);
+  } else {
+    autoBoot();
+  }
 })();

@@ -34,14 +34,27 @@ function makeDB(capture: {
     // project resolution by (agent_id, slug)
     if (/FROM projects WHERE agent_id = \? AND slug/.test(sql))
       return bound[1] === PROJECT.slug ? PROJECT : null;
-    // quota: prior question this (visitor, agent, day)
-    if (/FROM dm_log WHERE visitor_hash/.test(sql)) {
-      capture.priorBinds = bound;
-      return null; // no prior
-    }
-    // IP backstop count
-    if (/COUNT\(\*\) AS n FROM dm_log WHERE ip_hash/.test(sql)) return { n: 0 };
     return null;
+  }
+  // The pre-oracle reads (quota COUNT, IP COUNT, project corpus, history) now run in
+  // ONE db.batch. resolveAll answers each by its SQL and captures the corpus/quota
+  // binds the tests assert on.
+  function resolveAll(sql: string, bound: unknown[]): { results: any[] } {
+    // quota: prior question count for (visitor, agent, day).
+    if (/COUNT\(\*\) AS n FROM dm_log WHERE visitor_hash/.test(sql)) {
+      capture.priorBinds = bound;
+      return { results: [{ n: 0 }] };
+    }
+    // IP backstop count.
+    if (/COUNT\(\*\) AS n FROM dm_log WHERE ip_hash/.test(sql)) return { results: [{ n: 0 }] };
+    // project corpus.
+    if (/FROM dailies WHERE agent_id = \? AND project_id/.test(sql)) {
+      capture.corpusSql = sql;
+      capture.corpusBinds = bound;
+      return { results: dailies };
+    }
+    // history load + anything else: empty.
+    return { results: [] };
   }
   const DB: any = {
     withSession() { return DB; },
@@ -50,14 +63,8 @@ function makeDB(capture: {
       const stmt: any = {
         bind(...a: unknown[]) { bound = a; return stmt; },
         async first<T>() { return resolveFirst(sql, bound) as T | null; },
-        async all<T>() {
-          if (/FROM dailies WHERE agent_id = \? AND project_id/.test(sql)) {
-            capture.corpusSql = sql;
-            capture.corpusBinds = bound;
-            return { results: dailies } as { results: T[] };
-          }
-          return { results: [] } as { results: T[] };
-        },
+        async all<T>() { return resolveAll(sql, bound) as { results: T[] }; },
+        _resolveAll() { return resolveAll(sql, bound); },
         async run() {
           if (/INSERT INTO dm_log/.test(sql)) capture.insertBinds = bound;
           return { meta: { changes: 1 } };
@@ -65,6 +72,7 @@ function makeDB(capture: {
       };
       return stmt;
     },
+    async batch(stmts: any[]) { return stmts.map((s) => s._resolveAll()); },
   };
   return DB;
 }

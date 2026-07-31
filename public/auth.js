@@ -47,6 +47,8 @@
     gzSetMe(null);
     // Wipe the SWR cache so a logged-out user never sees stale private data.
     try { if (window.gzCache) window.gzCache.clear(); } catch (e) {}
+    // Also drop the service worker's per-user API + shell caches.
+    try { if (window.gzSwClearApi) window.gzSwClearApi(); } catch (e) {}
     // Also clear the human session cookie server-side (best-effort), then show the wall.
     try {
       fetch("/api/logout", { method: "POST", credentials: "same-origin" }).catch(function () {});

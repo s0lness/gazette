@@ -3,7 +3,17 @@
 // unsaving it (the bookmark on the card) removes it from the list. Polls every 12s
 // so a card saved elsewhere shows up without a reload; a repaint is skipped while a
 // reply is in progress so an in-flight interaction is never wiped.
+//
+// SPA-lite: exposes window.gzPages.saved = { mount(rootEl), unmount() }. Auto-boots
+// when this page is the document entry, exactly as before.
 (function () {
+  // The center-column markup for the saved page (mirrors public/saved.html).
+  var SKELETON =
+    '<div id="saved-view" hidden>' +
+    '<h1 class="page-title">Saved</h1>' +
+    '<section id="saved" style="margin-top:1rem"><p class="muted gz-loading">Gathering what you saved...</p></section>' +
+    "</div>";
+
   function revealView() {
     const view = document.getElementById("saved-view");
     if (view && view.hidden) view.hidden = false;
@@ -13,6 +23,8 @@
     '<p class="muted">Nothing saved. Tap the bookmark on any post to send it to your agent.</p>';
 
   let last = null;
+  let poll = null;
+  let unsaveHandler = null;
 
   // Paint a saved payload. Returns nothing; skips if unchanged or mid-reply.
   function paintSaved(box, data) {
@@ -72,20 +84,54 @@
   function wireUnsave() {
     const box = document.getElementById("saved");
     if (!box) return;
-    box.addEventListener("tw-unsaved", function (ev) {
+    unsaveHandler = function (ev) {
       const card = ev.target && ev.target.closest ? ev.target.closest(".tweet") : null;
       if (card && card.parentNode) card.parentNode.removeChild(card);
       last = null;
       if (!box.querySelector(".tweet")) box.innerHTML = EMPTY;
-    });
+    };
+    box.addEventListener("tw-unsaved", unsaveHandler);
   }
 
-  // No token at all: show the login wall immediately, no round trip.
-  if (!window.gzToken()) {
-    window.gzShowWall({ mode: "login" });
-    return;
+  // ---- lifecycle ----------------------------------------------------------
+  function boot() {
+    // No token at all: show the login wall immediately, no round trip.
+    if (!window.gzToken()) {
+      window.gzShowWall({ mode: "login" });
+      return;
+    }
+    last = null;
+    wireUnsave();
+    paintFromCache();
+    poll = window.gzLivePoll(load);
   }
-  wireUnsave();
-  paintFromCache();
-  window.gzLivePoll(load);
+
+  function mount(rootEl) {
+    if (rootEl) rootEl.innerHTML = SKELETON;
+    boot();
+  }
+
+  function unmount() {
+    if (poll && poll.stop) poll.stop();
+    poll = null;
+    // The saved box is discarded on center-column swap, so the tw-unsaved listener
+    // dies with it; clear the reference for tidiness.
+    unsaveHandler = null;
+  }
+
+  window.gzPages = window.gzPages || {};
+  window.gzPages.saved = { mount: mount, unmount: unmount };
+
+  function isEntry() {
+    return !!document.getElementById("saved-view") && !document.getElementById("root");
+  }
+  function autoBoot() {
+    if (document.documentElement.getAttribute("data-gz-spa") === "1") return;
+    if (isEntry()) boot();
+  }
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", autoBoot);
+  } else {
+    autoBoot();
+  }
 })();

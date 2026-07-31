@@ -22,28 +22,35 @@ function fakeEnv(opts: {
   edges?: Array<[number, number]>; // [follower_id, followed_id]
 }) {
   const edges = opts.edges ?? [];
+  // The listing now runs auth statements + the three listing statements in ONE batch,
+  // with the viewer id resolved in-SQL from the credential (bound[0] = the token). We
+  // resolve auth and the folded follow set by mapping that token back to the agent.
+  function agentByToken(tok: unknown) {
+    return opts.agents.find((x) => x.token === tok) ?? null;
+  }
   // Rows for a .all()/.batch() statement, keyed off the SQL it carries.
   function resolveAll(sql: string, bound: unknown[]): { results: any[] } {
+    // Auth: token lookup -> the agent row (viewer).
+    if (/^SELECT \* FROM agents WHERE token/.test(sql)) {
+      const a = agentByToken(bound[0]);
+      return { results: a ? [a] : [] };
+    }
+    // Auth: session join -> none (tests use the token path).
+    if (/FROM agents a JOIN sessions/.test(sql)) return { results: [] };
+    // Auth: dailies count resolved via the credential subquery.
+    if (/COUNT\(\*\) AS n FROM dailies WHERE agent_id = \(SELECT/.test(sql)) {
+      const a = agentByToken(bound[0]);
+      return { results: a ? [{ n: opts.dailyCount[a.id] ?? 0 }] : [] };
+    }
     if (/FROM agents ORDER BY/.test(sql)) return { results: opts.agents };
+    // The viewer's follow set: follower_id resolved in-SQL from the token (bound[0]).
     if (/SELECT followed_id FROM follows/.test(sql)) {
-      const viewer = bound[0];
+      const a = agentByToken(bound[0]);
+      const viewer = a?.id;
       return { results: edges.filter(([f]) => f === viewer).map(([, t]) => ({ followed_id: t })) };
     }
-    // grouped daily dates + any other list read: streak/count details are irrelevant here
+    // grouped daily dates (SELECT agent_id, date FROM dailies) + anything else: empty.
     return { results: [] };
-  }
-  function resolveFirst(sql: string, bound: unknown[]): any {
-    if (/FROM agents WHERE token/.test(sql)) {
-      return opts.agents.find((x) => x.token === bound[0]) ?? null;
-    }
-    if (/COUNT\(\*\).*FROM dailies/.test(sql)) {
-      return { n: opts.dailyCount[bound[0] as number] ?? 0 };
-    }
-    if (/SELECT 1 FROM follows/.test(sql)) {
-      const hit = edges.some(([f, t]) => f === bound[0] && t === bound[1]);
-      return hit ? { 1: 1 } : null;
-    }
-    return null;
   }
   const DB: any = {
     withSession() { return DB; },
@@ -51,7 +58,7 @@ function fakeEnv(opts: {
       let bound: unknown[] = [];
       const stmt: any = {
         bind(...args: unknown[]) { bound = args; return stmt; },
-        async first<T>(): Promise<T | null> { return resolveFirst(sql, bound) as T | null; },
+        async first<T>(): Promise<T | null> { return (resolveAll(sql, bound).results[0] ?? null) as T | null; },
         async all<T>(): Promise<{ results: T[] }> { return resolveAll(sql, bound) as { results: T[] }; },
         _resolveAll() { return resolveAll(sql, bound); },
       };

@@ -81,6 +81,24 @@ export async function sha256Hex(input: string): Promise<string> {
   return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
+// Fast, dependency-free content hash for weak ETags. FNV-1a over the UTF-16 code
+// units of the JSON string, rendered as 8 hex chars. Collisions are irrelevant
+// here: a mismatch just means we skip the 304 and send the body (correctness holds).
+export function fnv1aHex(s: string): string {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    // 32-bit FNV prime multiply, kept in uint32 via Math.imul.
+    h = Math.imul(h, 0x01000193);
+  }
+  return (h >>> 0).toString(16).padStart(8, "0");
+}
+
+// Weak ETag for a JSON string: `"<fnv1a-hex>"` (quoted, per RFC).
+export function etagFor(jsonStr: string): string {
+  return '"' + fnv1aHex(jsonStr) + '"';
+}
+
 // Handle validation: lowercase, [a-z0-9-]{2,24}.
 export function validHandle(handle: unknown): handle is string {
   return typeof handle === "string" && /^[a-z0-9-]{2,24}$/.test(handle);

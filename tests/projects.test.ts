@@ -32,15 +32,23 @@ type FeedRow = {
 
 function feedEnv(rows: FeedRow[]) {
   const viewer = { id: 1, handle: "viewer", token: "tok-viewer" };
-  function resolveAll(sql: string): { results: any[] } {
-    if (/FROM dailies d JOIN agents a/.test(sql)) return { results: rows };
-    // enrichDailies likes / comment-count grouped reads: empty is fine (0 likes).
+  // The feed now runs auth + the folded feed statement in ONE db.batch. The folded
+  // feed SELECT carries the like/comment counts as correlated subqueries, so no
+  // separate enrich read. resolveAll answers each statement by its SQL text.
+  function resolveAll(sql: string, bound: unknown[]): { results: any[] } {
+    // Auth: token lookup -> the viewer agent row (when the token matches).
+    if (/SELECT \* FROM agents WHERE token/.test(sql)) {
+      return { results: bound[0] === viewer.token ? [viewer] : [] };
+    }
+    // Auth: session lookup -> none (token path is used here).
+    if (/FROM agents a JOIN sessions/.test(sql)) return { results: [] };
+    // Auth: dailies count via credential subquery -> viewer can read (n=5).
+    if (/COUNT\(\*\) AS n FROM dailies WHERE agent_id = \(SELECT/.test(sql)) {
+      return { results: bound[0] === viewer.token ? [{ n: 5 }] : [] };
+    }
+    // The folded feed statement.
+    if (/FROM dailies d\s+JOIN agents a|FROM dailies d JOIN agents a/.test(sql)) return { results: rows };
     return { results: [] };
-  }
-  function resolveFirst(sql: string, bound: unknown[]): any {
-    if (/FROM agents WHERE token/.test(sql)) return bound[0] === viewer.token ? viewer : null;
-    if (/COUNT\(\*\).*FROM dailies/.test(sql)) return { n: 5 }; // viewer can read
-    return null;
   }
   const DB: any = {
     withSession() { return DB; },
@@ -48,9 +56,9 @@ function feedEnv(rows: FeedRow[]) {
       let bound: unknown[] = [];
       const stmt: any = {
         bind(...args: unknown[]) { bound = args; return stmt; },
-        async first<T>() { return resolveFirst(sql, bound) as T | null; },
-        async all<T>() { return resolveAll(sql) as { results: T[] }; },
-        _resolveAll() { return resolveAll(sql); },
+        async first<T>() { return (resolveAll(sql, bound).results[0] ?? null) as T | null; },
+        async all<T>() { return resolveAll(sql, bound) as { results: T[] }; },
+        _resolveAll() { return resolveAll(sql, bound); },
       };
       return stmt;
     },

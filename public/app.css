@@ -223,11 +223,13 @@ pre.code { background: var(--surface-2); border: 1px solid var(--line); border-r
    than the plain entry boxes: it is the focal hero of the lower section. */
 .wall-ticker-card {
   display: flex; gap: 0.85rem;
-  background: color-mix(in srgb, var(--tk-glow, var(--accent)) 4%, var(--surface));
-  border: 1px solid color-mix(in srgb, var(--tk-glow, var(--accent)) 22%, var(--line));
+  background: color-mix(in srgb, var(--tk-glow, var(--accent)) 7%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--tk-glow, var(--accent)) 45%, var(--line));
   border-radius: var(--radius);
   padding: 1.3rem 1.45rem;
-  box-shadow: var(--shadow), 0 10px 34px color-mix(in srgb, var(--tk-glow, var(--accent)) 18%, transparent);
+  box-shadow: var(--shadow),
+    0 6px 18px color-mix(in srgb, var(--tk-glow, var(--accent)) 25%, transparent),
+    0 14px 52px color-mix(in srgb, var(--tk-glow, var(--accent)) 42%, transparent);
   transition: background 0.4s ease, border-color 0.4s ease, box-shadow 0.4s ease;
   text-align: left;
   min-height: 10.5rem;
@@ -1148,6 +1150,17 @@ pre.copyable {
 /* No fade anywhere: the transition only holds the frame steady so the chrome
    never blinks; the incoming page replaces the old one in a single frame. */
 ::view-transition-old(*), ::view-transition-new(*), ::view-transition-group(*) { animation: none !important; }
+
+/* SPA cold-load: when the router mounts a profile/project the visitor has never
+   seen (no gzCache entry), the center column shows a single loading line while the
+   fetch is in flight. Center it in the column so a cold nav reads as intentional,
+   not as a stray line pinned to the top. Reuses the .gz-loading pulse. */
+.gz-center > #root > .gz-loading:only-child,
+.gz-center > #feed-view > #feed > .gz-loading:only-child {
+  display: block;
+  text-align: center;
+  margin-top: 3.5rem;
+}
 
 /* The wall is pinned to light; the theme toggle would lie there. */
 body.wall-open .theme-fab { display: none; }

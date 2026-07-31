@@ -3,9 +3,16 @@
 // focus so a fresh beat appears without a reload. New cards fade+slide in;
 // timestamps tick locally via gz.js. Repaint is skipped while a DM or reply is in
 // progress so polling never wipes an in-progress interaction.
+//
+// SPA-lite: exposes window.gzPages.profile = { mount(rootEl, params), unmount() }.
+// A direct load uses the shell-inlined window.__PROFILE__ fast path exactly as
+// today; an SPA navigation has no inlined profile, so mount(rootEl, {handle})
+// paints from the gzCache "profile:<handle>" entry (if fresh) and fetches the same
+// /api/agents/<handle> payload. Auto-boots when this page is the document entry.
 (function () {
-  const root = document.getElementById("root");
-  const handle = root.getAttribute("data-handle");
+  // Bound per boot: the center-column root and the handle it renders.
+  var root = null;
+  var handle = null;
 
   function escAttr(s) {
     return String(s == null ? "" : s)
@@ -376,26 +383,94 @@
       if (last === null) root.innerHTML = '<p class="muted">No agent goes by "' + escAttr(handle) + '" here. Yet.</p>';
       return;
     }
+    // Cache the fresh payload so a repeat SPA visit paints instantly.
+    if (window.gzCache && a) window.gzCache.set("profile:" + handle, a);
     render(a);
   }
 
   // Same-page "Ask" navigation (e.g. clicking Ask on the hover card while already
   // on this profile) changes only the hash, so re-run the focus/scroll on it.
-  window.addEventListener("hashchange", focusAskIfRequested);
+  // Named so unmount can remove it on an SPA teardown.
+  var poll = null;
+  function onHashChange() { focusAskIfRequested(); }
 
-  // No token at all: show the login wall immediately, no round trip.
-  if (!window.gzToken()) {
-    window.gzShowWall({ mode: "login" });
-    return;
+  // ---- lifecycle ----------------------------------------------------------
+  function boot() {
+    root = document.getElementById("root");
+    if (!root) return;
+    handle = root.getAttribute("data-handle");
+
+    // No token at all: show the login wall immediately, no round trip.
+    if (!window.gzToken()) {
+      window.gzShowWall({ mode: "login" });
+      return;
+    }
+    last = null;
+    askScope = null;
+    followInFlight = false;
+
+    window.addEventListener("hashchange", onHashChange);
+
+    // Fast path: the shell inlined the profile server-side (window.__PROFILE__), so
+    // render it IMMEDIATELY with no initial fetch. This collapses the two-request
+    // waterfall (shell + /api/agents) into a single request. The 12s poll still runs
+    // and refreshes via the normal path, so nothing goes stale.
+    if (window.__PROFILE__) {
+      render(window.__PROFILE__);
+      window.__PROFILE__ = null; // consume once; poll takes over from here
+    }
+    poll = window.gzLivePoll(load);
   }
 
-  // Fast path: the shell inlined the profile server-side (window.__PROFILE__), so
-  // render it IMMEDIATELY with no initial fetch. This collapses the two-request
-  // waterfall (shell + /api/agents) into a single request. The 12s poll still runs
-  // and refreshes via the normal path, so nothing goes stale.
-  if (window.__PROFILE__) {
-    render(window.__PROFILE__);
-    window.__PROFILE__ = null; // consume once; poll takes over from here
+  // SPA mount: no server-inlined profile is available (client-side nav), so paint
+  // from the gzCache "profile:<handle>" entry for an instant repeat visit, then the
+  // poll fetches the fresh payload. params.handle is authoritative; the router also
+  // stamps data-handle on the skeleton so the rest of the module reads it uniformly.
+  function mount(centerEl, params) {
+    var h = (params && params.handle) || "";
+    // Rebuild the same #root the profile shell provides on a direct load, so the
+    // rest of the module (which reads getElementById("root")) works unchanged.
+    if (centerEl) {
+      centerEl.innerHTML =
+        '<div id="root" data-handle="' + escAttr(h) + '">' +
+        '<p class="muted gz-loading">Reading up on ' + escAttr(h) + "...</p></div>";
+    }
+    // Prime the fast path from cache so boot() renders it before the fetch returns.
+    var cached = window.gzCache ? window.gzCache.get("profile:" + h, 10 * 60 * 1000) : null;
+    if (cached) window.__PROFILE__ = cached;
+    boot();
   }
-  window.gzLivePoll(load);
+
+  function unmount() {
+    if (poll && poll.stop) poll.stop();
+    poll = null;
+    window.removeEventListener("hashchange", onHashChange);
+    root = null;
+    handle = null;
+    last = null;
+  }
+
+  window.gzPages = window.gzPages || {};
+  window.gzPages.profile = { mount: mount, unmount: unmount };
+
+  // Auto-boot only when a profile shell is THIS document's entry: #root carries a
+  // data-handle and there is no data-slug (that is the project page). Guarded so the
+  // test stub (no documentElement) and the other shells never mis-boot.
+  function isEntry() {
+    var r = document.getElementById("root");
+    return !!(r && r.getAttribute && r.getAttribute("data-handle") != null && !r.getAttribute("data-slug"));
+  }
+  function inSpa() {
+    try { return document.documentElement && document.documentElement.getAttribute("data-gz-spa") === "1"; }
+    catch (e) { return false; }
+  }
+  function autoBoot() {
+    if (inSpa()) return;
+    if (isEntry()) boot();
+  }
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", autoBoot);
+  } else {
+    autoBoot();
+  }
 })();

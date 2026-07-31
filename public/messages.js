@@ -10,10 +10,16 @@
 // for the answer, then the real answer swaps in. 429 quota disables the input with a
 // quiet system line; a "N left today" hint appears only when remaining <= 3.
 //
+// SPA-lite: exposes window.gzPages.messages = { mount(rootEl), unmount() }. The hash
+// routing (list vs chat) stays inside this module. unmount() stops the list poll and
+// removes the hashchange + resize listeners this module installed. Auto-boots when
+// this page is the document entry, exactly as before.
+//
 // Dependency-free, vanilla, sylve-studio identity. Reuses window.gzAvatar (tweet.js),
 // window.gzFetch (auth.js), window.gzMarkdown (md.js), window.gzTime / gzLivePoll (gz.js).
 (function () {
-  var view = document.getElementById("messages-view");
+  // Resolved fresh on each boot: on an SPA mount the center column is a new node.
+  var view = null;
 
   function esc(s) {
     return String(s == null ? "" : s)
@@ -101,11 +107,24 @@
 
   var listPollTimer = null;
   function loadList() {
+    // ETag-aware: send If-None-Match when we have a stored etag. On 304 the list is
+    // unchanged, so skip the re-render and just refresh the cache freshness clock.
+    var etag = window.gzCache ? window.gzCache.getEtag("conversations") : null;
+    var opts = etag ? { headers: { "if-none-match": etag } } : undefined;
     window
-      .gzFetch("/api/conversations")
-      .then(function (r) { return r.json(); })
-      .then(function (data) {
-        if (window.gzCache) window.gzCache.set("conversations", data);
+      .gzFetch("/api/conversations", opts)
+      .then(function (r) {
+        if (r.status === 304) {
+          if (window.gzCache) window.gzCache.touch("conversations");
+          return { notModified: true };
+        }
+        var newEtag = r.headers.get ? r.headers.get("etag") : null;
+        return r.json().then(function (data) { return { data: data, etag: newEtag }; });
+      })
+      .then(function (res) {
+        if (!res || res.notModified) return; // 304: nothing to repaint
+        var data = res.data;
+        if (window.gzCache) window.gzCache.set("conversations", data, res.etag || undefined);
         if (parseHash()) return; // navigated into a chat mid-flight
         renderList(data.conversations || []);
       })
@@ -289,9 +308,10 @@
   }
 
   // Mobile keyboard show/hide resizes the viewport; stay pinned when at bottom.
-  window.addEventListener("resize", function () {
+  // Kept as a named handler so unmount can remove it (SPA teardown).
+  function onResize() {
     if (document.getElementById("msg-thread") && atPageBottom()) scrollThread();
-  });
+  }
 
   function setHint(text) {
     var hint = document.getElementById("msg-hint");
@@ -435,6 +455,7 @@
 
   // ---- top-level route switch ---------------------------------------------
   function route() {
+    if (!view) return;
     var target = parseHash();
     if (target) {
       renderChat(target.handle, target.slug);
@@ -444,12 +465,48 @@
     }
   }
 
-  window.addEventListener("hashchange", route);
-
-  // No token at all: show the login wall immediately, no round trip.
-  if (!window.gzToken()) {
-    window.gzShowWall({ mode: "login" });
-    return;
+  // ---- lifecycle ----------------------------------------------------------
+  function boot() {
+    view = document.getElementById("messages-view");
+    // No token at all: show the login wall immediately, no round trip.
+    if (!window.gzToken()) {
+      window.gzShowWall({ mode: "login" });
+      return;
+    }
+    listSig = null;
+    chatState = null;
+    window.addEventListener("hashchange", route);
+    window.addEventListener("resize", onResize);
+    route();
   }
-  route();
+
+  function mount(rootEl) {
+    if (rootEl) rootEl.innerHTML = '<div id="messages-view" hidden></div>';
+    boot();
+  }
+
+  function unmount() {
+    stopListPoll();
+    window.removeEventListener("hashchange", route);
+    window.removeEventListener("resize", onResize);
+    chatState = null;
+    listSig = null;
+    view = null;
+  }
+
+  window.gzPages = window.gzPages || {};
+  window.gzPages.messages = { mount: mount, unmount: unmount };
+
+  function isEntry() {
+    return !!document.getElementById("messages-view") && !document.getElementById("root");
+  }
+  function autoBoot() {
+    if (document.documentElement.getAttribute("data-gz-spa") === "1") return;
+    if (isEntry()) boot();
+  }
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", autoBoot);
+  } else {
+    autoBoot();
+  }
 })();

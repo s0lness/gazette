@@ -72,29 +72,39 @@
 
   // Live polling: refresh now, then every 12s while visible; also on tab focus
   // and on regaining visibility. Pause while hidden. fn must be idempotent and
-  // swallow its own fetch errors.
+  // swallow its own fetch errors. Returns a handle with .stop(): it clears the
+  // interval AND removes the focus/visibility listeners, so an SPA navigation can
+  // fully tear the poll down (no leaked timers, no ghost fetches on focus).
   function gzLivePoll(fn) {
     let timer = null;
     function start() {
       if (timer === null) timer = setInterval(fn, 12000);
     }
-    function stop() {
+    function stopTimer() {
       if (timer !== null) {
         clearInterval(timer);
         timer = null;
       }
     }
-    document.addEventListener("visibilitychange", function () {
+    function onVis() {
       if (document.hidden) {
-        stop();
+        stopTimer();
       } else {
         fn();
         start();
       }
-    });
+    }
+    document.addEventListener("visibilitychange", onVis);
     window.addEventListener("focus", fn);
     fn();
     if (!document.hidden) start();
+    return {
+      stop: function () {
+        stopTimer();
+        document.removeEventListener("visibilitychange", onVis);
+        window.removeEventListener("focus", fn);
+      },
+    };
   }
 
   // ---- copy buttons -------------------------------------------------------
@@ -203,15 +213,50 @@
         return null;
       }
     },
-    set: function (key, value) {
+    set: function (key, value, etag) {
       try {
-        localStorage.setItem(
-          GZ_CACHE_PREFIX + key,
-          JSON.stringify({ t: Date.now(), v: value })
-        );
+        // Preserve a previously stored etag when a caller sets a value without one
+        // (keeps the envelope backward compatible; older writers never pass etag).
+        var e = etag;
+        if (e == null) {
+          try {
+            var prevRaw = localStorage.getItem(GZ_CACHE_PREFIX + key);
+            if (prevRaw) {
+              var prev = JSON.parse(prevRaw);
+              if (prev && typeof prev.e === "string") e = prev.e;
+            }
+          } catch (e2) {}
+        }
+        var rec = { t: Date.now(), v: value };
+        if (typeof e === "string") rec.e = e;
+        localStorage.setItem(GZ_CACHE_PREFIX + key, JSON.stringify(rec));
       } catch (e) {
         // Quota or unavailable storage: caching is best-effort, ignore.
       }
+    },
+    // The last ETag stored alongside `key`, or null. Entries written before ETag
+    // support simply lack `.e` and this returns null (backward compatible).
+    getEtag: function (key) {
+      try {
+        var raw = localStorage.getItem(GZ_CACHE_PREFIX + key);
+        if (!raw) return null;
+        var rec = JSON.parse(raw);
+        return rec && typeof rec.e === "string" ? rec.e : null;
+      } catch (e) {
+        return null;
+      }
+    },
+    // Refresh only the freshness timestamp of an existing entry (used on a 304, where
+    // the payload is unchanged but we want to reset the max-age clock). No-op if absent.
+    touch: function (key) {
+      try {
+        var raw = localStorage.getItem(GZ_CACHE_PREFIX + key);
+        if (!raw) return;
+        var rec = JSON.parse(raw);
+        if (!rec) return;
+        rec.t = Date.now();
+        localStorage.setItem(GZ_CACHE_PREFIX + key, JSON.stringify(rec));
+      } catch (e) {}
     },
     clear: function () {
       try {
@@ -225,6 +270,88 @@
     },
   };
 
+  // ---- service worker registration ---------------------------------------
+  // Register /sw.js for instant cold start + offline reads. Feature-checked and
+  // skipped on /admin (Cloudflare Access pages must never be SW-controlled). Every
+  // step is guarded so a stubbed window (SSR/tests) never throws.
+  function gzRegisterSW() {
+    try {
+      if (!("serviceWorker" in navigator)) return;
+      if (!window.isSecureContext) return;
+      if (String(location.pathname).indexOf("/admin") === 0) return;
+      navigator.serviceWorker.register("/sw.js?v=45").catch(function () {});
+    } catch (e) {}
+  }
+
+  // Ask the active SW to drop the per-user API + shell caches (called from gzLogout in
+  // auth.js so a logged-out user never sees stale private data). Best-effort.
+  function gzSwClearApi() {
+    try {
+      if (!("serviceWorker" in navigator)) return;
+      var sw = navigator.serviceWorker;
+      if (sw.controller) {
+        sw.controller.postMessage({ type: "gz-clear-api" });
+        return;
+      }
+      // No controller yet (first load): wait for the registration to be ready.
+      if (sw.ready && sw.ready.then) {
+        sw.ready.then(function (reg) {
+          var target = reg.active || (navigator.serviceWorker && navigator.serviceWorker.controller);
+          if (target) target.postMessage({ type: "gz-clear-api" });
+        }).catch(function () {});
+      }
+    } catch (e) {}
+  }
+
+  // ---- one-shot boot seed -------------------------------------------------
+  // On a logged-in SPA start, fire ONE /api/boot fetch and warm every page's gzCache
+  // (feed / conversations / saved) from a single round-trip, so an internal navigation
+  // paints instantly before its own fetch returns. Fire-and-forget: it never blocks
+  // first paint. Guarded to run at most once per document load. If the endpoint 404s
+  // (backend not deployed) or errors, it fails silently.
+  var gzBooted = false;
+  function gzBootSeed() {
+    if (gzBooted) return;
+    gzBooted = true;
+    var tok = "";
+    try { tok = (window.gzToken && window.gzToken()) || ""; } catch (e) {}
+    if (!tok) return;
+    var headers = { "x-gz-token": tok };
+    try {
+      fetch("/api/boot", { headers: headers, credentials: "same-origin" })
+        .then(function (r) {
+          if (!r || r.status !== 200) return null; // 404/401/403/etc: silent no-op
+          return r.json().catch(function () { return null; });
+        })
+        .then(function (body) {
+          if (!body || !body.ok) return;
+          try {
+            if (body.feed) gzCache.set("feed", body.feed);
+            if (body.conversations) gzCache.set("conversations", body.conversations);
+            if (body.saved) gzCache.set("saved", body.saved);
+            // body.agents is available but the rail keeps no cache, so nothing to seed.
+          } catch (e) {}
+        })
+        .catch(function () {});
+    } catch (e) {}
+  }
+
+  // Kick both after the current page has had a chance to mount. A short defer keeps
+  // the boot fetch off the critical first-paint path.
+  function gzAfterMount(fn) {
+    try {
+      if (typeof requestAnimationFrame === "function") {
+        requestAnimationFrame(function () { setTimeout(fn, 0); });
+      } else {
+        setTimeout(fn, 0);
+      }
+    } catch (e) { try { fn(); } catch (e2) {} }
+  }
+
+  gzRegisterSW();
+  gzAfterMount(gzBootSeed);
+
+  window.gzSwClearApi = gzSwClearApi;
   window.gzCache = gzCache;
   window.gzRelTime = gzRelTime;
   window.gzTime = gzTime;

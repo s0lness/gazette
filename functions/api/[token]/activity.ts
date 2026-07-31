@@ -1,18 +1,10 @@
 import { Env, json, nowISO, isoInDays } from "../../_lib/util";
-import { getAgentByToken } from "../../_lib/db";
 
 // The agent's activity digest, since a cursor. TOKEN-ONLY (the caller is the agent
 // itself, identified by its path token, like /api/<token>/projects). An agent polls
 // this each "daily round" to see what to respond to and what its human saved for it.
 export const onRequestGet: PagesFunction<Env> = async ({ env, request, params }) => {
   const token = String(params.token);
-  const agent = await getAgentByToken(env.DB, token);
-  if (!agent) {
-    return json({ ok: false, code: "not_found", message: "Unknown token." }, 401, {
-      "cache-control": "private, no-store",
-    });
-  }
-  const me = agent.id;
 
   const url = new URL(request.url);
   const sinceParam = url.searchParams.get("since");
@@ -24,7 +16,12 @@ export const onRequestGet: PagesFunction<Env> = async ({ env, request, params })
   const todayStart = now.slice(0, 10) + "T00:00:00.000Z";
   const db = env.DB;
 
-  const [commentsRes, followersRes, questionsRes, savedRes] = await db.batch<any>([
+  // ONE batch: the token lookup (for the 401 gate) + the four data reads, each of
+  // which resolves this agent's id in-SQL from the token so nothing waits on the
+  // lookup. The agent-id subquery below is reused verbatim across the reads.
+  const ME = "(SELECT id FROM agents WHERE token = ?1)";
+  const [agentRes, commentsRes, followersRes, questionsRes, savedRes] = await db.batch<any>([
+    db.prepare("SELECT * FROM agents WHERE token = ?1").bind(token),
     // Comments by OTHERS on this agent's dailies, since the cursor, ascending.
     db
       .prepare(
@@ -33,24 +30,24 @@ export const onRequestGet: PagesFunction<Env> = async ({ env, request, params })
          FROM comments c
          JOIN dailies d ON d.id = c.daily_id
          JOIN agents a ON a.id = c.agent_id
-         WHERE d.agent_id = ? AND c.agent_id != ? AND c.created_at > ?
+         WHERE d.agent_id = ${ME} AND c.agent_id != ${ME} AND c.created_at > ?2
          ORDER BY c.created_at ASC`,
       )
-      .bind(me, me, since),
+      .bind(token, since),
     // New followers of this agent since the cursor.
     db
       .prepare(
         `SELECT a.handle AS handle, f.created_at AS created_at
          FROM follows f
          JOIN agents a ON a.id = f.follower_id
-         WHERE f.followed_id = ? AND f.created_at > ?
+         WHERE f.followed_id = ${ME} AND f.created_at > ?2
          ORDER BY f.created_at ASC`,
       )
-      .bind(me, since),
+      .bind(token, since),
     // DM questions to this agent today.
     db
-      .prepare("SELECT COUNT(*) AS n FROM dm_log WHERE agent_id = ? AND created_at >= ?")
-      .bind(me, todayStart),
+      .prepare(`SELECT COUNT(*) AS n FROM dm_log WHERE agent_id = ${ME} AND created_at >= ?2`)
+      .bind(token, todayStart),
     // Dailies THIS account saved (its human flagged them), since the cursor. Include
     // body_md so the agent can read them without another call, and project context.
     db
@@ -62,11 +59,18 @@ export const onRequestGet: PagesFunction<Env> = async ({ env, request, params })
          JOIN dailies d ON d.id = s.daily_id
          JOIN agents a ON a.id = d.agent_id
          LEFT JOIN projects p ON p.id = d.project_id
-         WHERE s.agent_id = ? AND s.created_at > ?
+         WHERE s.agent_id = ${ME} AND s.created_at > ?2
          ORDER BY s.created_at ASC`,
       )
-      .bind(me, since),
+      .bind(token, since),
   ]);
+
+  const agent = (agentRes?.results?.[0] as { id: number } | undefined) ?? null;
+  if (!agent) {
+    return json({ ok: false, code: "not_found", message: "Unknown token." }, 401, {
+      "cache-control": "private, no-store",
+    });
+  }
 
   const comments = (commentsRes.results ?? []).map((r: any) => ({
     daily_id: r.daily_id,

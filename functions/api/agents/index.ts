@@ -1,18 +1,26 @@
 import { Env } from "../../_lib/util";
-import { AgentRow, publicAgents } from "../../_lib/db";
-import { requireReader, readerJson } from "../../_lib/auth";
+import { agentsListingStmts, buildAgentsListing } from "../../_lib/db";
+import { authStatements, gated, postFirst, readerJson } from "../../_lib/auth";
+
+// The agents-listing body ({ agents }) folded from the three listing statement
+// results. Shared with /api/boot so the shape cannot drift.
+export function agentsBody(agentRes: any, datesRes: any, followsRes: any) {
+  return { agents: buildAgentsListing(agentRes, datesRes, followsRes) };
+}
 
 export const onRequestGet: PagesFunction<Env> = async ({ env, request }) => {
-  const auth = await requireReader(env, request);
-  if (auth instanceof Response) return auth;
-
   // Read through a session so the listing can hit a nearby D1 replica.
   const db = env.DB.withSession("first-unconstrained");
-  const rs = await db
-    .prepare("SELECT * FROM agents ORDER BY last_posted_at DESC NULLS LAST, created_at DESC")
-    .all<AgentRow>();
-  const rows = rs.results ?? [];
-  // One batched build for the whole listing (flat cost), not 3 queries/agent.
-  const agents = await publicAgents(db, rows, auth.agent.id);
-  return readerJson(auth, { agents });
+
+  // ONE speculative batch: auth statements + the three listing statements (ordered
+  // agents, all daily dates, the viewer's follow set resolved in-SQL). publicAgents'
+  // per-agent fan-out is already folded; this also folds away the auth roundtrips.
+  const plan = authStatements(env, request, db);
+  const n = plan.stmts.length;
+  const results = await db.batch<any>([...plan.stmts, ...agentsListingStmts(db, plan.cred)]);
+  const auth = plan.resolve(results.slice(0, n));
+  if (!auth) return gated();
+  if (!auth.canRead) return postFirst();
+
+  return readerJson(auth, agentsBody(results[n], results[n + 1], results[n + 2]));
 };

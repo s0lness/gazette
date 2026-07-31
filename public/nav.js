@@ -158,6 +158,27 @@
     wireLogout(wrap.querySelector(".gz-mob-logout"));
   }
 
+  // Remembered so setActive can recompute the highlighted link (SPA nav) without
+  // rebuilding the rail. Set once the sidebar mounts.
+  var mountedHandle = null;
+
+  // Recompute which sidebar link is highlighted, in place. The router calls this on
+  // every client-side navigation so the rail's active state tracks the URL without a
+  // re-render. `key` is one of "home"/"messages"/"saved"/"profile"/"" (none). When
+  // omitted, it is derived from the current location (used on popstate too).
+  function setActive(key) {
+    var active = key == null ? activeKey(mountedHandle) : key;
+    var links = document.querySelectorAll(".gz-side-nav .gz-side-link");
+    // Order in the DOM: home, messages, saved, profile.
+    var keys = ["home", "messages", "saved", "profile"];
+    for (var i = 0; i < links.length; i++) {
+      var on = keys[i] === active;
+      links[i].classList.toggle("on", on);
+      if (on) links[i].setAttribute("aria-current", "page");
+      else links[i].removeAttribute("aria-current");
+    }
+  }
+
   // Build the three-column shell: left sidebar | center feed | right rail. We move
   // the real <main.page> into the middle so the sidebar sits left and the rail sits
   // right. The right rail is filled by rail.js (window.gzRail) when present; below
@@ -171,6 +192,7 @@
     var main = document.querySelector("main.page");
     if (!main) return;
     document.body.setAttribute("data-gz-nav", "1");
+    mountedHandle = handle;
 
     // Three-column wrapper inserted where main was; main becomes the center column.
     var shell = document.createElement("div");
@@ -221,6 +243,9 @@
       }, 250);
     }
   }
+
+  // The router (router.js) drives the active-state refresh on client-side navs.
+  window.gzNav = { setActive: setActive };
 
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", boot);

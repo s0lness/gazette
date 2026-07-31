@@ -470,6 +470,128 @@ export function parseCommentCounts(
   return out;
 }
 
+// ---- SQL-folded feed / saved cards ---------------------------------------
+// The feed and Saved lists render enrichDailies cards. Instead of a base SELECT
+// followed by enrichDailies' extra like/comment batch, we fold the three enrich
+// values (like count, viewer-liked, comment count) into the base row as correlated
+// subqueries so ONE statement produces the finished card. Response shape is
+// byte-identical to enrichDailies + the feed/saved display_name/saved_at extras.
+//
+// Crucially the viewer id is NOT known until auth resolves, yet we want the card
+// statement to live in the SAME speculative batch as auth. We solve that the same
+// way the auth counts do: the viewer id is resolved INSIDE the SQL from the raw
+// credential (token OR unexpired session), bound as ?1=token, ?2=sid, ?3=nowISO.
+// So every "viewer id" reference is the scalar subquery VIEWER_ID below.
+
+// Scalar subquery yielding the requesting member's agent id from either credential
+// (token wins; the session row must be unexpired). Uses ?1=token, ?2=sid, ?3=now.
+const VIEWER_ID =
+  "(SELECT id FROM agents WHERE token = ?1 UNION ALL SELECT agent_id FROM sessions WHERE id = ?2 AND expires_at > ?3 LIMIT 1)";
+
+// The card projection shared by feed and saved: base daily columns, agent columns,
+// LEFT JOIN project context, and the three folded enrich values. The viewer id used
+// for "viewer-liked" is the VIEWER_ID subquery (credential-resolved), so the whole
+// statement is self-contained and batchable alongside auth.
+const CARD_COLUMNS = `d.id, d.agent_id, d.date, d.headline, d.body_md, d.image_id, d.created_at, d.project_id,
+        a.handle, a.display_name, a.last_posted_at,
+        p.name AS project_name, p.slug AS project_slug, p.descriptor AS project_descriptor,
+        (SELECT COUNT(*) FROM reactions r WHERE r.kind = 'like' AND r.daily_id = d.id) AS like_count,
+        (SELECT COUNT(*) FROM reactions r WHERE r.kind = 'like' AND r.daily_id = d.id AND r.agent_id = ${VIEWER_ID}) AS viewer_liked,
+        (SELECT COUNT(*) FROM comments c WHERE c.daily_id = d.id) AS comment_count`;
+
+// A card row as produced by CARD_COLUMNS.
+export type FoldedCardRow = DailyRow & {
+  handle: string;
+  display_name: string | null;
+  last_posted_at: string | null;
+  project_name: string | null;
+  project_slug: string | null;
+  project_descriptor: string | null;
+  like_count: number;
+  viewer_liked: number;
+  comment_count: number;
+  saved_at?: string;
+};
+
+// The credential bundle threaded into the folded statements: raw token, session id,
+// and an ISO "now" for the session-expiry check. Built once per request.
+export interface ViewerCred {
+  token: string;
+  sid: string;
+  now: string;
+}
+
+// The feed statement (SQL-folded, credential-resolved viewer). `following` unions
+// agent-follows and project-follows for the viewer; otherwise the global newest-60
+// stream. Self-contained: bind only the credential. Result rows match FoldedCardRow.
+export function feedStmt(db: D1Reader, cred: ViewerCred, following: boolean): D1PreparedStatement {
+  const b = (s: D1PreparedStatement) => s.bind(cred.token, cred.sid, cred.now);
+  if (following) {
+    return b(
+      db.prepare(
+        `SELECT ${CARD_COLUMNS}
+         FROM dailies d
+         JOIN agents a ON a.id = d.agent_id
+         LEFT JOIN projects p ON p.id = d.project_id
+         WHERE EXISTS (SELECT 1 FROM follows f WHERE f.followed_id = d.agent_id AND f.follower_id = ${VIEWER_ID})
+            OR EXISTS (SELECT 1 FROM project_follows pf WHERE pf.project_id = d.project_id AND pf.follower_id = ${VIEWER_ID})
+         ORDER BY d.created_at DESC
+         LIMIT 60`,
+      ),
+    );
+  }
+  return b(
+    db.prepare(
+      `SELECT ${CARD_COLUMNS}
+       FROM dailies d JOIN agents a ON a.id = d.agent_id
+       LEFT JOIN projects p ON p.id = d.project_id
+       ORDER BY d.created_at DESC
+       LIMIT 60`,
+    ),
+  );
+}
+
+// The saved-list statement (SQL-folded, credential-resolved viewer). Same card
+// columns plus saved_at, filtered to the viewer's saves and ordered by save time.
+export function savedStmt(db: D1Reader, cred: ViewerCred): D1PreparedStatement {
+  return db
+    .prepare(
+      `SELECT ${CARD_COLUMNS}, s.created_at AS saved_at
+       FROM saved_items s
+       JOIN dailies d ON d.id = s.daily_id
+       JOIN agents a ON a.id = d.agent_id
+       LEFT JOIN projects p ON p.id = d.project_id
+       WHERE s.agent_id = ${VIEWER_ID}
+       ORDER BY s.created_at DESC
+       LIMIT 100`,
+    )
+    .bind(cred.token, cred.sid, cred.now);
+}
+
+// Fold a CARD_COLUMNS result row into the exact enriched card shape (feed/saved).
+// Byte-identical to enrichDailies' output plus display_name (and the caller keeps
+// ids/saved_at separately as before).
+export function cardFromFoldedRow(r: FoldedCardRow) {
+  return {
+    id: r.id,
+    handle: r.handle,
+    status: deriveStatus(r.last_posted_at),
+    date: r.date,
+    headline: displayHeadline(r.headline, r.body_md),
+    body_md: r.body_md,
+    image_id: r.image_id,
+    created_at: r.created_at,
+    likes: r.like_count ?? 0,
+    liked: (r.viewer_liked ?? 0) > 0,
+    comment_count: r.comment_count ?? 0,
+    project:
+      r.project_id == null || r.project_name == null || r.project_slug == null
+        ? null
+        : { name: r.project_name, slug: r.project_slug, descriptor: r.project_descriptor ?? null },
+    display_name: r.display_name ?? null,
+  };
+}
+
 export async function getAgentByToken(db: D1Database, token: string): Promise<AgentRow | null> {
   return db.prepare("SELECT * FROM agents WHERE token = ?").bind(token).first<AgentRow>();
 }
@@ -627,6 +749,58 @@ export async function publicAgent(db: D1Database, a: AgentRow, viewerId?: number
   };
 }
 
+// ---- SQL-folded agents listing -------------------------------------------
+// The /api/agents listing renders publicAgents for EVERY agent. Instead of the
+// listing read followed by a separate publicAgents batch, we run all three reads in
+// ONE batch (alongside auth): the ordered agent rows, every agent's daily dates
+// (whole table, since the listing is the whole table), and the viewer's follow set.
+// The viewer follow set is resolved from the credential in-SQL so it batches without
+// a known id. agentsListingStmts returns the three statements; buildAgentsListing
+// folds their results into the same shape publicAgents produced.
+
+// The three listing statements, self-contained (viewer resolved from credential).
+export function agentsListingStmts(db: D1Reader, cred: ViewerCred): D1PreparedStatement[] {
+  return [
+    db.prepare("SELECT * FROM agents ORDER BY last_posted_at DESC NULLS LAST, created_at DESC"),
+    db.prepare("SELECT agent_id, date FROM dailies"),
+    db
+      .prepare(`SELECT followed_id FROM follows WHERE follower_id = ${VIEWER_ID}`)
+      .bind(cred.token, cred.sid, cred.now),
+  ];
+}
+
+// Fold the three listing results into the publicAgents shape (each row carries
+// `following` for the viewer). Byte-identical to publicAgents(rows, viewerId).
+export function buildAgentsListing(
+  agentRes: any,
+  datesRes: any,
+  followsRes: any,
+) {
+  const rows = (agentRes?.results ?? []) as AgentRow[];
+  const datesByAgent = new Map<number, Set<string>>();
+  for (const a of rows) datesByAgent.set(a.id, new Set());
+  for (const r of (datesRes?.results ?? []) as { agent_id: number; date: string }[]) {
+    datesByAgent.get(r.agent_id)?.add(r.date);
+  }
+  const followed = new Set<number>();
+  for (const r of (followsRes?.results ?? []) as { followed_id: number }[]) followed.add(r.followed_id);
+
+  const today = todayUTC();
+  return rows.map((a) => {
+    const dates = datesByAgent.get(a.id) ?? new Set<string>();
+    return {
+      handle: a.handle,
+      display_name: a.display_name,
+      bio: a.bio,
+      status: deriveStatus(a.last_posted_at),
+      streak: streakFromDates(dates, today),
+      last_posted_at: a.last_posted_at,
+      dailies_count: dates.size,
+      following: followed.has(a.id),
+    };
+  });
+}
+
 // Batched listing: build the public shape for MANY agents in ONE round-trip
 // instead of publicAgent's 3-queries-per-agent fan-out (streak + count + follow).
 // - one grouped read of every listed agent's daily dates -> streak AND count
@@ -729,6 +903,157 @@ export async function enrichDailies(
     comment_count: counts.get(r.id) ?? 0,
     project: projectContext(r),
   }));
+}
+
+// Profile dailies statement (SQL-folded enrich): one statement per agent whose rows
+// already carry like_count / viewer_liked / comment_count, so no separate enrich
+// batch. Same columns/order as the profile dailies read plus the folded counts.
+// The card mapper (cardForProfile) drops display_name (profile cards never had it).
+export function profileDailiesStmt(db: D1Reader, agentId: number, cred: ViewerCred): D1PreparedStatement {
+  return db
+    .prepare(
+      `SELECT ${CARD_COLUMNS}
+       FROM dailies d
+       JOIN agents a ON a.id = d.agent_id
+       LEFT JOIN projects p ON p.id = d.project_id
+       WHERE d.agent_id = ?4
+       ORDER BY d.date DESC, d.created_at DESC`,
+    )
+    .bind(cred.token, cred.sid, cred.now, agentId);
+}
+
+// Map a folded card row into the profile card shape: identical to enrichDailies'
+// output for profile rows (no display_name; status is undefined -> omitted from JSON,
+// exactly as before, because profileByHandle never set a status on its rows).
+export function cardForProfile(r: FoldedCardRow) {
+  return {
+    id: r.id,
+    handle: r.handle,
+    status: undefined as string | undefined,
+    date: r.date,
+    headline: displayHeadline(r.headline, r.body_md),
+    body_md: r.body_md,
+    image_id: r.image_id,
+    created_at: r.created_at,
+    likes: r.like_count ?? 0,
+    liked: (r.viewer_liked ?? 0) > 0,
+    comment_count: r.comment_count ?? 0,
+    project:
+      r.project_id == null || r.project_name == null || r.project_slug == null
+        ? null
+        : { name: r.project_name, slug: r.project_slug, descriptor: r.project_descriptor ?? null },
+  };
+}
+
+// Assemble the full profile payload from an already-resolved owning agent + the
+// results of ONE folded batch. The batch (built by the caller) is, in order:
+//   [0] profileDailiesStmt(agent)          -> dailies with folded enrich counts
+//   [1] COUNT followers  [2] COUNT following  [3] viewer-follows-owner (1 row/none)
+//   [4] projects rows (projectsForAgent's first read)
+//   [5] projected dailies rollup           [6] project follower counts
+// Shape is byte-identical to profileByHandle's return.
+export function assembleProfile(
+  agent: AgentRow,
+  viewerId: number,
+  res: any[],
+) {
+  const dailyRows = (res[0]?.results ?? []) as FoldedCardRow[];
+  const dates = new Set(dailyRows.map((d) => d.date));
+  const profile = {
+    handle: agent.handle,
+    display_name: agent.display_name,
+    bio: agent.bio,
+    status: deriveStatus(agent.last_posted_at),
+    streak: streakFromDates(dates, todayUTC()),
+    last_posted_at: agent.last_posted_at,
+    dailies_count: dailyRows.length,
+  };
+  const follow = {
+    followers_count: (res[1]?.results?.[0]?.n as number) ?? 0,
+    following_count: (res[2]?.results?.[0]?.n as number) ?? 0,
+    following: (res[3]?.results?.length ?? 0) > 0,
+  };
+  const dailies = dailyRows.map((r) => cardForProfile(r));
+  const projects = assembleProjects(agent.id, res[4], res[5], res[6]);
+  return { ...profile, ...follow, is_self: agent.id === viewerId, projects, dailies };
+}
+
+// The projects statements for an agent (projectsForAgent, split for batching). The
+// caller runs these in the SAME batch as the profile reads. Returns [] statements
+// unusable standalone; pair with assembleProjects.
+export function projectsStmts(db: D1Reader, agentId: number): D1PreparedStatement[] {
+  return [
+    db
+      .prepare(
+        "SELECT id, agent_id, name, slug, descriptor, repo_url, url, created_at FROM projects WHERE agent_id = ? ORDER BY created_at ASC, id ASC",
+      )
+      .bind(agentId),
+    db
+      .prepare(
+        "SELECT project_id, headline, body_md, created_at FROM dailies WHERE agent_id = ? AND project_id IS NOT NULL ORDER BY created_at DESC",
+      )
+      .bind(agentId),
+    db
+      .prepare(
+        "SELECT project_id, COUNT(*) AS n FROM project_follows WHERE project_id IN (SELECT id FROM projects WHERE agent_id = ?) GROUP BY project_id",
+      )
+      .bind(agentId),
+  ];
+}
+
+// Fold the three project reads into ProjectView[] (mirrors projectsForAgent exactly).
+export function assembleProjects(
+  _agentId: number,
+  projRes: any,
+  dRes: any,
+  fRes: any,
+): ProjectView[] {
+  const projects = (projRes?.results ?? []) as ProjectRow[];
+  if (projects.length === 0) return [];
+  const rollup = new Map<number, { count: number; last_at: string | null; last_headline: string | null }>();
+  for (const p of projects) rollup.set(p.id, { count: 0, last_at: null, last_headline: null });
+  for (const r of (dRes?.results ?? []) as { project_id: number; headline: string | null; body_md: string | null; created_at: string }[]) {
+    const e = rollup.get(r.project_id);
+    if (!e) continue;
+    e.count += 1;
+    if (e.last_at === null) {
+      e.last_at = r.created_at;
+      e.last_headline = displayHeadline(r.headline, r.body_md);
+    }
+  }
+  const followers = new Map<number, number>();
+  for (const r of (fRes?.results ?? []) as { project_id: number; n: number }[]) {
+    followers.set(r.project_id, r.n);
+  }
+  return projects.map((p) => {
+    const e = rollup.get(p.id)!;
+    return {
+      id: p.id,
+      name: p.name,
+      slug: p.slug,
+      descriptor: p.descriptor,
+      repo_url: p.repo_url ?? null,
+      url: p.url ?? null,
+      post_count: e.count,
+      followers_count: followers.get(p.id) ?? 0,
+      last_post_at: e.last_at,
+      last_headline: e.last_headline,
+    };
+  });
+}
+
+// The follow statements + profile dailies for an agent, self-contained. Combined with
+// projectsStmts this is the whole profile in ONE batch (after agent-by-handle).
+export function profileReadStmts(db: D1Reader, agent: AgentRow, cred: ViewerCred): D1PreparedStatement[] {
+  return [
+    profileDailiesStmt(db, agent.id, cred),
+    db.prepare("SELECT COUNT(*) AS n FROM follows WHERE followed_id = ?").bind(agent.id),
+    db.prepare("SELECT COUNT(*) AS n FROM follows WHERE follower_id = ?").bind(agent.id),
+    db
+      .prepare(`SELECT 1 FROM follows WHERE follower_id = ${VIEWER_ID} AND followed_id = ?4`)
+      .bind(cred.token, cred.sid, cred.now, agent.id),
+    ...projectsStmts(db, agent.id),
+  ];
 }
 
 // Full profile payload (public agent + its dailies as tweet cards). memberId is the

@@ -13,12 +13,16 @@ function makeDB(fx: {
   questionsToday?: number;
   saved?: any[];
 }) {
+  // The agent id is now resolved in-SQL via `(SELECT id FROM agents WHERE token = ?1)`
+  // embedded in the data reads, so the data-read branches must be matched BEFORE the
+  // bare agent-lookup branch (which would otherwise hijack every statement).
   function resolveAll(sql: string, bound: unknown[]): { results: any[] } {
-    if (/FROM agents WHERE token/.test(sql)) return { results: bound[0] === AGENT.token ? [AGENT] : [] };
     if (/FROM comments c\s+JOIN dailies/.test(sql)) return { results: fx.comments ?? [] };
     if (/FROM follows f\s+JOIN agents/.test(sql)) return { results: fx.followers ?? [] };
     if (/COUNT\(\*\) AS n FROM dm_log/.test(sql)) return { results: [{ n: fx.questionsToday ?? 0 }] };
     if (/FROM saved_items s\s+JOIN dailies/.test(sql)) return { results: fx.saved ?? [] };
+    // The standalone token lookup (first statement in the batch, for the 401 gate).
+    if (/^SELECT \* FROM agents WHERE token/.test(sql)) return { results: bound[0] === AGENT.token ? [AGENT] : [] };
     return { results: [] };
   }
   const DB: any = {

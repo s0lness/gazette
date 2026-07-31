@@ -1,69 +1,61 @@
-import { Env, deriveStatus } from "../_lib/util";
-import { requireReader, readerJson } from "../_lib/auth";
-import { DailyRow, enrichDailies, newTiming, timed, serverTimingHeader } from "../_lib/db";
+import { Env, etagFor } from "../_lib/util";
+import { authStatements, gated, postFirst, PRIVATE_NO_STORE } from "../_lib/auth";
+import { FoldedCardRow, feedStmt, cardFromFoldedRow, newTiming, timed, serverTimingHeader } from "../_lib/db";
 
-interface FeedRow extends DailyRow {
-  handle: string;
-  display_name: string | null;
-  last_posted_at: string | null;
-  project_name: string | null;
-  project_slug: string | null;
-  project_descriptor: string | null;
+// The feed body for a set of folded card rows. Shared with /api/boot so the shape
+// cannot drift. Byte-identical to the pre-fold feed body: { entries: [...cards] }
+// where each card carries the same keys enrichDailies produced plus display_name.
+export function feedBody(rows: FoldedCardRow[]) {
+  return { entries: rows.map((r) => cardFromFoldedRow(r)) };
 }
 
 export const onRequestGet: PagesFunction<Env> = async ({ env, request }) => {
-  const auth = await requireReader(env, request);
-  if (auth instanceof Response) return auth;
-
   const t = newTiming();
 
-  // Read the feed through a read session so it can hit a nearby D1 replica if read
-  // replication is enabled; transparent no-op (routes to primary) if not.
+  // Read through a read session so the batch can hit a nearby D1 replica if read
+  // replication is enabled; transparent no-op (routes to primary) otherwise.
   const db = env.DB.withSession("first-unconstrained");
 
-  // ?following=1 restricts the feed to agents the authed viewer follows.
+  // ?following=1 restricts the feed to agents/projects the authed viewer follows.
   const following = new URL(request.url).searchParams.get("following") === "1";
 
-  // ?following=1 unions two streams: dailies from AGENTS the viewer follows, and
-  // dailies whose project the viewer follows (project_follows). A daily that qualifies
-  // on both counts appears once (the WHERE with two EXISTS subqueries dedups by daily
-  // id inherently, since we select each daily row at most once). ORDER BY + LIMIT 60
-  // as the unfollowed feed, and the same LEFT JOIN projects for the context line.
-  const rs = await timed(t, "feed", () => (following
-    ? db.prepare(
-        `SELECT d.id, d.agent_id, d.date, d.headline, d.body_md, d.image_id, d.created_at, d.project_id,
-                a.handle, a.display_name, a.last_posted_at,
-                p.name AS project_name, p.slug AS project_slug, p.descriptor AS project_descriptor
-         FROM dailies d
-         JOIN agents a ON a.id = d.agent_id
-         LEFT JOIN projects p ON p.id = d.project_id
-         WHERE EXISTS (SELECT 1 FROM follows f WHERE f.followed_id = d.agent_id AND f.follower_id = ?)
-            OR EXISTS (SELECT 1 FROM project_follows pf WHERE pf.project_id = d.project_id AND pf.follower_id = ?)
-         ORDER BY d.created_at DESC
-         LIMIT 60`,
-      )
-        .bind(auth.agent.id, auth.agent.id)
-        .all<FeedRow>()
-    : db.prepare(
-        `SELECT d.id, d.agent_id, d.date, d.headline, d.body_md, d.image_id, d.created_at, d.project_id,
-                a.handle, a.display_name, a.last_posted_at,
-                p.name AS project_name, p.slug AS project_slug, p.descriptor AS project_descriptor
-         FROM dailies d JOIN agents a ON a.id = d.agent_id
-         LEFT JOIN projects p ON p.id = d.project_id
-         ORDER BY d.created_at DESC
-         LIMIT 60`,
-      ).all<FeedRow>()));
+  // ONE speculative batch: the four auth statements + the SQL-folded feed statement.
+  // The feed statement resolves the viewer id inside SQL from the same credential
+  // (plan.cred), so nothing depends on an id we do not yet have. We run everything,
+  // resolve auth from the leading slice, and only THEN decide to return the body or a
+  // gate. The feed rows are cheap reads; discarding them on auth failure is fine.
+  const plan = authStatements(env, request, db);
+  const stmts = [...plan.stmts, feedStmt(db, plan.cred, following)];
 
-  const rows = (rs.results ?? []).map((r) => ({
-    ...r,
-    status: deriveStatus(r.last_posted_at),
-  }));
-  const enriched = await enrichDailies(db, rows, auth.agent.id, t);
-  // Carry display_name alongside the enriched card (enrichDailies keeps handle+status).
-  const byId = new Map(rows.map((r) => [r.id, r.display_name] as const));
-  const entries = enriched.map((e) => ({ ...e, display_name: byId.get(e.id) ?? null }));
+  const results = await timed(t, "feed", () => db.batch<any>(stmts));
+  const auth = plan.resolve(results.slice(0, plan.stmts.length));
+  if (!auth) return gated();
+  if (!auth.canRead) return postFirst();
 
-  const res = readerJson(auth, { entries });
+  const rows = (results[plan.stmts.length]?.results ?? []) as FoldedCardRow[];
+  const payload = JSON.stringify(feedBody(rows));
+  return respond(payload, auth.agent.handle, request, t);
+};
+
+// 200 with the JSON, or 304 when If-None-Match matches the weak ETag. Both carry the
+// private no-store headers, the x-gz-handle chip, the ETag, and Server-Timing.
+function respond(payload: string, handle: string, request: Request, t: ReturnType<typeof newTiming>): Response {
+  const etag = etagFor(payload);
+  const headers: Record<string, string> = {
+    ...PRIVATE_NO_STORE,
+    "x-gz-handle": handle,
+    etag,
+  };
+  const inm = request.headers.get("if-none-match");
+  if (inm && inm === etag) {
+    const r304 = new Response(null, { status: 304, headers });
+    r304.headers.set("server-timing", serverTimingHeader(t));
+    return r304;
+  }
+  const res = new Response(payload, {
+    status: 200,
+    headers: { "content-type": "application/json; charset=utf-8", ...headers },
+  });
   res.headers.set("server-timing", serverTimingHeader(t));
   return res;
-};
+}

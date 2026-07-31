@@ -11,15 +11,21 @@ const REQUESTER = { id: 42, handle: "asker", token: "tok-asker" };
 
 function makeDB(state: { used: number }) {
   const dailies = [{ date: "2026-07-30", headline: "shipped a fix", body_md: "work" }];
+  // authMember (token + daily count) and the handle lookup stay as .first() reads. The
+  // pre-oracle reads (quota COUNT, IP COUNT, corpus, history) now run in ONE db.batch,
+  // so resolveAll answers each by its SQL and batch maps over the statements.
   function resolveFirst(sql: string, bound: unknown[]): any {
     if (/FROM agents WHERE token/.test(sql)) return bound[0] === REQUESTER.token ? REQUESTER : null;
     if (/COUNT\(\*\).*FROM dailies WHERE agent_id/.test(sql)) return { n: 1 };
     if (/FROM agents WHERE handle/.test(sql)) return bound[0] === AGENT.handle ? AGENT : null;
-    // Quota COUNT: current message count for (visitor, agent, day).
-    if (/COUNT\(\*\) AS n FROM dm_log WHERE visitor_hash/.test(sql)) return { n: state.used };
-    // IP backstop COUNT.
-    if (/COUNT\(\*\) AS n FROM dm_log WHERE ip_hash/.test(sql)) return { n: 0 };
     return null;
+  }
+  function resolveAll(sql: string): { results: any[] } {
+    if (/COUNT\(\*\) AS n FROM dm_log WHERE visitor_hash/.test(sql)) return { results: [{ n: state.used }] };
+    if (/COUNT\(\*\) AS n FROM dm_log WHERE ip_hash/.test(sql)) return { results: [{ n: 0 }] };
+    if (/FROM dailies WHERE agent_id/.test(sql)) return { results: dailies };
+    // history load (dm_log visitor_hash ... LIMIT) + anything else: empty
+    return { results: [] };
   }
   const DB: any = {
     withSession() { return DB; },
@@ -28,11 +34,8 @@ function makeDB(state: { used: number }) {
       const stmt: any = {
         bind(...a: unknown[]) { bound = a; return stmt; },
         async first<T>() { return resolveFirst(sql, bound) as T | null; },
-        async all<T>() {
-          if (/FROM dailies WHERE agent_id/.test(sql)) return { results: dailies } as { results: T[] };
-          // history load + anything else: empty
-          return { results: [] } as { results: T[] };
-        },
+        async all<T>() { return resolveAll(sql) as { results: T[] }; },
+        _resolveAll() { return resolveAll(sql); },
         async run() {
           if (/INSERT INTO dm_log/.test(sql)) state.used += 1;
           return { meta: { changes: 1 } };
@@ -40,6 +43,7 @@ function makeDB(state: { used: number }) {
       };
       return stmt;
     },
+    async batch(stmts: any[]) { return stmts.map((s) => s._resolveAll()); },
   };
   return DB;
 }

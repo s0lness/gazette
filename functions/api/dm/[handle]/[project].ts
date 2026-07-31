@@ -1,6 +1,6 @@
 import { Env, json, err, nowISO, todayUTC, sha256Hex } from "../../../_lib/util";
 import { getAgentByHandle } from "../../../_lib/db";
-import { authMember, gated, postFirst, requireReader, readerJson, PRIVATE_NO_STORE } from "../../../_lib/auth";
+import { authMember, gated, postFirst, readerJson, authStatements, PRIVATE_NO_STORE } from "../../../_lib/auth";
 import {
   DM_SALT,
   buildCorpus,
@@ -62,12 +62,27 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env, params }
   const date = todayUTC();
   const db = env.DB;
 
+  // The oracle call dominates, so fold the four pre-oracle reads (quota COUNT,
+  // IP-backstop COUNT, project corpus, history) into ONE batch, then gate in order.
+  const [usedRes, ipRes, corpusRes, histRes] = await db.batch<any>([
+    db
+      .prepare("SELECT COUNT(*) AS n FROM dm_log WHERE visitor_hash = ? AND agent_id = ? AND date = ?")
+      .bind(visitorHash, agent.id, date),
+    db.prepare("SELECT COUNT(*) AS n FROM dm_log WHERE ip_hash = ? AND date = ?").bind(ipHash, date),
+    db
+      .prepare(
+        "SELECT date, headline, body_md FROM dailies WHERE agent_id = ? AND project_id = ? ORDER BY date DESC, created_at DESC",
+      )
+      .bind(agent.id, project.id),
+    db
+      .prepare(
+        "SELECT question, answer FROM dm_log WHERE visitor_hash = ? AND agent_id = ? ORDER BY created_at DESC LIMIT ?",
+      )
+      .bind(visitorHash, agent.id, HISTORY_TURNS),
+  ]);
+
   // Quota: 10 messages per (requesting member, project, UTC day).
-  const usedRow = await db
-    .prepare("SELECT COUNT(*) AS n FROM dm_log WHERE visitor_hash = ? AND agent_id = ? AND date = ?")
-    .bind(visitorHash, agent.id, date)
-    .first<{ n: number }>();
-  const used = usedRow?.n ?? 0;
+  const used = (usedRes?.results?.[0]?.n as number) ?? 0;
   if (used >= DAILY_MESSAGES) {
     return json(
       { code: "quota", message: "That's our 10 messages for today. Come back tomorrow." },
@@ -77,11 +92,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env, params }
   }
 
   // IP-level backstop: cap total questions from one IP across all agents at 60/day.
-  const ipCount = await db
-    .prepare("SELECT COUNT(*) AS n FROM dm_log WHERE ip_hash = ? AND date = ?")
-    .bind(ipHash, date)
-    .first<{ n: number }>();
-  if ((ipCount?.n ?? 0) >= IP_DAILY_CAP) {
+  if (((ipRes?.results?.[0]?.n as number) ?? 0) >= IP_DAILY_CAP) {
     return json(
       { code: "quota", message: "That's our 10 messages for today. Come back tomorrow." },
       429,
@@ -99,24 +110,11 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env, params }
   }
 
   // Build corpus from THIS PROJECT's dailies only, most recent first.
-  const rs = await db
-    .prepare(
-      "SELECT date, headline, body_md FROM dailies WHERE agent_id = ? AND project_id = ? ORDER BY date DESC, created_at DESC",
-    )
-    .bind(agent.id, project.id)
-    .all<DailyLite>();
-  const dailies = rs.results ?? [];
+  const dailies = (corpusRes?.results ?? []) as DailyLite[];
   const corpus = buildCorpus(dailies);
 
-  // Load the last 12 turns of this project conversation (newest first), reverse to
-  // oldest-first so askOracle can replay them as alternating user/assistant messages.
-  const histRes = await db
-    .prepare(
-      "SELECT question, answer FROM dm_log WHERE visitor_hash = ? AND agent_id = ? ORDER BY created_at DESC LIMIT ?",
-    )
-    .bind(visitorHash, agent.id, HISTORY_TURNS)
-    .all<ChatTurn>();
-  const history = (histRes.results ?? []).slice().reverse();
+  // Last 12 turns (newest first), reversed to oldest-first for askOracle to replay.
+  const history = ((histRes?.results ?? []) as ChatTurn[]).slice().reverse();
 
   const outcome = await askOracle(
     env.ANTHROPIC_API_KEY,
@@ -153,29 +151,46 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env, params }
 };
 
 // Load the viewer's conversation with this project (the project-scoped thread), oldest
-// first. Member-gated.
+// first. Member-gated. ONE speculative batch: auth statements + agent-by-handle +
+// project-by-(handle,slug) + the history read (its agent_id, project id and
+// visitor_hash all resolved in-SQL, so nothing depends on an id we do not yet have).
 export const onRequestGet: PagesFunction<Env> = async ({ request, env, params }) => {
-  const auth = await requireReader(env, request);
-  if (auth instanceof Response) return auth;
-
   const handle = String(params.handle);
   const slug = String(params.project);
-  const agent = await getAgentByHandle(env.DB, handle);
-  if (!agent) return err("not_found", "No such agent.", 404);
+  const db = env.DB;
+  const plan = authStatements(env, request, db);
+  const n = plan.stmts.length;
+  const c = plan.cred;
 
-  const project = await env.DB.prepare(
-    "SELECT id FROM projects WHERE agent_id = ? AND slug = ?",
-  )
-    .bind(agent.id, slug)
-    .first<{ id: number }>();
+  const VIEWER_ID =
+    "(SELECT id FROM agents WHERE token = ?1 UNION ALL SELECT agent_id FROM sessions WHERE id = ?2 AND expires_at > ?3 LIMIT 1)";
+  // The project id resolved from (handle, slug), reused in the history filter.
+  const PROJ_ID =
+    "(SELECT p.id FROM projects p JOIN agents a ON a.id = p.agent_id WHERE a.handle = ?4 AND p.slug = ?5)";
+
+  const results = await db.batch<any>([
+    ...plan.stmts,
+    db.prepare("SELECT * FROM agents WHERE handle = ?").bind(handle),
+    db
+      .prepare("SELECT p.id FROM projects p JOIN agents a ON a.id = p.agent_id WHERE a.handle = ? AND p.slug = ?")
+      .bind(handle, slug),
+    db
+      .prepare(
+        `SELECT question, answer, created_at FROM dm_log
+         WHERE visitor_hash = ('member:' || ${VIEWER_ID} || ':p' || ${PROJ_ID})
+           AND agent_id = (SELECT id FROM agents WHERE handle = ?4)
+         ORDER BY created_at ASC LIMIT 200`,
+      )
+      .bind(c.token, c.sid, c.now, handle, slug),
+  ]);
+
+  const auth = plan.resolve(results.slice(0, n));
+  if (!auth) return gated();
+  if (!auth.canRead) return postFirst();
+  const agent = results[n]?.results?.[0];
+  if (!agent) return err("not_found", "No such agent.", 404);
+  const project = results[n + 1]?.results?.[0];
   if (!project) return err("not_found", "No such project.", 404);
 
-  const visitorHash = "member:" + auth.agent.id + ":p" + project.id;
-  const rs = await env.DB
-    .prepare(
-      "SELECT question, answer, created_at FROM dm_log WHERE visitor_hash = ? AND agent_id = ? ORDER BY created_at ASC LIMIT 200",
-    )
-    .bind(visitorHash, agent.id)
-    .all<{ question: string; answer: string; created_at: string }>();
-  return readerJson(auth, { ok: true, messages: rs.results ?? [] });
+  return readerJson(auth, { ok: true, messages: results[n + 2]?.results ?? [] });
 };
