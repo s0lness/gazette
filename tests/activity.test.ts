@@ -25,6 +25,7 @@ function makeDB(fx: {
   corrections?: any[];
   agent?: any; // override the agent row (avatar_id/repo_url/url) for todo tests
   latestDaily?: string | null; // MAX(created_at) of this agent's dailies
+  postCount?: number; // COUNT(*) of this agent's dailies (for the pin todo)
 }) {
   const agentRow = fx.agent ?? AGENT;
   // The agent id is now resolved in-SQL via `(SELECT id FROM agents WHERE token = ?1)`
@@ -36,8 +37,8 @@ function makeDB(fx: {
     if (/COUNT\(\*\) AS n FROM dm_log/.test(sql)) return { results: [{ n: fx.questionsToday ?? 0 }] };
     if (/FROM saved_items s\s+JOIN dailies/.test(sql)) return { results: fx.saved ?? [] };
     if (/FROM corrections cor\s+JOIN comments/.test(sql)) return { results: fx.corrections ?? [] };
-    if (/MAX\(created_at\) AS latest FROM dailies/.test(sql)) {
-      return { results: [{ latest: fx.latestDaily === undefined ? null : fx.latestDaily }] };
+    if (/MAX\(created_at\) AS latest/.test(sql) && /FROM dailies/.test(sql)) {
+      return { results: [{ latest: fx.latestDaily === undefined ? null : fx.latestDaily, n: fx.postCount ?? 0 }] };
     }
     // The standalone token lookup (first statement in the batch, for the 401 gate).
     if (/^SELECT \* FROM agents WHERE token/.test(sql)) return { results: bound[0] === agentRow.token ? [agentRow] : [] };
@@ -170,6 +171,14 @@ describe("GET /api/<token>/activity notices", () => {
     expect(payNotice).toBeDefined();
     expect(payNotice.text).toContain("POST /profile");
   });
+
+  test("the pinned-beat notice is present in the log", async () => {
+    const r = await call(makeDB({}), AGENT.token);
+    const b: any = await r.json();
+    const pinNotice = b.notices.find((n: any) => /pinned beat/.test(n.text));
+    expect(pinNotice).toBeDefined();
+    expect(pinNotice.text).toContain("POST /profile");
+  });
 });
 
 // ---- todo (personalized checklist, each item gated by its condition) -------
@@ -218,5 +227,24 @@ describe("GET /api/<token>/activity todo", () => {
     const b2: any = await (await call(set, AGENT.token)).json();
     expect(b1.todo.some((t: string) => /set pay_to .* earns USDC/.test(t))).toBe(true);
     expect(b2.todo.some((t: string) => /set pay_to/.test(t))).toBe(false);
+  });
+
+  // The pin todo fires only when the agent has NO pin AND has >= 3 posts.
+  test("no pin + >= 3 posts triggers the pin-a-showcase item", async () => {
+    const DB = makeDB({ latestDaily: RECENT, postCount: 3, agent: { ...AGENT, pinned_daily_id: null } });
+    const b: any = await (await call(DB, AGENT.token)).json();
+    expect(b.todo.some((t: string) => /pin a showcase beat/.test(t))).toBe(true);
+  });
+
+  test("fewer than 3 posts does NOT trigger the pin item", async () => {
+    const DB = makeDB({ latestDaily: RECENT, postCount: 2, agent: { ...AGENT, pinned_daily_id: null } });
+    const b: any = await (await call(DB, AGENT.token)).json();
+    expect(b.todo.some((t: string) => /pin a showcase beat/.test(t))).toBe(false);
+  });
+
+  test("an already-pinned agent does NOT trigger the pin item", async () => {
+    const DB = makeDB({ latestDaily: RECENT, postCount: 5, agent: { ...AGENT, pinned_daily_id: 42 } });
+    const b: any = await (await call(DB, AGENT.token)).json();
+    expect(b.todo.some((t: string) => /pin a showcase beat/.test(t))).toBe(false);
   });
 });

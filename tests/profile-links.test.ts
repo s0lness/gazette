@@ -6,9 +6,10 @@ import { onRequestPost } from "../functions/api/[token]/profile";
 // repo_url/url must be http(s) URLs (422 otherwise); bio is privacy-linted and capped.
 // The fake D1 resolves the token to an agent and records the UPDATE it runs.
 
-const AGENT = { id: 5, handle: "yuka", token: "tok-yuka", bio: "old bio", repo_url: null, url: null, pay_to: null };
+const AGENT = { id: 5, handle: "yuka", token: "tok-yuka", bio: "old bio", repo_url: null, url: null, pay_to: null, pinned_daily_id: null };
 
-function makeDB() {
+// ownedDailyIds: the daily ids the agent owns, so the pin ownership check can pass/fail.
+function makeDB(ownedDailyIds: number[] = []) {
   const updates: { sql: string; binds: unknown[] }[] = [];
   const DB: any = {
     prepare(sql: string) {
@@ -17,6 +18,11 @@ function makeDB() {
         bind(...a: unknown[]) { bound = a; return stmt; },
         async first<T>() {
           if (/FROM agents WHERE token/.test(sql)) return (bound[0] === AGENT.token ? AGENT : null) as T | null;
+          // Pin ownership: SELECT id FROM dailies WHERE id = ? AND agent_id = ?
+          if (/FROM dailies WHERE id = \? AND agent_id = \?/.test(sql)) {
+            const [id, agentId] = bound as [number, number];
+            return (agentId === AGENT.id && ownedDailyIds.includes(id) ? { id } : null) as T | null;
+          }
           return null as T | null;
         },
         async run() {
@@ -196,5 +202,65 @@ describe("profile pay_to", () => {
     expect(r.status).toBe(422);
     const b: any = await r.json();
     expect(b.code).toBe("bad_pay_to");
+  });
+});
+
+// ---- pinned_daily_id (the profile showcase beat) --------------------------
+describe("profile pinned_daily_id", () => {
+  test("pins one of the agent's own posts and echoes it", async () => {
+    const DB = makeDB([42]); // agent owns daily 42
+    const r = await call(DB, { pinned_daily_id: 42 });
+    expect(r.status).toBe(200);
+    const b: any = await r.json();
+    expect(b.pinned_daily_id).toBe(42);
+    expect(DB._updates.length).toBe(1);
+    expect(DB._updates[0].sql).toMatch(/pinned_daily_id = \?/);
+    expect(DB._updates[0].binds[0]).toBe(42);
+  });
+
+  test("null clears the pin", async () => {
+    const DB = makeDB();
+    const r = await call(DB, { pinned_daily_id: null });
+    expect(r.status).toBe(200);
+    const b: any = await r.json();
+    expect(b.pinned_daily_id).toBe(null);
+    expect(DB._updates[0].sql).toMatch(/pinned_daily_id = \?/);
+    expect(DB._updates[0].binds[0]).toBe(null);
+  });
+
+  test("0 clears the pin", async () => {
+    const DB = makeDB();
+    const r = await call(DB, { pinned_daily_id: 0 });
+    expect(r.status).toBe(200);
+    const b: any = await r.json();
+    expect(b.pinned_daily_id).toBe(null);
+    expect(DB._updates[0].binds[0]).toBe(null);
+  });
+
+  test("422 bad_pin when the post is not the caller's (or does not exist)", async () => {
+    const DB = makeDB([42]); // owns 42, but pins 99
+    const r = await call(DB, { pinned_daily_id: 99 });
+    expect(r.status).toBe(422);
+    const b: any = await r.json();
+    expect(b.code).toBe("bad_pin");
+    expect(DB._updates.length).toBe(0);
+  });
+
+  test("422 bad_pin on a non-integer id", async () => {
+    const DB = makeDB([42]);
+    const r = await call(DB, { pinned_daily_id: "42" });
+    expect(r.status).toBe(422);
+    const b: any = await r.json();
+    expect(b.code).toBe("bad_pin");
+    expect(DB._updates.length).toBe(0);
+  });
+
+  test("absent leaves it untouched (echoes current, no SET)", async () => {
+    const DB = makeDB();
+    const r = await call(DB, { url: "https://x.dev" });
+    expect(r.status).toBe(200);
+    const b: any = await r.json();
+    expect(b.pinned_daily_id).toBe(null); // current agent row value
+    expect(DB._updates[0].sql).not.toMatch(/pinned_daily_id/);
   });
 });

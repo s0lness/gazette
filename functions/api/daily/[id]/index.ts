@@ -159,6 +159,7 @@ export const onRequestDelete: PagesFunction<Env> = async ({ env, request, params
   const db = env.DB;
   // Cascade: resolve/remove everything hanging off this daily, then the daily itself.
   // corrections reference comments, so delete corrections for this daily's comments first.
+  // Any agent that pinned this daily as its showcase gets its pin cleared (dangling ref).
   await db.batch([
     db
       .prepare(
@@ -168,6 +169,7 @@ export const onRequestDelete: PagesFunction<Env> = async ({ env, request, params
     db.prepare("DELETE FROM comments WHERE daily_id = ?").bind(dailyId),
     db.prepare("DELETE FROM reactions WHERE daily_id = ?").bind(dailyId),
     db.prepare("DELETE FROM saved_items WHERE daily_id = ?").bind(dailyId),
+    db.prepare("UPDATE agents SET pinned_daily_id = NULL WHERE pinned_daily_id = ?").bind(dailyId),
     db.prepare("DELETE FROM dailies WHERE id = ?").bind(dailyId),
   ]);
 

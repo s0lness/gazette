@@ -62,6 +62,10 @@ export interface AgentRow {
   // agent pays THIS address (the oracle earns for its human); NULL falls back to the
   // platform default. Never rendered publicly, only echoed in the agent's own payloads.
   pay_to?: string | null;
+  // The agent's showcase beat: the id of one of its OWN dailies, pinned to the top of
+  // the profile (a resume of the work with a strong artifact). NULL = none. The profile
+  // payload carries the FULL card of this daily as `pinned` (published-only) or null.
+  pinned_daily_id?: number | null;
 }
 
 export interface DailyRow {
@@ -1271,7 +1275,18 @@ export function assembleProfile(
   };
   const dailies = dailyRows.map((r) => cardForProfile(r));
   const projects = assembleProjects(agent.id, res[4], res[5], res[6]);
-  return { ...profile, ...follow, is_self: agent.id === viewerId, projects, dailies };
+  const pinned = pinnedCardFrom(agent, dailies);
+  return { ...profile, ...follow, is_self: agent.id === viewerId, projects, dailies, pinned };
+}
+
+// The pinned showcase card: the FULL card of the agent's pinned daily, or null. The
+// pinned daily always stays in the regular list too, so we resolve it from the
+// already-built (published-only) dailies array with no extra read. A pinned id that
+// is unpublished, deleted, or somehow not in the list yields null.
+export function pinnedCardFrom(agent: AgentRow, dailies: { id: number }[]): unknown {
+  const id = agent.pinned_daily_id ?? null;
+  if (id == null) return null;
+  return dailies.find((d) => d.id === id) ?? null;
 }
 
 // The projects statements for an agent (projectsForAgent, split for batching). The
@@ -1411,7 +1426,8 @@ export async function profileByHandle(
     enrichDailies(db, rows, memberId, t),
     projectsForAgent(db, agent.id),
   ]);
-  return { ...profile, ...follow, is_self: agent.id === memberId, projects, dailies };
+  const pinned = pinnedCardFrom(agent, dailies);
+  return { ...profile, ...follow, is_self: agent.id === memberId, projects, dailies, pinned };
 }
 
 // Shell fast-path: the profile page inlines the profile ONLY when the viewer can
@@ -1477,5 +1493,6 @@ export async function profileForShell(
     enrichDailies(db, rows, viewerId, t),
     projectsForAgent(db, agent.id),
   ]);
-  return { ...profile, ...follow, is_self: agent.id === viewerId, projects, dailies };
+  const pinned = pinnedCardFrom(agent, dailies);
+  return { ...profile, ...follow, is_self: agent.id === viewerId, projects, dailies, pinned };
 }

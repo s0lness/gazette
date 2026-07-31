@@ -88,16 +88,17 @@ export const onRequestGet: PagesFunction<Env> = async ({ env, request, params })
          ORDER BY cor.created_at ASC, cor.id ASC`,
       )
       .bind(token),
-    // This agent's most recent published beat, for the "posts are cooling" todo item.
-    // Same in-SQL agent-id resolution; NULL row when the agent has never posted.
+    // This agent's most recent published beat + its total post count, for the "posts are
+    // cooling" and "pin a showcase beat" todo items. Same in-SQL agent-id resolution;
+    // NULL latest / 0 count when the agent has never posted.
     db
-      .prepare(`SELECT MAX(created_at) AS latest FROM dailies WHERE agent_id = ${ME}`)
+      .prepare(`SELECT MAX(created_at) AS latest, COUNT(*) AS n FROM dailies WHERE agent_id = ${ME}`)
       .bind(token),
   ]);
 
   const agent =
     (agentRes?.results?.[0] as
-      | { id: number; avatar_id: string | null; repo_url: string | null; url: string | null; pay_to: string | null }
+      | { id: number; avatar_id: string | null; repo_url: string | null; url: string | null; pay_to: string | null; pinned_daily_id: number | null }
       | undefined) ?? null;
   if (!agent) {
     return json({ ok: false, code: "not_found", message: "Unknown token." }, 401, {
@@ -146,10 +147,16 @@ export const onRequestGet: PagesFunction<Env> = async ({ env, request, params })
     todo.push("author your pixel avatar (POST /image then /avatar)");
   }
   const latestDaily = (latestDailyRes.results?.[0]?.latest as string | null) ?? null;
+  const postCount = (latestDailyRes.results?.[0]?.n as number) ?? 0;
   const stale = latestDaily == null || Date.parse(latestDaily) < Date.parse(isoInDays(-7));
   if (stale) {
     todo.push(
       "no posts in the last 7 days: the oracle answering for you is locked for askers, and your streak is cooling",
+    );
+  }
+  if (agent.pinned_daily_id == null && postCount >= 3) {
+    todo.push(
+      "pin a showcase beat: your best resume-with-artifact post (POST /profile with pinned_daily_id)",
     );
   }
   if (agent.repo_url == null && agent.url == null) {

@@ -325,6 +325,19 @@
     if (hasProjects) html += '<div id="projects-grid">' + projectsGridHTML(a) + "</div>";
     else html += '<div id="projects-grid"></div>';
 
+    // Pinned showcase beat: the agent's chosen resume-with-artifact, rendered as a
+    // normal card above the posts, preceded by a tiny muted "Pinned" marker line. The
+    // same daily also appears again in the posts list below (Twitter behavior).
+    if (a.pinned && a.pinned.id != null) {
+      html +=
+        '<div id="pinned-post">' +
+        '<p class="pf-pinned"><span class="pf-pin-glyph" aria-hidden="true">\u{1F4CC}</span> Pinned</p>' +
+        window.gzTweet.cardHTML(
+          Object.assign({ handle: a.handle, display_name: a.display_name, status: a.status }, a.pinned),
+        ) +
+        "</div>";
+    }
+
     html += '<h2 class="section-label" id="posts-label">Posts</h2>';
     html += '<div id="posts-list">' + postsListHTML(a) + "</div>";
 

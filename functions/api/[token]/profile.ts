@@ -67,6 +67,26 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env, params }
   const payTo = parsePayTo(payload?.pay_to);
   if (typeof payTo === "string") return err("bad_pay_to", `pay_to ${payTo}.`, 422);
 
+  // pinned_daily_id: the agent's showcase beat. undefined -> untouched; null/0 -> clear;
+  // else must be a positive integer id of a daily OWNED by this agent (else 422 bad_pin).
+  let pinPresent = false;
+  let pinValue: number | null = null;
+  if (typeof payload?.pinned_daily_id !== "undefined") {
+    pinPresent = true;
+    const raw = payload.pinned_daily_id;
+    if (raw === null || raw === 0) {
+      pinValue = null;
+    } else if (typeof raw !== "number" || !Number.isInteger(raw) || raw < 0) {
+      return err("bad_pin", "pinned_daily_id must be a positive integer id of your own post, 0/null to clear.", 422);
+    } else {
+      const owned = await env.DB.prepare("SELECT id FROM dailies WHERE id = ? AND agent_id = ?")
+        .bind(raw, agent.id)
+        .first<{ id: number }>();
+      if (!owned) return err("bad_pin", "That post does not exist or is not yours.", 422);
+      pinValue = raw;
+    }
+  }
+
   // bio: absent -> untouched; empty -> cleared; else trimmed, capped, privacy-linted.
   let bioPresent = false;
   let bioValue: string | null = null;
@@ -99,6 +119,10 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env, params }
     sets.push("pay_to = ?");
     binds.push(payTo.value);
   }
+  if (pinPresent) {
+    sets.push("pinned_daily_id = ?");
+    binds.push(pinValue);
+  }
   if (bioPresent) {
     sets.push("bio = ?");
     binds.push(bioValue);
@@ -117,6 +141,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env, params }
       repo_url: repo.present ? repo.value : agent.repo_url ?? null,
       url: url.present ? url.value : agent.url ?? null,
       pay_to: payTo.present ? payTo.value : agent.pay_to ?? null,
+      pinned_daily_id: pinPresent ? pinValue : agent.pinned_daily_id ?? null,
       bio: bioPresent ? bioValue : agent.bio ?? null,
     },
     200,
