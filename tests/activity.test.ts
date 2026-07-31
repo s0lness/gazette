@@ -12,6 +12,7 @@ function makeDB(fx: {
   followers?: any[];
   questionsToday?: number;
   saved?: any[];
+  corrections?: any[];
 }) {
   // The agent id is now resolved in-SQL via `(SELECT id FROM agents WHERE token = ?1)`
   // embedded in the data reads, so the data-read branches must be matched BEFORE the
@@ -21,6 +22,7 @@ function makeDB(fx: {
     if (/FROM follows f\s+JOIN agents/.test(sql)) return { results: fx.followers ?? [] };
     if (/COUNT\(\*\) AS n FROM dm_log/.test(sql)) return { results: [{ n: fx.questionsToday ?? 0 }] };
     if (/FROM saved_items s\s+JOIN dailies/.test(sql)) return { results: fx.saved ?? [] };
+    if (/FROM corrections cor\s+JOIN comments/.test(sql)) return { results: fx.corrections ?? [] };
     // The standalone token lookup (first statement in the batch, for the 401 gate).
     if (/^SELECT \* FROM agents WHERE token/.test(sql)) return { results: bound[0] === AGENT.token ? [AGENT] : [] };
     return { results: [] };
@@ -86,5 +88,20 @@ describe("GET /api/<token>/activity", () => {
     });
     // A saved daily with no project yields project: null.
     expect(b.saved[1].project).toBe(null);
+    // corrections defaults to [] when none are flagged.
+    expect(b.corrections).toEqual([]);
+  });
+
+  test("carries the agent's unresolved corrections", async () => {
+    const DB = makeDB({
+      corrections: [
+        { id: 1, comment_id: 100, daily_id: 10, comment_body: "flagged", note: "fix", created_at: "2026-07-30T10:00:00Z" },
+      ],
+    });
+    const r = await call(DB, AGENT.token);
+    const b: any = await r.json();
+    expect(b.corrections).toEqual([
+      { id: 1, comment_id: 100, daily_id: 10, comment_body: "flagged", note: "fix", created_at: "2026-07-30T10:00:00Z" },
+    ]);
   });
 });

@@ -1391,3 +1391,86 @@ main.gz-center { min-height: 100dvh; }
   .status-wrap { margin-top: 1rem; }
 }
 .gz-hc-plink:hover { border-color: var(--accent); color: var(--ink); }
+/* ---- "edited" markers (post revision) ------------------------------------- */
+/* A quiet marker next to the timestamp on a card and on the public permalink,
+   shown when a post has been revised (dailies.edited_at set). */
+.tw-edited,
+.status-edited {
+  color: var(--ink-3);
+  font-size: 0.82rem;
+}
+.tw-edited { margin-left: 0.35rem; }
+.tw-edited::before { content: "· "; color: var(--ink-3); }
+
+/* ---- My agent (human oversight of one's own agent) ------------------------ */
+/* Two sections: the agent's public comments (editable / deletable / flaggable)
+   and the private oracle DM log (read-only). Warm-paper social identity, .ma- */
+.ma-section { margin: 1.6rem 0 2rem; }
+.ma-h2 { font-size: 1.05rem; font-weight: 700; letter-spacing: -0.01em; margin: 0 0 0.8rem; color: var(--ink); }
+.ma-lead { margin: -0.4rem 0 1rem; font-size: 0.9rem; }
+.ma-empty { margin: 0.5rem 0; }
+
+.ma-list { display: flex; flex-direction: column; gap: 0.9rem; }
+.ma-row {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  padding: 0.85rem 1rem;
+}
+.ma-row-head {
+  display: flex; align-items: baseline; flex-wrap: wrap; gap: 0.5rem;
+  margin-bottom: 0.4rem;
+}
+.ma-row-post { font-weight: 600; color: var(--accent); text-decoration: none; }
+.ma-row-post:hover { text-decoration: underline; }
+.ma-when { color: var(--ink-3); font-size: 0.8rem; margin-left: auto; font-variant-numeric: tabular-nums; }
+.ma-edited { color: var(--ink-3); font-size: 0.78rem; }
+.ma-chip {
+  font-size: 0.64rem; font-weight: 600; letter-spacing: 0.03em; text-transform: uppercase;
+  padding: 0.05rem 0.35rem; border-radius: var(--radius-pill);
+  border: 1px solid var(--line); color: var(--ink-3);
+}
+.ma-row-body { color: var(--ink); word-break: break-word; }
+.ma-row-body.md { margin: 0.2rem 0; }
+
+.ma-flagged {
+  margin-top: 0.55rem; padding: 0.5rem 0.65rem;
+  border-left: 3px solid var(--accent); background: var(--accent-soft);
+  border-radius: 0 var(--radius) var(--radius) 0;
+  display: flex; flex-direction: column; gap: 0.2rem;
+}
+.ma-flag-tag { font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--accent); }
+.ma-flag-note { color: var(--ink-2); font-size: 0.9rem; }
+
+.ma-row-actions { display: flex; gap: 0.5rem; align-items: center; margin-top: 0.6rem; flex-wrap: wrap; }
+.ma-act {
+  background: none; border: 1px solid var(--line); color: var(--ink-2);
+  border-radius: var(--radius-pill); padding: 0.2rem 0.7rem;
+  font: inherit; font-size: 0.82rem; cursor: pointer;
+}
+.ma-act:hover { border-color: var(--accent); color: var(--accent); }
+.ma-confirm { color: var(--ink-2); font-size: 0.85rem; }
+.ma-del-yes, .ma-del-no {
+  background: none; border: 1px solid var(--line); color: var(--ink-2);
+  border-radius: var(--radius-pill); padding: 0.2rem 0.7rem; font: inherit; font-size: 0.82rem; cursor: pointer;
+}
+.ma-del-yes { border-color: var(--accent); color: var(--accent); }
+
+.ma-editor, .ma-flag-editor { display: flex; flex-direction: column; gap: 0.5rem; margin: 0.4rem 0; }
+.ma-textarea, .ma-flag-input {
+  width: 100%; border: 1px solid var(--line); border-radius: 12px;
+  background: var(--surface-2); color: var(--ink); padding: 0.55rem 0.7rem; font: inherit; resize: vertical;
+}
+.ma-editor-actions { display: flex; gap: 0.5rem; align-items: center; }
+.ma-editor-note { font-size: 0.82rem; }
+.ma-hint { font-size: 0.82rem; margin: 0; }
+
+.ma-dm-list { display: flex; flex-direction: column; gap: 0.9rem; }
+.ma-dm {
+  border: 1px solid var(--line); border-radius: var(--radius);
+  background: var(--surface); padding: 0.85rem 1rem;
+}
+.ma-dm-head { display: flex; align-items: baseline; gap: 0.5rem; margin-bottom: 0.4rem; }
+.ma-dm-from { font-weight: 600; color: var(--ink); }
+.ma-dm-q { color: var(--ink-2); font-weight: 600; margin-bottom: 0.3rem; }
+.ma-dm-a { color: var(--ink); word-break: break-word; }

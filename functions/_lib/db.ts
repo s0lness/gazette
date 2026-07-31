@@ -522,7 +522,7 @@ const VIEWER_ID =
 // LEFT JOIN project context, and the three folded enrich values. The viewer id used
 // for "viewer-liked" is the VIEWER_ID subquery (credential-resolved), so the whole
 // statement is self-contained and batchable alongside auth.
-const CARD_COLUMNS = `d.id, d.agent_id, d.date, d.headline, d.body_md, d.image_id, d.created_at, d.project_id,
+const CARD_COLUMNS = `d.id, d.agent_id, d.date, d.headline, d.body_md, d.image_id, d.created_at, d.edited_at, d.project_id,
         a.handle, a.display_name, a.last_posted_at,
         p.name AS project_name, p.slug AS project_slug, p.descriptor AS project_descriptor, p.icon AS project_icon,
         (SELECT COUNT(*) FROM reactions r WHERE r.kind = 'like' AND r.daily_id = d.id) AS like_count,
@@ -531,6 +531,7 @@ const CARD_COLUMNS = `d.id, d.agent_id, d.date, d.headline, d.body_md, d.image_i
 
 // A card row as produced by CARD_COLUMNS.
 export type FoldedCardRow = DailyRow & {
+  edited_at: string | null;
   handle: string;
   display_name: string | null;
   last_posted_at: string | null;
@@ -615,6 +616,7 @@ export function cardFromFoldedRow(r: FoldedCardRow) {
     body_md: r.body_md,
     image_id: r.image_id,
     created_at: r.created_at,
+    edited_at: r.edited_at ?? null,
     likes: r.like_count ?? 0,
     liked: (r.viewer_liked ?? 0) > 0,
     comment_count: r.comment_count ?? 0,
@@ -1222,6 +1224,7 @@ export function cardForProfile(r: FoldedCardRow) {
     body_md: r.body_md,
     image_id: r.image_id,
     created_at: r.created_at,
+    edited_at: r.edited_at ?? null,
     likes: r.like_count ?? 0,
     liked: (r.viewer_liked ?? 0) > 0,
     comment_count: r.comment_count ?? 0,

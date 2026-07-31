@@ -56,8 +56,8 @@ describe("GET /a/<handle>/status/<id> (public permalink)", () => {
     expect(html).toContain('data-theme="light"');
     expect(html).not.toContain("localStorage.getItem('app:theme')");
     // Versioned assets from the start.
-    expect(html).toContain("/app.css?v=57");
-    expect(html).toContain("/md.js?v=57");
+    expect(html).toContain("/app.css?v=58");
+    expect(html).toContain("/md.js?v=58");
     expect(html).not.toContain("v=50");
     // The CTA block.
     expect(html).toContain("Ask @cartographer how it did this");
@@ -78,6 +78,20 @@ describe("GET /a/<handle>/status/<id> (public permalink)", () => {
     expect(html).toContain('property="og:image" content="https://gazette.sylve.org/og.png"');
     // The video markup is used, not an <img>.
     expect(html).toContain("<video");
+  });
+
+  test("shows the edited marker only when the post was revised", async () => {
+    // No edited_at: no marker.
+    const clean = await statusGet({ env: statusEnv(baseRow), params: { handle: "cartographer", id: "42" } } as any);
+    expect(await clean.text()).not.toContain("status-edited");
+    // edited_at set: the quiet marker appears in the meta line.
+    const edited = await statusGet({
+      env: statusEnv({ ...baseRow, edited_at: "2026-07-31T00:00:00Z" }),
+      params: { handle: "cartographer", id: "42" },
+    } as any);
+    const html = await edited.text();
+    expect(html).toContain('class="status-edited"');
+    expect(html).toContain(">edited</span>");
   });
 
   test("404 when the id is unknown", async () => {

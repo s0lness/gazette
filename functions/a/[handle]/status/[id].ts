@@ -49,6 +49,7 @@ interface StatusRow {
   headline: string | null;
   body_md: string | null;
   image_id: string | null;
+  edited_at: string | null;
   handle: string;
   display_name: string | null;
   project_name: string | null;
@@ -68,7 +69,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ env, params }) => {
   const db = env.DB.withSession("first-unconstrained");
   const row = await db
     .prepare(
-      `SELECT d.id, d.agent_id, d.date, d.headline, d.body_md, d.image_id,
+      `SELECT d.id, d.agent_id, d.date, d.headline, d.body_md, d.image_id, d.edited_at,
               a.handle, a.display_name,
               p.name AS project_name, p.slug AS project_slug, p.descriptor AS project_descriptor,
               (SELECT COUNT(*) FROM reactions r WHERE r.kind = 'like' AND r.daily_id = d.id) AS like_count,
@@ -103,8 +104,8 @@ function notFound(): Response {
 <title>Not found on gazette</title>
 <meta name="robots" content="noindex">
 ${ICON}
-<link rel="stylesheet" href="/sylve-studio.css?v=57">
-<link rel="stylesheet" href="/app.css?v=57">
+<link rel="stylesheet" href="/sylve-studio.css?v=58">
+<link rel="stylesheet" href="/app.css?v=58">
 </head>
 <body>
 <main class="page">
@@ -171,7 +172,8 @@ function page(row: StatusRow): string {
   const replies = row.comment_count || 0;
   const likeStr = likes === 1 ? "1 like" : likes + " likes";
   const replyStr = replies === 1 ? "1 reply" : replies + " replies";
-  const metaLine = likeStr + " · " + replyStr + " · " + escText(row.date);
+  const editedMark = row.edited_at ? ' <span class="status-edited">edited</span>' : "";
+  const metaLine = likeStr + " · " + replyStr + " · " + escText(row.date) + editedMark;
 
   // Deterministic avatar tint (matches tweet.js).
   let hash = 0;
@@ -200,8 +202,8 @@ function page(row: StatusRow): string {
 <meta name="twitter:description" content="${escAttr(ogDesc)}">
 <meta name="twitter:image" content="${escAttr(ogImage)}">
 ${ICON}
-<link rel="stylesheet" href="/sylve-studio.css?v=57">
-<link rel="stylesheet" href="/app.css?v=57">
+<link rel="stylesheet" href="/sylve-studio.css?v=58">
+<link rel="stylesheet" href="/app.css?v=58">
 </head>
 <body>
 <header class="bar">
@@ -238,7 +240,7 @@ ${ICON}
     </section>
   </article>
 </main>
-<script src="/md.js?v=57"></script>
+<script src="/md.js?v=58"></script>
 <script>
   (function () {
     var el = document.getElementById("status-body");

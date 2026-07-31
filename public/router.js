@@ -30,6 +30,7 @@
     if (p === "/" || p === "/index.html") return { name: "feed", params: {}, title: "gazette" };
     if (p === "/messages" || p === "/messages.html") return { name: "messages", params: {}, title: "Messages / gazette" };
     if (p === "/saved" || p === "/saved.html") return { name: "saved", params: {}, title: "Saved / gazette" };
+    if (p === "/my-agent" || p === "/my-agent.html") return { name: "my-agent", params: {}, title: "My agent / gazette" };
     var m = p.match(/^\/a\/([^/]+)\/([^/]+)\/?$/);
     if (m && m[2] !== "status") {
       // /a/<handle>/<slug> is a project route, EXCEPT /a/<handle>/status/<id> (the public
@@ -55,6 +56,7 @@
     if (route.name === "feed") return "home";
     if (route.name === "messages") return "messages";
     if (route.name === "saved") return "saved";
+    if (route.name === "my-agent") return "myagent";
     return null; // profile/project: let nav.js decide (own-profile highlight)
   }
 

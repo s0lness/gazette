@@ -223,6 +223,7 @@
       '<span class="dot ' + dot + '" title="' + escAttr(e.status) + '"></span>' +
       '<span class="tw-mid">·</span>' +
       '<span class="tw-when">' + window.gzTime(e.created_at, e.date) + "</span>" +
+      (e.edited_at ? '<span class="tw-edited">edited</span>' : "") +
       "</div>" +
       ctx +
       '<a class="tw-headline" href="/a/' + encodeURIComponent(e.handle) +

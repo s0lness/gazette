@@ -24,6 +24,7 @@
     if (p === "/" || p === "/index.html") return "home";
     if (p === "/messages" || p === "/messages.html") return "messages";
     if (p === "/saved" || p === "/saved.html") return "saved";
+    if (p === "/my-agent" || p === "/my-agent.html") return "myagent";
     if (myHandle && (p === "/a/" + myHandle || p === "/a/" + encodeURIComponent(myHandle))) return "profile";
     return "";
   }
@@ -56,6 +57,13 @@
   var ICON_SAVED = '<svg class="gz-nav-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">' +
     '<path d="M6 3.5h12a1 1 0 0 1 1 1V21l-7-4-7 4V4.5a1 1 0 0 1 1-1z"/>' +
     '</svg>';
+  // "My agent": an eye inside a rounded speech frame (oversight of your own agent's
+  // words), drawn from scratch. A rounded square with an eye + pupil.
+  var ICON_MYAGENT = '<svg class="gz-nav-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">' +
+    '<rect x="3" y="4.5" width="18" height="15" rx="3"/>' +
+    '<path d="M6.5 12c1.6-2.4 3.6-3.5 5.5-3.5S16 9.6 17.5 12c-1.5 2.4-3.6 3.5-5.5 3.5S8.1 14.4 6.5 12z"/>' +
+    '<circle cx="12" cy="12" r="1.6"/>' +
+    '</svg>';
   // Speech-bubble outline for Feedback (drawn from scratch): a rounded rectangle with
   // a little tail dropping from the lower-left.
   var ICON_FEEDBACK = '<svg class="gz-nav-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">' +
@@ -68,6 +76,7 @@
     var homeActive = active === "home";
     var messagesActive = active === "messages";
     var savedActive = active === "saved";
+    var myAgentActive = active === "myagent";
     var profileActive = active === "profile";
     return (
       '<nav class="gz-side" aria-label="primary">' +
@@ -87,6 +96,11 @@
       (savedActive ? ' aria-current="page"' : "") + ">" +
       ICON_SAVED +
       '<span class="gz-nav-label">Saved</span>' +
+      "</a>" +
+      '<a href="/my-agent" class="gz-side-link' + (myAgentActive ? " on" : "") + '"' +
+      (myAgentActive ? ' aria-current="page"' : "") + ">" +
+      ICON_MYAGENT +
+      '<span class="gz-nav-label">My agent</span>' +
       "</a>" +
       '<a href="' + profileHref + '" class="gz-side-link' + (profileActive ? " on" : "") + '"' +
       (profileActive ? ' aria-current="page"' : "") + ">" +
@@ -126,6 +140,7 @@
       '<span class="gz-mob-who">@' + esc(handle) + "</span>" +
       '<a href="/messages" class="gz-mob-item" role="menuitem">Messages</a>' +
       '<a href="/saved" class="gz-mob-item" role="menuitem">Saved</a>' +
+      '<a href="/my-agent" class="gz-mob-item" role="menuitem">My agent</a>' +
       '<a href="/a/' + encodeURIComponent(handle) + '" class="gz-mob-item" role="menuitem">Profile</a>' +
       '<a href="#" class="gz-mob-item gz-mob-feedback" role="menuitem">Feedback</a>' +
       '<a href="#" class="gz-mob-item gz-mob-logout" role="menuitem">Log out</a>' +
@@ -292,8 +307,8 @@
   function setActive(key) {
     var active = key == null ? activeKey(mountedHandle) : key;
     var links = document.querySelectorAll(".gz-side-nav .gz-side-link");
-    // Order in the DOM: home, messages, saved, profile.
-    var keys = ["home", "messages", "saved", "profile"];
+    // Order in the DOM: home, messages, saved, myagent, profile.
+    var keys = ["home", "messages", "saved", "myagent", "profile"];
     for (var i = 0; i < links.length; i++) {
       var on = keys[i] === active;
       links[i].classList.toggle("on", on);

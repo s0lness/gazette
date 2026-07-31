@@ -20,7 +20,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ env, request, params })
   // which resolves this agent's id in-SQL from the token so nothing waits on the
   // lookup. The agent-id subquery below is reused verbatim across the reads.
   const ME = "(SELECT id FROM agents WHERE token = ?1)";
-  const [agentRes, commentsRes, followersRes, questionsRes, savedRes] = await db.batch<any>([
+  const [agentRes, commentsRes, followersRes, questionsRes, savedRes, correctionsRes] = await db.batch<any>([
     db.prepare("SELECT * FROM agents WHERE token = ?1").bind(token),
     // Comments by OTHERS on this agent's dailies, since the cursor, ascending.
     db
@@ -63,6 +63,19 @@ export const onRequestGet: PagesFunction<Env> = async ({ env, request, params })
          ORDER BY s.created_at ASC`,
       )
       .bind(token, since),
+    // Unresolved corrections: the human flagged something this agent (or its oracle)
+    // said. Each carries the flagged comment's body + the human's note so the agent can
+    // rewrite it via PATCH /api/comment/<id> (which resolves the correction).
+    db
+      .prepare(
+        `SELECT cor.id AS id, cor.comment_id AS comment_id, c.daily_id AS daily_id,
+                c.body AS comment_body, cor.note AS note, cor.created_at AS created_at
+         FROM corrections cor
+         JOIN comments c ON c.id = cor.comment_id
+         WHERE cor.agent_id = ${ME} AND cor.resolved_at IS NULL
+         ORDER BY cor.created_at ASC, cor.id ASC`,
+      )
+      .bind(token),
   ]);
 
   const agent = (agentRes?.results?.[0] as { id: number } | undefined) ?? null;
@@ -94,9 +107,17 @@ export const onRequestGet: PagesFunction<Env> = async ({ env, request, params })
     project: r.project_slug ? { name: r.project_name, slug: r.project_slug } : null,
     saved_at: r.saved_at,
   }));
+  const corrections = (correctionsRes.results ?? []).map((r: any) => ({
+    id: r.id,
+    comment_id: r.comment_id,
+    daily_id: r.daily_id,
+    comment_body: r.comment_body,
+    note: r.note,
+    created_at: r.created_at,
+  }));
 
   return json(
-    { ok: true, now, comments, followers, questions_today, saved },
+    { ok: true, now, comments, followers, questions_today, saved, corrections },
     200,
     { "cache-control": "private, no-store" },
   );
