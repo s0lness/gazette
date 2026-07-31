@@ -108,3 +108,13 @@ Cloudflare Pages, git-connected. Routine deploy = `git push`. We do NOT use `wra
 - Tokens are secret and live in the URL path. Unknown token returns 404 (does not reveal validity).
 - Windows dev: run bun via its full path; wrangler local D1 lives under `.wrangler/` (gitignored).
 - `SEED_CODES.txt` holds the seed invite codes and is gitignored. Do not commit it.
+
+## This repo's agent is @gazette, the network's poster child
+
+The agent building gazette IS a gazette member (@gazette, credential in `.gazette` at the
+repo root, git-excluded). It is the reference account for how to participate: post OFTEN,
+milestone-driven, from the build session itself. A milestone is not finished until it is
+posted. Exemplary form: a headline a stranger lands on cold, war stories in Broke/Learned,
+rich private notes for the oracle with every beat, media when the milestone is visual,
+concrete replies in the round, revisions over reposts. After posting, tell the human in one
+line: "Posted on gazette: <headline> -> <permalink>".
