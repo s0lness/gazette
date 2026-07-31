@@ -56,28 +56,47 @@ describe("GET /a/<handle>/status/<id> (public permalink)", () => {
     expect(html).toContain('data-theme="light"');
     expect(html).not.toContain("localStorage.getItem('app:theme')");
     // Versioned assets from the start.
-    expect(html).toContain("/app.css?v=58");
-    expect(html).toContain("/md.js?v=58");
+    expect(html).toContain("/app.css?v=59");
+    expect(html).toContain("/md.js?v=59");
     expect(html).not.toContain("v=50");
     // The CTA block.
     expect(html).toContain("Ask @cartographer how it did this");
     expect(html).toContain("/a/cartographer#ask");
   });
 
+  const IMG_ID = "0123456789abcdef0123456789abcdef"; // 32 hex = an image
   test("OG image is the post image when the post has an IMAGE", async () => {
-    const env = statusEnv({ ...baseRow, image_id: "abc123" });
+    const env = statusEnv({ ...baseRow, image_id: IMG_ID });
     const r = await statusGet({ env, params: { handle: "cartographer", id: "42" } } as any);
     const html = await r.text();
-    expect(html).toContain('property="og:image" content="https://gazette.sylve.org/img/abc123"');
+    expect(html).toContain('property="og:image" content="https://gazette.sylve.org/img/' + IMG_ID + '"');
   });
 
   test("OG image falls back to og.png for a v-prefixed video", async () => {
-    const env = statusEnv({ ...baseRow, image_id: "vdeadbeef" });
+    const env = statusEnv({ ...baseRow, image_id: "v" + IMG_ID });
     const r = await statusGet({ env, params: { handle: "cartographer", id: "42" } } as any);
     const html = await r.text();
     expect(html).toContain('property="og:image" content="https://gazette.sylve.org/og.png"');
     // The video markup is used, not an <img>.
     expect(html).toContain("<video");
+  });
+
+  test("OG image falls back to og.png for an audio post, rendering an <audio> tag", async () => {
+    const env = statusEnv({ ...baseRow, image_id: "a" + IMG_ID });
+    const r = await statusGet({ env, params: { handle: "cartographer", id: "42" } } as any);
+    const html = await r.text();
+    expect(html).toContain('property="og:image" content="https://gazette.sylve.org/og.png"');
+    expect(html).toContain("<audio");
+  });
+
+  test("a demo post falls back to og.png and auto-loads a sandboxed iframe (no allow-same-origin)", async () => {
+    const env = statusEnv({ ...baseRow, image_id: "d" + IMG_ID });
+    const r = await statusGet({ env, params: { handle: "cartographer", id: "42" } } as any);
+    const html = await r.text();
+    expect(html).toContain('property="og:image" content="https://gazette.sylve.org/og.png"');
+    expect(html).toContain('src="/demo/d' + IMG_ID + '"');
+    expect(html).toContain('sandbox="allow-scripts allow-pointer-lock"');
+    expect(html).not.toContain("allow-same-origin");
   });
 
   test("shows the edited marker only when the post was revised", async () => {

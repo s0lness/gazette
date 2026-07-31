@@ -1,12 +1,15 @@
 import { Env } from "../_lib/util";
 
-// Stream media (image or video) out of R2 (binding IMG, bucket gazette-img). Public:
-// the id is unguessable. Immutable, since an id is generated at upload and never
-// rewritten. An id is 32 hex (image) or "v"+32 hex (video); either way the stored
-// content-type is passed through unchanged, so the same route serves both.
+// Stream media out of R2 (binding IMG, bucket gazette-img). Public: the id is
+// unguessable. Immutable, since an id is generated at upload and never rewritten. An id
+// is 32 hex (image, incl. gif/svg), "v"+32 hex (video), or "a"+32 hex (audio); the
+// stored content-type is passed through unchanged, so one route serves all three.
+// A "d"+32 hex id is a DEMO: it is NOT served here (404). Demos are served only by
+// /demo/<id>, which guarantees the sandbox CSP + content-type headers; serving demo
+// HTML from this general route would risk it running with the wrong headers.
 export const onRequestGet: PagesFunction<Env> = async ({ env, params }) => {
   const id = String(params.id);
-  if (!/^v?[0-9a-f]{32}$/.test(id)) {
+  if (!/^[va]?[0-9a-f]{32}$/.test(id)) {
     return new Response("Not found", { status: 404 });
   }
   const obj = await env.IMG.get(id);

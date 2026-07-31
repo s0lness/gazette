@@ -104,8 +104,8 @@ function notFound(): Response {
 <title>Not found on gazette</title>
 <meta name="robots" content="noindex">
 ${ICON}
-<link rel="stylesheet" href="/sylve-studio.css?v=58">
-<link rel="stylesheet" href="/app.css?v=58">
+<link rel="stylesheet" href="/sylve-studio.css?v=59">
+<link rel="stylesheet" href="/app.css?v=59">
 </head>
 <body>
 <main class="page">
@@ -140,24 +140,46 @@ function page(row: StatusRow): string {
   else if (row.project_descriptor) ogDesc = row.project_descriptor;
   else ogDesc = "A daily review by @" + row.handle + " on gazette";
 
-  // OG image: the post's image when it is a real image (not a v-prefixed video), else
-  // the site card.
-  const isVideo = !!row.image_id && /^v/.test(row.image_id);
-  const ogImage =
-    row.image_id && !isVideo
-      ? "https://gazette.sylve.org/img/" + encodeURIComponent(row.image_id)
-      : "https://gazette.sylve.org/og.png";
+  // Media kind by id shape. An image id is exactly 32 hex; a prefixed id is one letter
+  // + 32 hex: "v" video, "a" audio, "d" demo. Matching the FULL shape (not just the
+  // first char) matters because an image id can legitimately start with the hex digit
+  // "a" or "d"; only a 33-char prefixed id is a non-image kind.
+  const id = row.image_id || "";
+  const isVideo = /^v[0-9a-f]{32}$/.test(id);
+  const isAudio = /^a[0-9a-f]{32}$/.test(id);
+  const isDemo = /^d[0-9a-f]{32}$/.test(id);
+  const isImage = !!id && !isVideo && !isAudio && !isDemo;
 
-  // Media markup: same shape tweet.js uses. A v-prefixed id is an inline video.
+  // OG image: the post's image only when it is a real image (png/jpeg/webp/svg/gif).
+  // A video, audio, or demo has no still to show, so fall back to the site card.
+  const ogImage = isImage
+    ? "https://gazette.sylve.org/img/" + encodeURIComponent(id)
+    : "https://gazette.sylve.org/og.png";
+
+  // Media markup: same shapes tweet.js renders. The permalink is a single post page, so
+  // a demo AUTO-LOADS its sandboxed iframe here (allow-scripts allow-pointer-lock only,
+  // NO allow-same-origin) rather than showing a click-to-play cover.
   let media = "";
-  if (row.image_id) {
-    const src = "/img/" + encodeURIComponent(row.image_id);
-    media = isVideo
-      ? '<video class="tw-video status-media" src="' + escAttr(src) +
-        '" controls muted loop playsinline preload="metadata"></video>'
-      : '<a class="tw-img status-media" href="' + escAttr(src) +
+  if (id) {
+    const src = "/img/" + encodeURIComponent(id);
+    if (isVideo) {
+      media =
+        '<video class="tw-video status-media" src="' + escAttr(src) +
+        '" controls muted loop playsinline preload="metadata"></video>';
+    } else if (isAudio) {
+      media = '<audio class="tw-audio status-media" controls preload="metadata" src="' + escAttr(src) + '"></audio>';
+    } else if (isDemo) {
+      const demoSrc = "/demo/" + encodeURIComponent(id);
+      media =
+        '<div class="tw-demo tw-demo-live status-media"><iframe class="tw-demo-frame" ' +
+        'sandbox="allow-scripts allow-pointer-lock" src="' + escAttr(demoSrc) +
+        '" loading="lazy" allowfullscreen></iframe></div>';
+    } else {
+      media =
+        '<a class="tw-img status-media" href="' + escAttr(src) +
         '" target="_blank" rel="noopener"><img loading="lazy" src="' + escAttr(src) +
         '" alt="attachment from ' + escAttr(row.handle) + '"></a>';
+    }
   }
 
   // Project chip, only when the daily carries a project. Links to the project page.
@@ -202,8 +224,8 @@ function page(row: StatusRow): string {
 <meta name="twitter:description" content="${escAttr(ogDesc)}">
 <meta name="twitter:image" content="${escAttr(ogImage)}">
 ${ICON}
-<link rel="stylesheet" href="/sylve-studio.css?v=58">
-<link rel="stylesheet" href="/app.css?v=58">
+<link rel="stylesheet" href="/sylve-studio.css?v=59">
+<link rel="stylesheet" href="/app.css?v=59">
 </head>
 <body>
 <header class="bar">
@@ -240,7 +262,7 @@ ${ICON}
     </section>
   </article>
 </main>
-<script src="/md.js?v=58"></script>
+<script src="/md.js?v=59"></script>
 <script>
   (function () {
     var el = document.getElementById("status-body");

@@ -96,10 +96,11 @@
   }
 
   // Media strip: a horizontal, scrollable row of square thumbnails (newest first,
-  // max 12) drawn from the project's dailies that carry an attachment. Images render
-  // as <img>; videos as a muted, controls-free <video> with a play-glyph overlay. A
-  // thumbnail carries data-key of its post so a click can scroll to that card and
-  // flash it. Empty (no attachments) -> "" so the header stays clean.
+  // max 12) drawn from the project's dailies that carry an attachment. Rendered by id
+  // prefix: images as <img>; videos as a muted <video> with a play-glyph overlay;
+  // demos ("d") as a play glyph over a demo tile (a playable, so it shows the play
+  // affordance like videos); audio ("a") as an audio glyph tile. A thumbnail carries
+  // data-key of its post so a click scrolls to that card and flashes it. Empty -> "".
   function mediaStripHTML(a) {
     var dailies = a.dailies || [];
     var withMedia = [];
@@ -109,14 +110,29 @@
     if (withMedia.length === 0) return "";
     var tiles = withMedia
       .map(function (d) {
-        var src = "/img/" + encodeURIComponent(d.image_id);
+        var id = String(d.image_id);
+        var src = "/img/" + encodeURIComponent(id);
         var key = a.owner.handle + "|" + d.date;
-        var inner = /^v/.test(String(d.image_id))
-          ? '<video class="proj-media-vid" src="' + src +
+        // Match the full id shape: an image id (32 hex) can start with "a"/"d", so only
+        // a 33-char prefixed id ("v"/"a"/"d" + 32 hex) is a non-image kind.
+        var inner;
+        if (/^v[0-9a-f]{32}$/.test(id)) {
+          inner =
+            '<video class="proj-media-vid" src="' + src +
             '" muted playsinline preload="metadata"></video>' +
-            '<span class="proj-media-play" aria-hidden="true"></span>'
-          : '<img class="proj-media-img" loading="lazy" src="' + src +
+            '<span class="proj-media-play" aria-hidden="true"></span>';
+        } else if (/^d[0-9a-f]{32}$/.test(id)) {
+          // A demo has no still; show a neutral tile with the same play glyph as videos.
+          inner =
+            '<span class="proj-media-demo" aria-hidden="true"></span>' +
+            '<span class="proj-media-play" aria-hidden="true"></span>';
+        } else if (/^a[0-9a-f]{32}$/.test(id)) {
+          inner = '<span class="proj-media-audio" aria-hidden="true"></span>';
+        } else {
+          inner =
+            '<img class="proj-media-img" loading="lazy" src="' + src +
             '" alt="attachment from @' + escAttr(a.owner.handle) + '">';
+        }
         return (
           '<button type="button" class="proj-media-tile" data-key="' + escAttr(key) +
           '" aria-label="Jump to this post">' + inner + "</button>"

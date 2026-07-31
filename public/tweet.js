@@ -23,6 +23,50 @@
     return e.handle + "|" + e.date;
   }
 
+  // Inline play triangle for a demo cover, no external requests.
+  var PLAY_SVG =
+    '<svg class="tw-demo-play-glyph" viewBox="0 0 24 24" width="26" height="26" aria-hidden="true">' +
+    '<path d="M8 5v14l11-7z"/></svg>';
+
+  // Render a post's single attachment by its id prefix. `autoDemo` (permalink only)
+  // loads the demo iframe immediately; in the feed it is always a click-to-play cover,
+  // never auto-instantiated. Returns "" when there is no attachment.
+  //  - "v" video : inline <video>, muted looping, like a Twitter clip.
+  //  - "a" audio : a styled <audio controls> bar.
+  //  - "d" demo  : a .tw-demo cover with a play button ("Play demo"); clicking swaps in
+  //                a sandboxed iframe (allow-scripts allow-pointer-lock, NO
+  //                allow-same-origin/popups/top-navigation) pointed at /demo/<id>.
+  //  - else image (png/jpeg/webp/svg/gif): a linked <img>.
+  // An image id is exactly 32 hex; a prefixed id is one letter + 32 hex ("v"/"a"/"d").
+  // Match the full shape: an image id can start with the hex digit "a" or "d", so only
+  // a 33-char prefixed id is a non-image kind.
+  function mediaHTML(imageId, handle, autoDemo) {
+    if (!imageId) return "";
+    var id = String(imageId);
+    var src = "/img/" + encodeURIComponent(id);
+    if (/^v[0-9a-f]{32}$/.test(id)) {
+      return '<video class="tw-video" src="' + src +
+        '" controls muted loop playsinline preload="metadata"></video>';
+    }
+    if (/^a[0-9a-f]{32}$/.test(id)) {
+      return '<audio class="tw-audio" controls preload="metadata" src="' + src + '"></audio>';
+    }
+    if (/^d[0-9a-f]{32}$/.test(id)) {
+      var demoSrc = "/demo/" + encodeURIComponent(id);
+      if (autoDemo) {
+        return '<div class="tw-demo tw-demo-live">' +
+          '<iframe class="tw-demo-frame" sandbox="allow-scripts allow-pointer-lock" src="' +
+          escAttr(demoSrc) + '" loading="lazy" allowfullscreen></iframe></div>';
+      }
+      return '<div class="tw-demo" data-demo="' + escAttr(demoSrc) + '">' +
+        '<button type="button" class="tw-demo-play" aria-label="Play demo">' +
+        PLAY_SVG + '<span class="tw-demo-label">Play demo</span></button></div>';
+    }
+    return '<a class="tw-img" href="' + src +
+      '" target="_blank" rel="noopener"><img loading="lazy" src="' + src +
+      '" alt="attachment from ' + escAttr(handle) + '"></a>';
+  }
+
   // DiceBear "glass" avatar, served same-origin via the /avatar/<seed> proxy (edge
   // cached, immutable, no handle leakage to dicebear). Kept inside the same .tw-avatar
   // span so every existing size class keeps working. A deterministic hue from the
@@ -175,18 +219,11 @@
   function cardHTML(e) {
     var dot = e.status === "active" ? "active" : "lapsed";
     var name = e.display_name ? e.display_name : e.handle;
-    // Attachment: an id prefixed "v" is a video (mp4/webm), otherwise an image. Same
-    // container styling; the video plays inline (muted, looping) like a Twitter clip.
-    var img = "";
-    if (e.image_id) {
-      var mediaSrc = "/img/" + encodeURIComponent(e.image_id);
-      img = /^v/.test(String(e.image_id))
-        ? '<video class="tw-video" src="' + mediaSrc +
-          '" controls muted loop playsinline preload="metadata"></video>'
-        : '<a class="tw-img" href="' + mediaSrc +
-          '" target="_blank" rel="noopener"><img loading="lazy" src="' + mediaSrc +
-          '" alt="attachment from ' + escAttr(e.handle) + '"></a>';
-    }
+    // Attachment, keyed by the id prefix: "v" video (mp4/webm, inline muted loop),
+    // "a" audio (mp3/ogg/wav, a controls bar), "d" demo (a click-to-play cover that
+    // swaps in a sandboxed iframe; NEVER auto-instantiated in the feed), otherwise an
+    // image (png/jpeg/webp/svg/gif). Same rounded container styling across kinds.
+    var img = mediaHTML(e.image_id, e.handle, false);
     // The card shows the top summary only: no body on the card. The full body lives on
     // the post's public permalink (/a/<handle>/status/<id>), reached by the headline
     // link below, so depth is one click away.
@@ -441,6 +478,25 @@
     done();
   }
 
+  // Click-to-play a demo: swap the cover for a sandboxed iframe. The iframe grants ONLY
+  // allow-scripts + allow-pointer-lock (no allow-same-origin, no allow-popups, no
+  // allow-top-navigation), so the demo runs isolated in an opaque origin. Consumed once.
+  function playDemo(btn) {
+    var wrap = btn.parentNode;
+    if (!wrap || wrap.getAttribute("data-demo") == null) return;
+    var demoSrc = wrap.getAttribute("data-demo");
+    if (!demoSrc) return;
+    var frame = document.createElement("iframe");
+    frame.className = "tw-demo-frame";
+    frame.setAttribute("sandbox", "allow-scripts allow-pointer-lock");
+    frame.setAttribute("loading", "lazy");
+    frame.setAttribute("allowfullscreen", "");
+    frame.src = demoSrc;
+    wrap.innerHTML = "";
+    wrap.classList.add("tw-demo-live");
+    wrap.appendChild(frame);
+  }
+
   function fallbackCopy(text) {
     try {
       var ta = document.createElement("textarea");
@@ -466,6 +522,8 @@
       if (bm && card.contains(bm)) { toggleSave(card); return; }
       var share = ev.target.closest ? ev.target.closest(".tw-share-btn") : null;
       if (share && card.contains(share)) { copyLink(share); return; }
+      var demoBtn = ev.target.closest ? ev.target.closest(".tw-demo-play") : null;
+      if (demoBtn && card.contains(demoBtn)) { playDemo(demoBtn); return; }
       var send = ev.target.closest ? ev.target.closest(".tw-reply-send") : null;
       if (send && card.contains(send)) { sendReply(card); return; }
     });

@@ -727,6 +727,31 @@ body.wall-open main.page { max-width: 70rem; }
 /* Video attachment: same frame as an image (rounded, hairline, capped height). */
 .tw-video { display: block; margin: 0 0 0.6rem; max-width: 100%; max-height: 32rem; border-radius: var(--radius-sm); border: 1px solid var(--line); background: #000; }
 
+/* Audio attachment: a controls bar sized to the card. */
+.tw-audio { display: block; width: 100%; margin: 0 0 0.6rem; }
+
+/* Playable demo (self-contained HTML in a sandboxed iframe): a 16:10 rounded box. In a
+   feed card it starts as a click-to-play cover; on the permalink it auto-loads the
+   iframe. .tw-demo is the box; .tw-demo-play is the cover button; once live, the iframe
+   fills the box. */
+.tw-demo {
+  position: relative; display: block; margin: 0 0 0.6rem;
+  aspect-ratio: 16 / 10; width: 100%;
+  border-radius: var(--radius-sm); border: 1px solid var(--line);
+  background: var(--surface-2, #111); overflow: hidden;
+}
+.tw-demo-play {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.5rem;
+  border: 0; background: transparent; cursor: pointer; color: var(--ink);
+  font: inherit; font-size: 0.85rem; font-weight: 600;
+  transition: background 0.12s ease;
+}
+.tw-demo-play:hover { background: color-mix(in srgb, var(--accent) 10%, transparent); }
+.tw-demo-play-glyph { fill: var(--accent); display: block; }
+.tw-demo-label { color: var(--ink-2, var(--ink)); }
+.tw-demo-frame { display: block; width: 100%; height: 100%; border: 0; }
+
 /* Action row: like heart + count, reply count, copy-link. Pill hover states. */
 .tw-actions { display: flex; align-items: center; gap: 0.4rem; margin: 0.2rem 0 0; color: var(--ink-3); }
 .tw-like-btn, .tw-comment-btn, .tw-share-btn, .tw-bookmark-btn {
@@ -936,6 +961,16 @@ pre.rt-code { font-size: 0.82rem; margin: 0; white-space: pre; overflow-x: auto;
   content: ""; position: absolute; top: 50%; left: 54%; transform: translate(-50%, -50%);
   border-style: solid; border-width: 0.32rem 0 0.32rem 0.52rem;
   border-color: transparent transparent transparent #fff;
+}
+/* Demo thumbnail: no still to show, so a neutral filled tile carrying the play glyph. */
+.proj-media-demo { position: absolute; inset: 0; background: var(--surface-2, #1a1a1a); }
+/* Audio thumbnail: a neutral tile with a small speaker-wave glyph, no play overlay. */
+.proj-media-audio { position: absolute; inset: 0; background: var(--surface-2, #1a1a1a); }
+.proj-media-audio::after {
+  content: ""; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  width: 1.5rem; height: 1.5rem;
+  background: no-repeat center / contain
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23fff'%3E%3Cpath d='M4 9v6h4l5 5V4L8 9H4zm12.5 3a3.5 3.5 0 0 0-2-3.15v6.3A3.5 3.5 0 0 0 16.5 12zM14 3.2v2.06a7 7 0 0 1 0 13.48v2.06a9 9 0 0 0 0-17.6z'/%3E%3C/svg%3E");
 }
 
 /* ---- Hover card (desktop only) ------------------------------------------- */
@@ -1364,6 +1399,8 @@ main.gz-center { min-height: 100dvh; }
 .status-media img, .status-media.tw-video, video.status-media {
   width: 100%; height: auto; max-width: 100%; border-radius: var(--radius); display: block;
 }
+audio.status-media { width: 100%; }
+.status-media.tw-demo { margin: 0 0 1.1rem; border-radius: var(--radius); }
 .status-body { margin: 0 0 1.1rem; }
 .status-meta { font-size: 0.85rem; color: var(--ink-3); margin: 0 0 1.6rem; }
 .status-cta {
