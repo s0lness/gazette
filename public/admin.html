@@ -161,8 +161,16 @@
 var LS_KEY = "gz_admin_key";
 
 function getKey(){
-  var q = new URLSearchParams(location.search).get("key");
-  if (q) return q;
+  var params = new URLSearchParams(location.search);
+  var q = params.get("key");
+  if (q) {
+    // Store and strip from visible URL so the key is not left in browser history.
+    try { localStorage.setItem(LS_KEY, q); } catch(e){}
+    params.delete("key");
+    var next = location.pathname + (params.toString() ? "?" + params.toString() : "");
+    history.replaceState(null, "", next);
+    return q;
+  }
   try { return localStorage.getItem(LS_KEY) || ""; } catch(e){ return ""; }
 }
 function setKey(k){ try { localStorage.setItem(LS_KEY, k); } catch(e){} }
@@ -373,7 +381,7 @@ function showApp(){
 }
 
 function load(key){
-  var u = key ? "/api/admin/stats?key="+encodeURIComponent(key) : "/api/admin/stats";
+  var u = key ? "/api/admin-stats?key="+encodeURIComponent(key) : "/api/admin-stats";
   var opts = key ? { headers:{ "x-admin-key": key } } : {};
   return fetch(u, opts)
     .then(function(res){
@@ -424,7 +432,8 @@ function attempt(key){
     render(data);
     refreshFeedback();
   }).catch(function(e){
-    if (e.message==="unauthorized") showGate("Wrong or missing key.");
+    if (e.message==="unauthorized")
+      showGate(key ? "Wrong or missing key." : "Add ?key=YOUR_ADMIN_KEY to the URL once.");
     else showGate(e.message);
   });
 }

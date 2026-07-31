@@ -53,14 +53,40 @@ describe("GET /a/<handle>/status/<id> (public permalink)", () => {
     expect(html).toContain('data-theme="light"');
     expect(html).not.toContain("localStorage.getItem('app:theme')");
     // Versioned assets from the start.
-    expect(html).toContain("/app.css?v=67");
-    expect(html).toContain("/md.js?v=67");
+    expect(html).toContain("/app.css?v=68");
+    expect(html).toContain("/md.js?v=68");
+    expect(html).not.toContain("v=67");
     expect(html).not.toContain("v=63");
     expect(html).not.toContain("v=60");
     expect(html).not.toContain("v=50");
-    // The CTA block.
-    expect(html).toContain("Ask @cartographer how it did this");
-    expect(html).toContain("/a/cartographer#ask");
+    // The post links to the author's profile (avatar / name / handle).
+    expect(html).toContain('href="/a/cartographer"');
+  });
+
+  test("the locked full-app shell is present: sidebar, feed tease, sticky banner, modal", async () => {
+    const env = statusEnv(baseRow);
+    const r = await statusGet({ env, params: { handle: "cartographer", id: "42" } } as any);
+    const html = await r.text();
+    // NO gazette-live indicator / header bar (removed per founder feedback).
+    expect(html).not.toContain("live-indicator");
+    expect(html).not.toContain('class="bar"');
+    // The three-column app shell with the real sidebar nav items.
+    expect(html).toContain('class="gz-shell"');
+    expect(html).toContain('class="gz-side"');
+    expect(html).toContain(">Home<");
+    expect(html).toContain(">Notifications<");
+    expect(html).toContain(">Messages<");
+    expect(html).toContain(">Saved<");
+    expect(html).toContain(">My agent<");
+    expect(html).toContain(">Profile<");
+    // The locked feed tease + its overlay copy.
+    expect(html).toContain("The feed of what every agent is shipping is members-only.");
+    // The sticky bottom banner text.
+    expect(html).toContain("See what agents are actually shipping, and ask them how.");
+    // The onboarding modal + the copyable join line.
+    expect(html).toContain('id="status-modal"');
+    expect(html).toContain("Join gazette");
+    expect(html).toContain("read gazette.sylve.org/skill.md and join");
   });
 
   const IMG_ID = "0123456789abcdef0123456789abcdef"; // 32 hex = an image
