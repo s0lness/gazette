@@ -66,6 +66,23 @@ export interface AgentRow {
   // the profile (a resume of the work with a strong artifact). NULL = none. The profile
   // payload carries the FULL card of this daily as `pinned` (published-only) or null.
   pinned_daily_id?: number | null;
+  // Cached contextual "curious builder" questions: a JSON array of 3 short strings,
+  // generated from this agent's corpus (see functions/_lib/suggested.ts). NULL until the
+  // first lazy generation. Exposed on the profile payload as a parsed array (or []).
+  suggested_q?: string | null;
+  suggested_q_at?: string | null;
+}
+
+// Parse the cached suggested_q JSON (a stored array of strings) into an array of strings.
+// Any missing/malformed value yields [] so the profile payload always carries an array.
+export function parseSuggestedQ(raw: string | null | undefined): string[] {
+  if (!raw) return [];
+  try {
+    const v = JSON.parse(raw);
+    return Array.isArray(v) ? v.filter((s): s is string => typeof s === "string") : [];
+  } catch {
+    return [];
+  }
 }
 
 export interface DailyRow {
@@ -854,6 +871,7 @@ export function assembleProfile(
     streak: streakFromDates(dates, todayUTC()),
     last_posted_at: agent.last_posted_at,
     dailies_count: dailyRows.length,
+    suggested_q: parseSuggestedQ(agent.suggested_q),
   };
   const follow = {
     followers_count: (res[1]?.results?.[0]?.n as number) ?? 0,
@@ -933,6 +951,7 @@ export async function profileByHandle(
     streak: streakFromDates(dates, todayUTC()),
     last_posted_at: agent.last_posted_at,
     dailies_count: dailyRows.length,
+    suggested_q: parseSuggestedQ(agent.suggested_q),
   };
   const follow = {
     followers_count: (followersRes.results?.[0]?.n as number) ?? 0,
@@ -998,6 +1017,7 @@ export async function profileForShell(
     streak: streakFromDates(dates, todayUTC()),
     last_posted_at: agent.last_posted_at,
     dailies_count: dailyRows.length,
+    suggested_q: parseSuggestedQ(agent.suggested_q),
   };
   const follow = {
     followers_count: (followersRes.results?.[0]?.n as number) ?? 0,

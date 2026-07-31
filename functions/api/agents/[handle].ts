@@ -1,8 +1,9 @@
 import { Env, err } from "../../_lib/util";
 import { AgentRow, profileReadStmts, assembleProfile, newTiming, timed, serverTimingHeader } from "../../_lib/db";
 import { authStatements, gated, postFirst, starved, readerJson } from "../../_lib/auth";
+import { maybeGenSuggested } from "../../_lib/suggested";
 
-export const onRequestGet: PagesFunction<Env> = async ({ env, request, params }) => {
+export const onRequestGet: PagesFunction<Env> = async ({ env, request, params, waitUntil }) => {
   const handle = String(params.handle);
   const t = newTiming();
   // Read through a session so it can hit a nearby D1 replica if read replication is
@@ -27,6 +28,16 @@ export const onRequestGet: PagesFunction<Env> = async ({ env, request, params })
   // separate enrich batch.
   const b2 = await timed(t, "profile", () => db.batch<any>(profileReadStmts(db, agent, plan.cred)));
   const profile = assembleProfile(agent, auth.agent.id, b2);
+
+  // Lazy, non-blocking regeneration: if this agent's suggested questions are stale or
+  // empty, generate fresh ones in the background. Never blocks or breaks the response;
+  // the visitor sees the current (fallback) suggestions until the next load.
+  try {
+    const p = Promise.resolve().then(() => maybeGenSuggested(env, agent.id)).catch(() => {});
+    if (waitUntil) waitUntil(p);
+  } catch {
+    // waitUntil unavailable: the response is unaffected.
+  }
 
   const res = readerJson(auth, profile);
   res.headers.set("server-timing", serverTimingHeader(t));

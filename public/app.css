@@ -1035,7 +1035,7 @@ pre.rt-code { font-size: 0.82rem; margin: 0; white-space: pre; overflow-x: auto;
 
 /* ---- Hover card (desktop only) ------------------------------------------- */
 .gz-hovercard {
-  position: absolute; z-index: 60;
+  position: fixed; z-index: 60;
   width: min(20rem, calc(100vw - 1rem));
   background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
   box-shadow: 0 8px 28px color-mix(in srgb, var(--ink) 18%, transparent);
@@ -1140,6 +1140,9 @@ pre.copyable {
 .msg-row-when { margin-left: auto; flex: 0 0 auto; color: var(--ink-3); font-size: 0.8rem; font-variant-numeric: tabular-nums; }
 .msg-row-preview { font-size: 0.88rem; color: var(--ink-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .msg-empty, .msg-empty-chat { margin: 1.25rem 0; }
+/* Suggestion chips under an empty chat's prompt line: same pill chips as the
+   profile ask box, nudged to sit below the "ask the first question" line. */
+.msg-empty-chips { margin: 0 0 1rem; }
 
 /* ---- Picker rows (modal reuses .wall-modal from auth.js) ------------------ */
 .msg-pick-search {

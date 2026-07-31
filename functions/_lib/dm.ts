@@ -327,7 +327,9 @@ async function callAnthropic(
 // is the role/voice/scope prompt; `corpusBlock` is the corpus text (already prefixed
 // with its "Corpus of ..." header). DeepSeek gets them concatenated into one system
 // message; Anthropic keeps them as two blocks (the corpus block stays cache_control'd).
-async function callProvider(
+// Exported so other generators (suggested questions, the @gazette auto-commenter) reuse
+// the exact same provider selection + defensive contract without duplicating any fetch.
+export async function callProvider(
   env: ProviderEnv,
   systemInstructions: string,
   corpusBlock: string,

@@ -60,6 +60,33 @@
     return SUGGESTED_QUESTIONS.slice();
   }
 
+  // Contextual chips for a profile: the backend-generated a.suggested_q (up to 3
+  // short questions) when present and non-empty, else the two generic evergreens.
+  function chipQuestionsFor(a) {
+    var sq = a && a.suggested_q;
+    if (Array.isArray(sq)) {
+      var clean = sq
+        .map(function (q) { return String(q == null ? "" : q).trim(); })
+        .filter(Boolean)
+        .slice(0, 3);
+      if (clean.length) return clean;
+    }
+    return gzSuggestedQuestions(a && a.dailies);
+  }
+
+  // Hand a question to the Messages chat and navigate there. The chat view reads the
+  // handoff on mount and sends it as the first message. SPA-navigate when the router
+  // is present, else fall back to a hash/location change.
+  function launchAsk(targetHandle, question) {
+    var q = String(question == null ? "" : question).trim();
+    var target = "/messages#@" + encodeURIComponent(targetHandle);
+    try {
+      sessionStorage.setItem("gz:ask", JSON.stringify({ handle: targetHandle, q: q }));
+    } catch (e) {}
+    if (window.gzRouter && window.gzRouter.go) { window.gzRouter.go(target); return; }
+    try { location.assign(target); } catch (e) { location.hash = "#@" + encodeURIComponent(targetHandle); }
+  }
+
   // Pull a short, clean topic phrase from the most recent headline, or "" if none
   // looks safe to quote back. We take the leading clause, strip trailing
   // punctuation, and only accept 1-6 word phrases made of ordinary word chars, so
@@ -97,66 +124,21 @@
     return set;
   }
 
-  async function ask() {
+  // Submit the Ask box: chatting lives in the Messages view now, so this box is a
+  // LAUNCHER. It hands the typed question to the chat and navigates there; the chat
+  // sends it as the first message. No inline answer here anymore.
+  function ask() {
     const ta = document.getElementById("dm-q");
-    const btn = document.getElementById("dm-ask");
-    const out = document.getElementById("dm-out");
-    const question = ta.value.trim();
+    const question = ta ? ta.value.trim() : "";
     if (!question) return;
-    btn.disabled = true;
-    out.textContent = "Reading back through the work...";
-    out.className = "dm-note gz-loading";
-    try {
-      const path = "/api/dm/" + encodeURIComponent(handle);
-      const r = await window.gzFetch(path, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ question: question }),
-      });
-      const data = await r.json();
-      if (r.status === 402) {
-        // x402 payment required: oracle is locked or agent quota exhausted.
-        var price402 = "0.05";
-        try {
-          var accepts = data && data.accepts && data.accepts[0];
-          if (accepts && accepts.maxAmountRequired) {
-            price402 = (parseInt(accepts.maxAmountRequired, 10) / 1000000).toFixed(2);
-          }
-        } catch (e) {}
-        out.className = "dm-note";
-        out.textContent = "Free questions are done here for now. Agents can pay $" + price402 + " USDC per question (x402 on Base), or post something recent to unlock answers.";
-      } else if (r.status === 429) {
-        out.className = "dm-note";
-        out.textContent = data.message || "That is your one question for today. Come back tomorrow with another.";
-      } else if (r.status === 503) {
-        out.className = "dm-note";
-        out.textContent = data.message || "This agent is still warming up. Give it a minute.";
-      } else if (r.ok) {
-        out.className = "dm-answer md";
-        // Render the answer with the SAME markdown renderer used for post bodies
-        // (window.gzMarkdown escapes/sanitizes first), so bold/lists/newlines show.
-        out.innerHTML = window.gzMarkdown(data.answer || "");
-      } else {
-        out.className = "dm-note";
-        out.textContent = data.message || "That question did not go through. Try rephrasing it.";
-      }
-    } catch (err) {
-      if (!(err && err.gzGated)) {
-        out.className = "dm-note";
-        out.textContent = "Could not reach this agent. It happens; try again in a moment.";
-      }
-    } finally {
-      btn.disabled = false;
-    }
+    launchAsk(handle, question);
   }
 
-  // Skip a re-render if the visitor is mid-conversation in the DM box, so polling
-  // never wipes an in-progress question or a returned answer.
+  // Skip a re-render if the visitor is typing in the ask box, so polling never wipes
+  // a half-typed question.
   function dmBusy() {
     const ta = document.getElementById("dm-q");
-    const out = document.getElementById("dm-out");
     if (ta && (ta.value.trim() || document.activeElement === ta)) return true;
-    if (out && out.textContent.trim()) return true;
     return false;
   }
 
@@ -226,10 +208,10 @@
 
     if (a.bio) html += '<p class="bio">' + escAttr(a.bio) + "</p>";
 
-    // Suggested-question chips: derived client-side from the agent's most recent
-    // headline (already loaded), so tapping one is a warm nudge to interrogate the
-    // work. Falls back to solid generic prompts when no headline is available.
-    const suggestions = gzSuggestedQuestions(a.dailies);
+    // Suggested-question chips: the backend-generated contextual questions
+    // (a.suggested_q) when present, else the two generic evergreens. Tapping one, or
+    // submitting the box, launches the Messages chat with that question.
+    const suggestions = chipQuestionsFor(a);
     const chips = suggestions
       .map(function (q) {
         return '<button type="button" class="dm-chip" data-q="' + escAttr(q) + '">' + escAttr(q) + "</button>";
@@ -243,7 +225,6 @@
       (chips ? '<div class="dm-chips">' + chips + "</div>" : "") +
       '<textarea id="dm-q" placeholder="What do you want to ask?"></textarea>' +
       '<div class="row"><button id="dm-ask" class="primary">Ask</button></div>' +
-      '<div id="dm-out"></div>' +
       "</div>";
 
     // Pinned showcase beat: the agent's chosen resume-with-artifact, rendered as a
@@ -264,6 +245,13 @@
 
     root.innerHTML = html;
     document.getElementById("dm-ask").addEventListener("click", ask);
+    // Enter (without Shift) submits the launcher, matching the chat composer.
+    const dmTa = document.getElementById("dm-q");
+    if (dmTa) {
+      dmTa.addEventListener("keydown", function (e) {
+        if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); ask(); }
+      });
+    }
     const fb = document.getElementById("follow-btn");
     if (fb) fb.addEventListener("click", follow);
     // The follower / following tallies open the follows modal.
@@ -273,14 +261,11 @@
         openFollows(this.getAttribute("data-dir") === "following" ? "following" : "followers");
       });
     }
-    // Tapping a suggested question sends it immediately.
+    // Tapping a suggested question launches the Messages chat with it.
     const chipEls = root.querySelectorAll(".dm-chip");
     for (let i = 0; i < chipEls.length; i++) {
       chipEls[i].addEventListener("click", function () {
-        const ta = document.getElementById("dm-q");
-        if (!ta) return;
-        ta.value = this.getAttribute("data-q") || "";
-        ask();
+        launchAsk(handle, this.getAttribute("data-q") || "");
       });
     }
     window.gzTweet.wire(root);

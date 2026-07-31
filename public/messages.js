@@ -312,13 +312,71 @@
     return d.scrollHeight - d.scrollTop - d.clientHeight < 150;
   }
 
+  // Generic evergreen fallbacks, mirrored from profile.js. Used for the empty-chat
+  // suggestion chips when the agent has no suggested_q of its own.
+  var GENERIC_Q = [
+    "What's a best practice you have?",
+    "What's something that helps you save time?",
+  ];
+
+  // Suggestion chips for the empty state of a chat: the agent's backend-generated
+  // suggested_q (up to 3) when present, else the two generics. Each chip, clicked,
+  // fills the composer and sends immediately (reusing the normal send path).
+  function chipsHTML(questions) {
+    var qs = (questions && questions.length ? questions : GENERIC_Q).slice(0, 3);
+    var chips = qs
+      .map(function (q) { return '<button type="button" class="dm-chip" data-q="' + esc(q) + '">' + esc(q) + "</button>"; })
+      .join("");
+    return '<div class="dm-chips msg-empty-chips">' + chips + "</div>";
+  }
+
+  function wireEmptyChips(handle) {
+    var t = document.getElementById("msg-thread");
+    if (!t) return;
+    var chipEls = t.querySelectorAll(".dm-chip");
+    for (var i = 0; i < chipEls.length; i++) {
+      chipEls[i].addEventListener("click", function () {
+        var ta = document.getElementById("msg-input");
+        if (!ta || (chatState && chatState.disabled)) return;
+        ta.value = this.getAttribute("data-q") || "";
+        send();
+      });
+    }
+  }
+
+  // Fetch (once, best-effort) the agent's suggested_q and, if the chat is still
+  // empty, replace the empty-state line with contextual suggestion chips.
+  function loadEmptyChips(handle) {
+    window
+      .gzFetch("/api/agents/" + encodeURIComponent(handle))
+      .then(function (r) { return r.json(); })
+      .then(function (a) {
+        if (!chatState || chatState.handle !== handle) return; // navigated away
+        var t = document.getElementById("msg-thread");
+        if (!t || !t.querySelector(".msg-empty-chat")) return; // history arrived meanwhile
+        var sq = a && Array.isArray(a.suggested_q)
+          ? a.suggested_q.map(function (q) { return String(q == null ? "" : q).trim(); }).filter(Boolean)
+          : [];
+        var empty = t.querySelector(".msg-empty-chat");
+        empty.insertAdjacentHTML("afterend", chipsHTML(sq));
+        wireEmptyChips(handle);
+      })
+      .catch(function () {});
+  }
+
   function renderThread(messages) {
     var t = document.getElementById("msg-thread");
     if (!t) return;
-    t.innerHTML = (messages && messages.length)
-      ? messages.map(bubbleHTML).join("")
-      : '<p class="muted msg-empty-chat">No messages yet. Ask the first question below.</p>';
-    scrollThread();
+    var handle = chatState && chatState.handle;
+    if (messages && messages.length) {
+      t.innerHTML = messages.map(bubbleHTML).join("");
+      scrollThread();
+    } else {
+      t.innerHTML = '<p class="muted msg-empty-chat">No messages yet. Ask the first question below.</p>';
+      // Show contextual suggestion chips (or generics) under the empty-state line.
+      if (handle) loadEmptyChips(handle);
+      scrollThread();
+    }
   }
 
   function autoGrow(ta) {
@@ -457,6 +515,10 @@
       .then(function (data) {
         // Ignore if the viewer navigated away or into another chat meanwhile.
         if (!chatState || chatState.handle !== handle) return;
+        // A handoff question (from a profile's Ask launcher) already put an
+        // optimistic pair in an otherwise-empty thread; don't clobber it with the
+        // empty-state render when the history fetch returns nothing.
+        if (chatState.handoff && !(data.messages && data.messages.length)) return;
         renderThread(data.messages || []);
       })
       .catch(function (err) {
@@ -485,6 +547,38 @@
       setTimeout(function () { try { ta.focus({ preventScroll: true }); } catch (e) { ta.focus(); } }, 40);
     }
     loadChat(handle);
+    consumeAskHandoff(handle);
+  }
+
+  // A question handed off from a profile's Ask launcher (sessionStorage "gz:ask")
+  // is sent immediately as the first message when its handle matches this chat, so
+  // it appears as the user's bubble and the answer streams in. The key is removed
+  // right away (single-shot) so a re-render or back-and-forth never re-sends it.
+  function consumeAskHandoff(handle) {
+    var raw = null;
+    try { raw = sessionStorage.getItem("gz:ask"); } catch (e) { return; }
+    if (!raw) return;
+    var payload = null;
+    try { payload = JSON.parse(raw); } catch (e) {}
+    // Always clear once read: this is a single-use handoff, guarding double-send.
+    try { sessionStorage.removeItem("gz:ask"); } catch (e) {}
+    if (!payload || payload.handle !== handle) return;
+    var q = String(payload.q == null ? "" : payload.q).trim();
+    if (!q) return;
+    var ta = document.getElementById("msg-input");
+    if (!ta) return;
+    if (chatState && chatState.handle === handle) chatState.handoff = true;
+    // Clear the "reading back..." loading placeholder so the optimistic pair is the
+    // first thing in the thread (history, if any, arrives via loadChat and, when
+    // non-empty, re-renders including this fresh question).
+    var t = document.getElementById("msg-thread");
+    if (t) {
+      var loading = t.querySelector(".gz-loading");
+      if (loading) loading.remove();
+    }
+    ta.value = q;
+    autoGrow(ta);
+    send();
   }
 
   // ---- top-level route switch ---------------------------------------------

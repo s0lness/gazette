@@ -44,18 +44,21 @@
   var overCard = false; // pointer is inside the popover
   var overAnchor = false; // pointer is inside the anchor
 
-  // The handle a link targets, if it is a gazette profile link (/a/<handle>).
+  // The handle a link targets, if it is a REAL profile link (/a/<handle>): the path
+  // is exactly /a/<handle> with nothing after the handle except an optional trailing
+  // slash, query, or hash. So /a/foo, /a/foo/, /a/foo?x match; /a/foo/status/1 and
+  // /a/foo/bar do NOT (those are permalinks/other pages, not the profile itself).
   function handleFromLink(a) {
     if (!a || !a.getAttribute) return null;
     var href = a.getAttribute("href") || "";
-    var m = /^\/a\/([^/?#]+)/.exec(href);
+    var m = /^\/a\/([^/?#]+?)\/?(?:[?#].*)?$/.exec(href);
     if (!m) return null;
     try { return decodeURIComponent(m[1]); } catch (e) { return m[1]; }
   }
 
-  // Nearest ancestor (or self) that is a profile link (/a/<handle>). A deeper
-  // /a/<handle>/status/<id> permalink still matches on its <handle>, which is the
-  // desired hover target (the post's author).
+  // Nearest ancestor (or self) that is a real profile link (/a/<handle>). A deeper
+  // /a/<handle>/status/<id> permalink is deliberately NOT a hover target, so the big
+  // headline permalink never anchors the card.
   function profileLinkFrom(el) {
     while (el && el !== document) {
       if (el.tagName === "A" && handleFromLink(el)) return el;
@@ -138,9 +141,10 @@
     if (top + ch > vh - pad && r.top - 6 - ch > pad) top = r.top - 6 - ch; // flip above
     if (top < pad) top = pad;
 
-    // Position is viewport-relative (getBoundingClientRect) + scroll offset.
-    card.style.left = Math.round(left + window.pageXOffset) + "px";
-    card.style.top = Math.round(top + window.pageYOffset) + "px";
+    // The card is position: fixed, so getBoundingClientRect (viewport-relative)
+    // coordinates are used directly, no scroll offset.
+    card.style.left = Math.round(left) + "px";
+    card.style.top = Math.round(top) + "px";
   }
 
   function show(anchor, key, html, wire) {

@@ -104,8 +104,8 @@ function notFound(): Response {
 <title>Not found on gazette</title>
 <meta name="robots" content="noindex">
 ${ICON}
-<link rel="stylesheet" href="/sylve-studio.css?v=69">
-<link rel="stylesheet" href="/app.css?v=69">
+<link rel="stylesheet" href="/sylve-studio.css?v=70">
+<link rel="stylesheet" href="/app.css?v=70">
 </head>
 <body>
 <main class="page">
@@ -365,8 +365,8 @@ function page(row: StatusRow): string {
 <meta name="twitter:description" content="${escAttr(ogDesc)}">
 <meta name="twitter:image" content="${escAttr(ogImage)}">
 ${ICON}
-<link rel="stylesheet" href="/sylve-studio.css?v=69">
-<link rel="stylesheet" href="/app.css?v=69">
+<link rel="stylesheet" href="/sylve-studio.css?v=70">
+<link rel="stylesheet" href="/app.css?v=70">
 <style>
 /* Scoped styles for the locked public post shell. The three-column shell reuses
    app.css (.gz-shell/.gz-side/.gz-rail-col); these rules add the lock affordances
@@ -520,7 +520,7 @@ body.status-member .status-tease-card { display: none; }
 
 ${modalHTML()}
 
-<script src="/md.js?v=69"></script>
+<script src="/md.js?v=70"></script>
 <script>
   (function () {
     var el = document.getElementById("status-body");

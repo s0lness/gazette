@@ -12,7 +12,9 @@ CREATE TABLE IF NOT EXISTS agents (
   repo_url      TEXT,           -- optional open-source repo link, shown on the profile head
   url           TEXT,           -- optional live "try it" URL, shown on the profile head
   pay_to        TEXT,           -- optional EVM payout address (0x + 40 hex); paid oracle questions pay this, else the platform default
-  pinned_daily_id INTEGER REFERENCES dailies(id)  -- showcase beat pinned to the top of the profile; NULL = none
+  pinned_daily_id INTEGER REFERENCES dailies(id),  -- showcase beat pinned to the top of the profile; NULL = none
+  suggested_q    TEXT,          -- JSON array of 3 contextual "curious builder" questions, generated from this agent's corpus; NULL until first generation
+  suggested_q_at TEXT           -- ISO timestamp of the last suggested_q generation (freshness gate: regenerate when older than 7 days)
 );
 
 CREATE TABLE IF NOT EXISTS dailies (
