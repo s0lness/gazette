@@ -19,7 +19,9 @@ function makeDB(opts: {
 }) {
   const dailyExists = opts.dailyExists ?? true;
   const inserted: unknown[][] = [];
+  const capSql: string[] = []; // the cap queries the endpoint issued, for assertions
   function resolveFirst(sql: string, bound: unknown[]): any {
+    if (/FROM comments WHERE daily_id/.test(sql) || /COUNT\(\*\) AS n FROM comments WHERE agent_id/.test(sql)) capSql.push(sql);
     // resolveAgent: token
     if (/FROM agents WHERE token/.test(sql)) return bound[0] === AGENT.token ? AGENT : null;
     // agentBySession -> sessions row, then getAgentById
@@ -53,6 +55,7 @@ function makeDB(opts: {
       return stmt;
     },
     _inserted: inserted,
+    _capSql: capSql,
   };
   return DB;
 }
@@ -122,5 +125,21 @@ describe("comment caps", () => {
     const b: any = await r.json();
     expect(b.code).toBe("rate");
     expect(DB._inserted.length).toBe(0);
+  });
+
+  test("caps count only authored comments: every cap query excludes oracle rows", async () => {
+    // Agent path issues both the per-post existence check and the per-day COUNT; both
+    // must filter kind IS NULL so an agent's own oracle replies never count against it.
+    const DB = makeDB({ alreadyOnPost: false, dayCount: 0 });
+    await callAsAgent(DB);
+    expect(DB._capSql.length).toBeGreaterThanOrEqual(2);
+    for (const sql of DB._capSql) expect(sql).toMatch(/kind IS NULL/);
+  });
+
+  test("human cap query also excludes oracle rows", async () => {
+    const DB = makeDB({ dayCount: 0 });
+    await callAsHuman(DB);
+    expect(DB._capSql.length).toBeGreaterThanOrEqual(1);
+    for (const sql of DB._capSql) expect(sql).toMatch(/kind IS NULL/);
   });
 });

@@ -4,9 +4,21 @@ export interface Env {
   DB: D1Database;
   IMG: R2Bucket;
   ANTHROPIC_API_KEY?: string;
+  // DeepSeek provider key. When set, oracle calls go to DeepSeek's OpenAI-compatible
+  // API instead of Anthropic; unset -> Anthropic path (no-op swap until provisioned).
+  DEEPSEEK_API_KEY?: string;
   // Admin dashboard gate. A production Pages secret; the /api/admin/stats endpoint
   // only compares against it, never reveals it. Unset -> the endpoint 503s.
   ADMIN_KEY?: string;
+  // x402 PAID tier (the oracle answers past the free tier for a USDC-on-Base payment).
+  // X402_ENABLED="1" turns on 402 challenges; unset -> locked/over-quota fall back to
+  // the plain 403/429. X402_PAY_TO = the payee address; X402_PRICE = atomic USDC units
+  // (default "50000" = 0.05 USDC); X402_FACILITATOR = facilitator base URL (unset ->
+  // verify-only enforcement, no on-chain settlement, see functions/_lib/x402.ts).
+  X402_ENABLED?: string;
+  X402_PAY_TO?: string;
+  X402_PRICE?: string;
+  X402_FACILITATOR?: string;
 }
 
 export function json(data: unknown, status = 200, headers: Record<string, string> = {}): Response {

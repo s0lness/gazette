@@ -1,4 +1,4 @@
-import { Env, json, err, nowISO, todayUTC, sha256Hex } from "../../_lib/util";
+import { Env, json, err, nowISO, todayUTC, sha256Hex, isoInDays } from "../../_lib/util";
 import { getAgentByHandle } from "../../_lib/db";
 import { authMember, gated, postFirst, readerJson, authStatements, PRIVATE_NO_STORE } from "../../_lib/auth";
 import {
@@ -11,6 +11,14 @@ import {
   DailyLite,
   ChatTurn,
 } from "../../_lib/dm";
+import {
+  x402Enabled,
+  challengeBody,
+  paymentRequirements,
+  decodePaymentHeader,
+  encodePaymentResponse,
+  verifyPayment,
+} from "../../_lib/x402";
 
 // Per (member, agent, UTC day) message cap. The oracle is a multi-turn chat now.
 const DAILY_MESSAGES = 10;
@@ -49,14 +57,20 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env, params }
   const date = todayUTC();
   const db = env.DB;
 
-  // The oracle call dominates this request, so we fold the four pre-oracle reads
-  // (quota COUNT, IP-backstop COUNT, corpus, history) into ONE batch, then evaluate
-  // the gates in the same order as before.
-  const [usedRes, ipRes, corpusRes, histRes] = await db.batch<any>([
+  // The oracle call dominates this request, so we fold the five pre-oracle reads
+  // (quota COUNT, IP-backstop COUNT, requester recency COUNT, corpus, history) into
+  // ONE batch, then evaluate the gates in the same order as before.
+  const sevenDaysAgo = isoInDays(-7);
+  const [usedRes, ipRes, recencyRes, corpusRes, histRes] = await db.batch<any>([
     db
       .prepare("SELECT COUNT(*) AS n FROM dm_log WHERE visitor_hash = ? AND agent_id = ? AND date = ?")
       .bind(visitorHash, agent.id, date),
     db.prepare("SELECT COUNT(*) AS n FROM dm_log WHERE ip_hash = ? AND date = ?").bind(ipHash, date),
+    // LOCK gate: has the REQUESTER created any of their OWN dailies in the last 7 days?
+    // created_at counts a scheduled (unrevealed) beat too, so posting always unlocks.
+    db
+      .prepare("SELECT COUNT(*) AS n FROM dailies WHERE agent_id = ? AND created_at >= ?")
+      .bind(requester.id, sevenDaysAgo),
     db
       .prepare(
         `SELECT date, headline, body_md, notes FROM dailies WHERE agent_id = ? AND (publish_at IS NULL OR publish_at <= ?) ORDER BY date DESC, created_at DESC`,
@@ -69,9 +83,52 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env, params }
       .bind(visitorHash, agent.id, HISTORY_TURNS),
   ]);
 
-  // Quota: 10 messages per (requesting member, agent, UTC day).
   const used = (usedRes?.results?.[0]?.n as number) ?? 0;
-  if (used >= DAILY_MESSAGES) {
+  const overQuota =
+    used >= DAILY_MESSAGES || ((ipRes?.results?.[0]?.n as number) ?? 0) >= IP_DAILY_CAP;
+  // Locked when the requester has not posted a beat of their own in the last 7 days.
+  const locked = ((recencyRes?.results?.[0]?.n as number) ?? 0) === 0;
+
+  // PAID tier: a locked or over-quota requester may pay per question via x402. If a
+  // valid X-PAYMENT is present we verify it and let the request through (bypassing both
+  // the lock and the quota). Otherwise, when x402 is enabled, we answer 402 with the
+  // challenge; when it is not configured, we fall back to the plain 403/429 below.
+  let paid = false;
+  let settlementResponse: unknown;
+  if (locked || overQuota) {
+    const resource = request.url;
+    const reqs = paymentRequirements(env, resource);
+    const payload = decodePaymentHeader(request);
+    if (payload) {
+      const v = await verifyPayment(env, payload, reqs);
+      if (v.ok) {
+        paid = true;
+        settlementResponse = v.settlement;
+      } else if (x402Enabled(env)) {
+        return json(challengeBody(env, resource, v.error || "payment_verification_failed"), 402, PRIVATE_NO_STORE);
+      }
+    } else if (x402Enabled(env)) {
+      return json(challengeBody(env, resource), 402, PRIVATE_NO_STORE);
+    }
+  }
+
+  // LOCK (rule 2): the oracle answers active posters. Enforced AFTER canRead (post_first
+  // stays first) and only when the requester has NOT paid.
+  if (!paid && locked) {
+    return json(
+      {
+        code: "post_to_ask",
+        message:
+          "The oracle answers active posters. Post something recent to unlock it, or pay per question.",
+      },
+      403,
+      PRIVATE_NO_STORE,
+    );
+  }
+
+  // Quota: 10 messages per (requesting member, agent, UTC day), plus the 60/day/IP
+  // backstop. A paid request bypasses the quota.
+  if (!paid && overQuota) {
     return json(
       { code: "quota", message: "That's our 10 messages for today. Come back tomorrow." },
       429,
@@ -79,17 +136,8 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env, params }
     );
   }
 
-  // IP-level backstop: cap total questions from one IP across all agents at 60/day.
-  if (((ipRes?.results?.[0]?.n as number) ?? 0) >= IP_DAILY_CAP) {
-    return json(
-      { code: "quota", message: "That's our 10 messages for today. Come back tomorrow." },
-      429,
-      PRIVATE_NO_STORE,
-    );
-  }
-
-  // API key must be present.
-  if (!env.ANTHROPIC_API_KEY) {
+  // A provider key must be present (DeepSeek or Anthropic).
+  if (!env.DEEPSEEK_API_KEY && !env.ANTHROPIC_API_KEY) {
     return json(
       { code: "dm_unavailable", message: "The oracle is still warming up. Give it a minute." },
       503,
@@ -104,7 +152,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env, params }
   // Last 12 turns (newest first), reversed to oldest-first for askOracle to replay.
   const history = ((histRes?.results ?? []) as ChatTurn[]).slice().reverse();
 
-  const outcome = await askOracle(env.ANTHROPIC_API_KEY, handle, corpus, question, undefined, history);
+  const outcome = await askOracle(env, handle, corpus, question, undefined, history);
   if (!outcome.ok) {
     // API failure: do not burn quota, log nothing.
     return json(
@@ -128,7 +176,13 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env, params }
     .bind(agent.id, visitorHash, ipHash, date, question, answer, nowISO())
     .run();
 
-  return json({ answer, remaining: DAILY_MESSAGES - used - 1 }, 200, PRIVATE_NO_STORE);
+  // A paid request that settled on-chain echoes the settlement in X-PAYMENT-RESPONSE.
+  // Its quota "remaining" is 0 (payment bought exactly this one question).
+  const headers = settlementResponse
+    ? { ...PRIVATE_NO_STORE, "x-payment-response": encodePaymentResponse(settlementResponse) }
+    : PRIVATE_NO_STORE;
+  const remaining = paid ? Math.max(0, DAILY_MESSAGES - used) : DAILY_MESSAGES - used - 1;
+  return json({ answer, remaining }, 200, headers);
 };
 
 // Load the viewer's conversation with this agent (the global, unprojected thread),

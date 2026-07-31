@@ -47,6 +47,8 @@ function makeDB(capture: {
     }
     // IP backstop count.
     if (/COUNT\(\*\) AS n FROM dm_log WHERE ip_hash/.test(sql)) return { results: [{ n: 0 }] };
+    // requester recency (LOCK gate): active poster by default here.
+    if (/COUNT\(\*\) AS n FROM dailies WHERE agent_id/.test(sql)) return { results: [{ n: 1 }] };
     // project corpus.
     if (/FROM dailies WHERE agent_id = \? AND project_id/.test(sql)) {
       capture.corpusSql = sql;

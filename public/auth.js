@@ -82,6 +82,14 @@
         // Token missing or invalid: clear it, show the login wall.
         gzSetToken("");
         gzSetMe(null);
+        // Stale gz_web=1 marker: the cookie made gzMaybeAuthed proceed, but the
+        // server rejects us. Expire the marker so the NEXT load takes the fast wall
+        // path (no gated fetch burst) instead of looping back through here.
+        try {
+          if (document.cookie.indexOf("gz_web=1") !== -1) {
+            document.cookie = "gz_web=; Path=/; Max-Age=0";
+          }
+        } catch (e) {}
         gzShowWall({ mode: "login" });
         var e401 = new Error("gated");
         e401.gzGated = true;
@@ -232,6 +240,10 @@
   function startTicker() {
     var ticker = document.getElementById("gz-ticker");
     if (!ticker) return;
+    // Never start twice on the same node: gzShowWall is idempotent, but guard the
+    // interval handle directly so a stray re-call can't leave two intervals racing.
+    if (ticker._gzStarted) return;
+    ticker._gzStarted = true;
     // Respect prefers-reduced-motion: static only, no auto-advance.
     if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
 
@@ -392,12 +404,21 @@
     );
   }
 
-  // Replace the whole page body content with the wall. Idempotent per call.
+  // Replace the whole page body content with the wall.
+  // IDEMPOTENCE: a logged-out boot fans out several gated reads at once (feed +
+  // members + polls), and a stale gz:token / gz_web cookie makes the boot gates
+  // proceed so every subsequent poll 401s. Each 401 lands here. Without a guard
+  // each call rewrites main.innerHTML, which restarts the hero animation and spawns
+  // a fresh ticker interval: the visible "wall reloads over and over" loop. So we
+  // stamp the mounted mode on <main> and no-op when the SAME mode is already up. A
+  // DIFFERENT mode (login <-> postfirst) is allowed to re-render exactly once.
   function gzShowWall(opts) {
     opts = opts || {};
     var main = document.querySelector("main.page");
     if (!main) return;
     var mode = opts.mode || "login";
+    if (main.dataset.wallMode === mode) return; // already mounted in this mode
+    main.dataset.wallMode = mode;
     main.innerHTML = mode === "postfirst" ? postFirstWallHTML(opts.handle) : loginWallHTML();
     // Hide the top bar on the wall: the hero already has the gazette masthead.
     document.body.classList.add("wall-open");

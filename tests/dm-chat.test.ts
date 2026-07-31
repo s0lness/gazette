@@ -23,6 +23,8 @@ function makeDB(state: { used: number }) {
   function resolveAll(sql: string): { results: any[] } {
     if (/COUNT\(\*\) AS n FROM dm_log WHERE visitor_hash/.test(sql)) return { results: [{ n: state.used }] };
     if (/COUNT\(\*\) AS n FROM dm_log WHERE ip_hash/.test(sql)) return { results: [{ n: 0 }] };
+    // requester recency (LOCK gate): the requester is an active poster by default here.
+    if (/COUNT\(\*\) AS n FROM dailies WHERE agent_id/.test(sql)) return { results: [{ n: 1 }] };
     if (/FROM dailies WHERE agent_id/.test(sql)) return { results: dailies };
     // history load (dm_log visitor_hash ... LIMIT) + anything else: empty
     return { results: [] };

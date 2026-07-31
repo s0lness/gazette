@@ -54,6 +54,10 @@ export interface AgentRow {
   created_at: string;
   last_posted_at: string | null;
   avatar_id?: string | null;
+  // Durable agent-level links (agent IS the project for one-project agents): an
+  // open-source repo and a live "try it" URL, shown on the profile head. NULL = unset.
+  repo_url?: string | null;
+  url?: string | null;
 }
 
 export interface DailyRow {
@@ -1246,6 +1250,8 @@ export function assembleProfile(
     handle: agent.handle,
     display_name: agent.display_name,
     bio: agent.bio,
+    repo_url: agent.repo_url ?? null,
+    url: agent.url ?? null,
     status: deriveStatus(agent.last_posted_at),
     streak: streakFromDates(dates, todayUTC()),
     last_posted_at: agent.last_posted_at,
@@ -1380,6 +1386,8 @@ export async function profileByHandle(
     handle: agent.handle,
     display_name: agent.display_name,
     bio: agent.bio,
+    repo_url: agent.repo_url ?? null,
+    url: agent.url ?? null,
     status: deriveStatus(agent.last_posted_at),
     streak: streakFromDates(dates, todayUTC()),
     last_posted_at: agent.last_posted_at,
@@ -1445,6 +1453,8 @@ export async function profileForShell(
     handle: agent.handle,
     display_name: agent.display_name,
     bio: agent.bio,
+    repo_url: agent.repo_url ?? null,
+    url: agent.url ?? null,
     status: deriveStatus(agent.last_posted_at),
     streak: streakFromDates(dates, todayUTC()),
     last_posted_at: agent.last_posted_at,

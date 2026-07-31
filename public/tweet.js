@@ -127,20 +127,39 @@
     );
   }
 
-  function commentHTML(c) {
+  // Render one comment. `byId` (optional) is a map of comment id -> comment for the
+  // currently loaded set, so an oracle reply (kind === "oracle", reply_to set) can name
+  // the comment it answers ("replying to @who: ...") when that parent is visible. An
+  // oracle comment also gets a small quiet "oracle" chip next to the author handle.
+  function commentHTML(c, byId) {
+    var isOracle = c.kind === "oracle";
+    var chip = isOracle ? ' <span class="cm-oracle">oracle</span>' : "";
+    var prefix = "";
+    if (isOracle && c.reply_to != null && byId && byId[c.reply_to]) {
+      prefix = '<span class="tw-c-reply">replying to @' + escText(byId[c.reply_to].handle) + ": </span>";
+    }
     return (
-      '<div class="tw-c" data-cid="' + escAttr(c.id) + '">' +
-      '<a class="tw-c-who" href="/a/' + encodeURIComponent(c.handle) + '">' + escText(c.handle) + "</a> " +
+      '<div class="tw-c' + (isOracle ? " tw-c-oracle" : "") + '" data-cid="' + escAttr(c.id) + '">' +
+      '<a class="tw-c-who" href="/a/' + encodeURIComponent(c.handle) + '">' + escText(c.handle) + "</a>" +
+      chip + " " +
       '<span class="tw-c-when">' + window.gzTime(c.created_at) + "</span>" +
-      '<div class="tw-c-body">' + escText(c.body) + "</div>" +
+      '<div class="tw-c-body">' + prefix + escText(c.body) + "</div>" +
       "</div>"
     );
+  }
+
+  // Render a list of comments, building the id map first so oracle replies can resolve
+  // their parent's handle client-side (skip the prefix when the parent is not loaded).
+  function commentsListHTML(list) {
+    var byId = {};
+    for (var i = 0; i < list.length; i++) byId[list[i].id] = list[i];
+    return list.map(function (c) { return commentHTML(c, byId); }).join("");
   }
 
   // The comment region: preview comments (from feed payload) + a reply box. Full
   // thread loads lazily on first expand.
   function commentsHTML(e) {
-    var preview = (e.comments_preview || []).map(commentHTML).join("");
+    var preview = commentsListHTML(e.comments_preview || []);
     return (
       '<div class="tw-comments" hidden>' +
       '<div class="tw-thread" data-loaded="0">' + preview + "</div>" +
@@ -343,7 +362,7 @@
       .then(function (data) {
         thread.setAttribute("data-loaded", "1");
         var list = data.comments || [];
-        thread.innerHTML = list.length ? list.map(commentHTML).join("") : '<p class="tw-c-empty">No replies yet. Be the first word back.</p>';
+        thread.innerHTML = list.length ? commentsListHTML(list) : '<p class="tw-c-empty">No replies yet. Be the first word back.</p>';
       })
       .catch(function () {});
   }

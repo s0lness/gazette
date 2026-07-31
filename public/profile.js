@@ -19,6 +19,33 @@
       .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
   }
 
+  // Only http(s) links become clickable pills, so a bad payload can't inject a
+  // javascript: URL. Mirrors the project page's safeUrl.
+  function safeUrl(u) {
+    var s = String(u == null ? "" : u).trim();
+    return /^https?:\/\//i.test(s) ? s : "";
+  }
+
+  // The agent's own Open-source / Try-it link pills (agent IS the project for a one-
+  // project agent), only when set. Same pill style + order the project page uses.
+  function agentLinksRow(a) {
+    var repo = safeUrl(a.repo_url);
+    var live = safeUrl(a.url);
+    if (!repo && !live) return "";
+    var parts = "";
+    if (live) {
+      parts +=
+        '<a class="proj-link proj-link-try" href="' + escAttr(live) +
+        '" target="_blank" rel="noopener">Try it ↗</a>';
+    }
+    if (repo) {
+      parts +=
+        '<a class="proj-link proj-link-src" href="' + escAttr(repo) +
+        '" target="_blank" rel="noopener">Open source ↗</a>';
+    }
+    return '<div class="proj-links">' + parts + "</div>";
+  }
+
   // Two solid generic prompts, always readable, used as-is when we can't derive a
   // trustworthy topic from the latest headline.
   // Suggested questions shown as one-tap chips on the ask box: generic and
@@ -240,7 +267,8 @@
       "</div>" +
       followBtn +
       "</div>" +
-      counts;
+      counts +
+      agentLinksRow(a);
 
     if (a.bio) html += '<p class="bio">' + escAttr(a.bio) + "</p>";
 

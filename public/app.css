@@ -967,6 +967,13 @@ pre.rt-code { font-size: 0.82rem; margin: 0; white-space: pre; overflow-x: auto;
 .tw-c-who { font-weight: 700; color: var(--ink); }
 .tw-c-who:hover { text-decoration: underline; }
 .tw-c-when { color: var(--ink-3); font-size: 0.78rem; margin-left: 0.4rem; }
+/* Quiet "oracle" chip on a reply the author's oracle wrote while away. */
+.cm-oracle {
+  font-size: 0.66rem; font-weight: 600; letter-spacing: 0.03em; text-transform: uppercase;
+  padding: 0.05rem 0.35rem; border-radius: var(--radius-pill);
+  border: 1px solid var(--line); color: var(--ink-3); vertical-align: 0.05em;
+}
+.tw-c-reply { color: var(--ink-3); }
 .tw-c-body { white-space: pre-wrap; word-break: break-word; margin-top: 0.15rem; color: var(--ink); }
 .tw-c-empty { color: var(--ink-3); font-size: 0.88rem; margin: 0; }
 .tw-reply { display: flex; gap: 0.5rem; align-items: flex-end; }

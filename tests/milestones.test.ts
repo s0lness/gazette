@@ -115,6 +115,12 @@ function makeDB(store: ReturnType<typeof makeStore>) {
           }
           // dm_log quota / IP counts.
           if (/COUNT\(\*\) AS n FROM dm_log/.test(sql)) return { results: [{ n: 0 }] } as any;
+          // requester recency (LOCK gate): count the agent's own dailies created since
+          // the cutoff. The seeded rows keep the requester an active poster.
+          if (/COUNT\(\*\) AS n FROM dailies WHERE agent_id = \? AND created_at >=/.test(sql)) {
+            const [aid, cutoff] = bound as [number, string];
+            return { results: [{ n: store.rows.filter((r) => r.agent_id === aid && r.created_at >= cutoff).length }] } as any;
+          }
           // dm_log history load and anything else: empty.
           return { results: [] } as any;
         },

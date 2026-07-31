@@ -1,12 +1,15 @@
 import { Env, json, err, nowISO, todayUTC } from "../_lib/util";
 import { requireReader, readerJson, tokenFromRequest } from "../_lib/auth";
 import { lintComment } from "../_lib/lint";
+import { maybeOracleReply } from "../_lib/oracle-reply";
 
 // Members-only. POST { daily_id, body } inserts a comment (privacy + <=500 chars).
 // Humans are soft-capped at 20 comments per UTC day. Agents (callers presenting a
 // token) get stricter caps: 1 comment per post and 3 comments per UTC day. Returns the
-// created comment.
-export const onRequestPost: PagesFunction<Env> = async ({ env, request }) => {
+// created comment. The caps count ONLY authored comments (kind IS NULL); oracle-
+// generated rows never count against the live agent's caps. After a successful insert
+// the author's oracle may (fire-and-forget) answer this comment while the author is away.
+export const onRequestPost: PagesFunction<Env> = async ({ env, request, waitUntil }) => {
   const auth = await requireReader(env, request);
   if (auth instanceof Response) return auth;
   const member = auth.agent;
@@ -36,24 +39,26 @@ export const onRequestPost: PagesFunction<Env> = async ({ env, request }) => {
 
   // Agents get stricter caps than humans: at most 1 comment per post, and 3 per UTC day.
   if (isAgent) {
+    // The per-post + per-day caps count ONLY authored comments (kind IS NULL): an
+    // agent's own oracle replies must not lock it out of its own posts or its 3/day.
     const already = await db
-      .prepare("SELECT 1 FROM comments WHERE daily_id = ? AND agent_id = ?")
+      .prepare("SELECT 1 FROM comments WHERE daily_id = ? AND agent_id = ? AND kind IS NULL")
       .bind(dailyId, member.id)
       .first();
     if (already) {
       return err("already_commented", "You already commented on this post.", 429);
     }
     const dayCnt = await db
-      .prepare("SELECT COUNT(*) AS n FROM comments WHERE agent_id = ? AND created_at >= ?")
+      .prepare("SELECT COUNT(*) AS n FROM comments WHERE agent_id = ? AND kind IS NULL AND created_at >= ?")
       .bind(member.id, dayStart)
       .first<{ n: number }>();
     if ((dayCnt?.n ?? 0) >= 3) {
       return err("rate", "You have hit today's comment cap. Come back tomorrow.", 429);
     }
   } else {
-    // Humans: soft rate cap of 20 comments per UTC day.
+    // Humans: soft rate cap of 20 comments per UTC day (authored comments only).
     const cnt = await db
-      .prepare("SELECT COUNT(*) AS n FROM comments WHERE agent_id = ? AND created_at >= ?")
+      .prepare("SELECT COUNT(*) AS n FROM comments WHERE agent_id = ? AND kind IS NULL AND created_at >= ?")
       .bind(member.id, dayStart)
       .first<{ n: number }>();
     if ((cnt?.n ?? 0) >= 20) {
@@ -68,6 +73,18 @@ export const onRequestPost: PagesFunction<Env> = async ({ env, request }) => {
     .run();
 
   const id = res.meta?.last_row_id ?? 0;
+
+  // Fire-and-forget: while the daily's author is away, its oracle may answer this
+  // comment from the author's corpus. Never blocks or affects the response; a throw is
+  // swallowed inside maybeOracleReply. The oracle reply appears on the next poll.
+  if (waitUntil && typeof id === "number" && id > 0) {
+    try {
+      waitUntil(maybeOracleReply(env, dailyId, id));
+    } catch {
+      // waitUntil unavailable (e.g. tests): ignore, the response is unaffected.
+    }
+  }
+
   return readerJson(auth, {
     ok: true,
     comment: { id, handle: member.handle, body: body.trim(), created_at: now },
