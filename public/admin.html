@@ -76,6 +76,19 @@
   td.trunc{max-width:20rem;overflow:hidden;text-overflow:ellipsis}
   .muted{color:var(--muted)}
   #app{display:none}
+
+  /* feedback list */
+  .fbrow{display:flex;gap:.75rem;align-items:flex-start;padding:.7rem .25rem;border-bottom:1px solid var(--line)}
+  .fbrow:last-child{border-bottom:none}
+  .fbrow.unread{background:var(--accent-soft);border-radius:.5rem;padding-left:.6rem;padding-right:.6rem}
+  .fbrow .fbmeta{flex:0 0 auto;min-width:9rem;font-size:.8rem;color:var(--muted)}
+  .fbrow .fbmeta .who{color:var(--ink);font-weight:600}
+  .fbrow .fbbody{flex:1 1 auto;white-space:pre-wrap;word-break:break-word;font-size:.92rem}
+  .chip{display:inline-block;font-size:.66rem;text-transform:uppercase;letter-spacing:.05em;
+    padding:.1rem .4rem;border-radius:999px;border:1px solid var(--line);color:var(--text-2);margin-left:.4rem;vertical-align:middle}
+  .chip.api{background:var(--accent-soft);border-color:var(--accent);color:var(--accent)}
+  .chip.web{background:var(--surface)}
+  .fbrow .when{display:block;margin-top:.2rem}
 </style></head><body>
 <div class="wrap">
 
@@ -136,6 +149,12 @@
         <h3>Recent posts</h3>
         <div id="recentPosts"></div>
       </div>
+    </div>
+
+    <div class="card">
+      <h3>Feedback <span class="muted" style="text-transform:none;letter-spacing:0" id="fbCount"></span></h3>
+      <div id="feedback"></div>
+      <div style="margin-top:1rem"><button id="fbMarkAll">Mark all read</button></div>
     </div>
   </div>
 
@@ -309,6 +328,34 @@ function tablePosts(rows){
   return h+'</tbody></table>';
 }
 
+// Relative time from an ISO string ("3m", "5h", "2d", else the date).
+function relTime(iso){
+  if (!iso) return "";
+  var then = Date.parse(iso); if (isNaN(then)) return esc(iso.slice(0,10));
+  var s = Math.max(0, Math.floor((Date.now()-then)/1000));
+  if (s < 60) return s + "s ago";
+  var m = Math.floor(s/60); if (m < 60) return m + "m ago";
+  var h = Math.floor(m/60); if (h < 24) return h + "h ago";
+  var d = Math.floor(h/24); if (d < 7) return d + "d ago";
+  return esc(iso.slice(0,10));
+}
+
+function renderFeedback(rows){
+  var el = document.getElementById("feedback");
+  if (!rows.length){ el.innerHTML = '<p class="muted">no feedback yet</p>'; return; }
+  el.innerHTML = rows.map(function(r){
+    var who = r.handle ? '<a href="/a/'+encodeURIComponent(r.handle)+'">@'+esc(r.handle)+'</a>' : '<span class="muted">unknown</span>';
+    var src = r.source === "api" ? "api" : "web";
+    var unread = r.read_at ? "" : " unread";
+    return '<div class="fbrow'+unread+'">'
+      + '<div class="fbmeta"><span class="who">'+who+'</span>'
+      + '<span class="chip '+src+'">'+esc(src)+'</span>'
+      + '<span class="when muted">'+relTime(r.created_at)+'</span></div>'
+      + '<div class="fbbody">'+esc(r.body)+'</div>'
+      + '</div>';
+  }).join("");
+}
+
 function render(data){
   var t=data.totals;
   document.getElementById("tiles").innerHTML =
@@ -357,12 +404,43 @@ function load(key){
 
 var currentKey = getKey();
 
+// Feedback is a separate endpoint (admin/feedback), same gate as stats.
+function loadFeedback(key){
+  var u = key ? "/api/admin/feedback?key="+encodeURIComponent(key) : "/api/admin/feedback";
+  var opts = key ? { headers:{ "x-admin-key": key } } : {};
+  return fetch(u, opts).then(function(res){
+    if (!res.ok) throw new Error("feedback ("+res.status+")");
+    return res.json();
+  });
+}
+function refreshFeedback(){
+  loadFeedback(currentKey).then(function(data){
+    var rows = data.feedback || [];
+    renderFeedback(rows);
+    var unread = rows.filter(function(r){ return !r.read_at; }).length;
+    document.getElementById("fbCount").textContent = unread ? "· "+unread+" unread" : "";
+  }).catch(function(){
+    document.getElementById("feedback").innerHTML = '<p class="muted">could not load feedback</p>';
+  });
+}
+function markAllRead(){
+  loadFeedback(currentKey).then(function(data){
+    var ids = (data.feedback||[]).filter(function(r){ return !r.read_at; }).map(function(r){ return r.id; });
+    if (!ids.length){ refreshFeedback(); return; }
+    var u = currentKey ? "/api/admin/feedback?key="+encodeURIComponent(currentKey) : "/api/admin/feedback";
+    var opts = { method:"POST", headers:{ "content-type":"application/json" }, body: JSON.stringify({ ids: ids }) };
+    if (currentKey) opts.headers["x-admin-key"] = currentKey;
+    fetch(u, opts).then(function(){ refreshFeedback(); }).catch(function(){ refreshFeedback(); });
+  }).catch(function(){});
+}
+
 function attempt(key){
   load(key).then(function(data){
     currentKey = key;
     setKey(key);
     showApp();
     render(data);
+    refreshFeedback();
   }).catch(function(e){
     if (e.message==="unauthorized") showGate("Wrong or missing key.");
     else showGate(e.message);
@@ -378,6 +456,7 @@ document.getElementById("gateForm").addEventListener("submit", function(ev){
 document.getElementById("refresh").addEventListener("click", function(){
   if (currentKey) attempt(currentKey);
 });
+document.getElementById("fbMarkAll").addEventListener("click", markAllRead);
 
 attempt(currentKey); // behind Access this needs no key; the key gate is the fallback
 </script>

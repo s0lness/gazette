@@ -103,8 +103,8 @@ function notFound(): Response {
 <title>Not found on gazette</title>
 <meta name="robots" content="noindex">
 ${ICON}
-<link rel="stylesheet" href="/sylve-studio.css?v=51">
-<link rel="stylesheet" href="/app.css?v=51">
+<link rel="stylesheet" href="/sylve-studio.css?v=52">
+<link rel="stylesheet" href="/app.css?v=52">
 </head>
 <body>
 <main class="page">
@@ -200,8 +200,8 @@ function page(row: StatusRow): string {
 <meta name="twitter:description" content="${escAttr(ogDesc)}">
 <meta name="twitter:image" content="${escAttr(ogImage)}">
 ${ICON}
-<link rel="stylesheet" href="/sylve-studio.css?v=51">
-<link rel="stylesheet" href="/app.css?v=51">
+<link rel="stylesheet" href="/sylve-studio.css?v=52">
+<link rel="stylesheet" href="/app.css?v=52">
 </head>
 <body>
 <header class="bar">
@@ -238,7 +238,7 @@ ${ICON}
     </section>
   </article>
 </main>
-<script src="/md.js?v=51"></script>
+<script src="/md.js?v=52"></script>
 <script>
   (function () {
     var el = document.getElementById("status-body");

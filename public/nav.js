@@ -56,6 +56,11 @@
   var ICON_SAVED = '<svg class="gz-nav-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">' +
     '<path d="M6 3.5h12a1 1 0 0 1 1 1V21l-7-4-7 4V4.5a1 1 0 0 1 1-1z"/>' +
     '</svg>';
+  // Speech-bubble outline for Feedback (drawn from scratch): a rounded rectangle with
+  // a little tail dropping from the lower-left.
+  var ICON_FEEDBACK = '<svg class="gz-nav-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">' +
+    '<path d="M4 5.5h16a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H9l-4 3.5V16.5H4a1 1 0 0 1-1-1v-9a1 1 0 0 1 1-1z"/>' +
+    '</svg>';
 
   function sidebarHTML(handle) {
     var active = activeKey(handle);
@@ -90,6 +95,10 @@
       "</a>" +
       "</div>" +
       '<div class="gz-side-foot">' +
+      '<button type="button" class="gz-side-feedback" aria-label="Send feedback to the builder">' +
+      ICON_FEEDBACK +
+      '<span class="gz-nav-label">Feedback</span>' +
+      "</button>" +
       '<div class="gz-account" title="' + esc(handle) + '">' +
       '<a class="gz-account-id" href="' + profileHref + '">' +
       avatar(handle) +
@@ -118,6 +127,7 @@
       '<a href="/messages" class="gz-mob-item" role="menuitem">Messages</a>' +
       '<a href="/saved" class="gz-mob-item" role="menuitem">Saved</a>' +
       '<a href="/a/' + encodeURIComponent(handle) + '" class="gz-mob-item" role="menuitem">Profile</a>' +
+      '<a href="#" class="gz-mob-item gz-mob-feedback" role="menuitem">Feedback</a>' +
       '<a href="#" class="gz-mob-item gz-mob-logout" role="menuitem">Log out</a>' +
       "</div>" +
       "</div>"
@@ -129,6 +139,118 @@
     el.addEventListener("click", function (e) {
       e.preventDefault();
       if (window.gzLogout) window.gzLogout();
+    });
+  }
+
+  // ---- feedback modal -----------------------------------------------------
+  // A direct line to the builder. Reuses the wall-modal classes from auth.js so it
+  // inherits the sheet/backdrop/close styling; the .fb- prefixed bits (see app.css)
+  // supplement the textarea + actions. One textarea, one Send button. On success the
+  // body swaps to a short thanks that auto-closes.
+
+  function feedbackModalHTML() {
+    return (
+      '<div class="wall-modal" id="gz-fb-modal" hidden>' +
+      '<div class="wall-modal-backdrop" id="gz-fb-backdrop"></div>' +
+      '<div class="wall-modal-sheet" role="dialog" aria-modal="true" aria-label="Feedback">' +
+      '<button type="button" class="wall-modal-x" id="gz-fb-close" aria-label="Close">&times;</button>' +
+      '<div id="gz-fb-body">' +
+      '<h3 class="wall-modal-title">Feedback</h3>' +
+      '<p class="wall-modal-sub">A direct line to Sylve, who builds gazette. What is broken, missing, or great?</p>' +
+      '<textarea id="gz-fb-text" class="fb-textarea" rows="4" placeholder="What\'s broken, missing, or great?" spellcheck="true"></textarea>' +
+      '<div class="fb-actions">' +
+      '<button id="gz-fb-send" class="primary" type="button">Send</button>' +
+      "</div>" +
+      '<p id="gz-fb-note" class="wall-note"></p>' +
+      "</div>" +
+      "</div>" +
+      "</div>"
+    );
+  }
+
+  // The single modal instance, mounted lazily on first open. Returns the modal node.
+  var fbModal = null;
+  function ensureFeedbackModal() {
+    if (fbModal) return fbModal;
+    var wrap = document.createElement("div");
+    wrap.innerHTML = feedbackModalHTML();
+    fbModal = wrap.firstChild;
+    document.body.appendChild(fbModal);
+
+    var backdrop = fbModal.querySelector("#gz-fb-backdrop");
+    var closeBtn = fbModal.querySelector("#gz-fb-close");
+    if (backdrop) backdrop.addEventListener("click", closeFeedback);
+    if (closeBtn) closeBtn.addEventListener("click", closeFeedback);
+    document.addEventListener("keydown", function (e) {
+      if (e.key === "Escape" && !fbModal.hidden) closeFeedback();
+    });
+    return fbModal;
+  }
+
+  function closeFeedback() {
+    if (!fbModal) return;
+    fbModal.hidden = true;
+    document.body.classList.remove("gz-modal-open");
+  }
+
+  function openFeedback() {
+    var m = ensureFeedbackModal();
+    // Reset the body every open (it may have swapped to the thanks state last time).
+    var body = m.querySelector("#gz-fb-body");
+    body.innerHTML =
+      '<h3 class="wall-modal-title">Feedback</h3>' +
+      '<p class="wall-modal-sub">A direct line to Sylve, who builds gazette. What is broken, missing, or great?</p>' +
+      '<textarea id="gz-fb-text" class="fb-textarea" rows="4" placeholder="What\'s broken, missing, or great?" spellcheck="true"></textarea>' +
+      '<div class="fb-actions"><button id="gz-fb-send" class="primary" type="button">Send</button></div>' +
+      '<p id="gz-fb-note" class="wall-note"></p>';
+    var text = body.querySelector("#gz-fb-text");
+    var send = body.querySelector("#gz-fb-send");
+    var note = body.querySelector("#gz-fb-note");
+    if (send) send.addEventListener("click", function () { submitFeedback(text, send, note, body); });
+    m.hidden = false;
+    document.body.classList.add("gz-modal-open");
+    if (text) text.focus();
+  }
+
+  function submitFeedback(text, send, note, body) {
+    var msg = (text.value || "").trim();
+    if (!msg) { note.textContent = "Write something first."; return; }
+    note.textContent = "";
+    send.disabled = true;
+    var doFetch = window.gzFetch || fetch;
+    doFetch("/api/feedback", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify({ message: msg }),
+    })
+      .then(function (r) {
+        return r.json().catch(function () { return {}; }).then(function (b) { return { r: r, b: b }; });
+      })
+      .then(function (res) {
+        if (res.r.ok && res.b && res.b.ok) {
+          body.innerHTML = '<h3 class="wall-modal-title">Thanks</h3>' +
+            '<p class="wall-modal-sub">Sent. Sylve reads these.</p>';
+          setTimeout(closeFeedback, 1200);
+          return;
+        }
+        // 422 / 429 (and anything else): show the server message inline.
+        send.disabled = false;
+        note.textContent = (res.b && res.b.message) || "Could not send. Try again.";
+      })
+      .catch(function (e) {
+        // gzFetch raises the wall on 401/403 and throws; nothing to add here.
+        if (e && e.gzGated) return;
+        send.disabled = false;
+        note.textContent = "Could not send. Try again.";
+      });
+  }
+
+  function wireFeedback(el) {
+    if (!el) return;
+    el.addEventListener("click", function (e) {
+      e.preventDefault();
+      openFeedback();
     });
   }
 
@@ -156,6 +278,7 @@
       if (e.key === "Escape") close();
     });
     wireLogout(wrap.querySelector(".gz-mob-logout"));
+    wireFeedback(wrap.querySelector(".gz-mob-feedback"));
   }
 
   // Remembered so setActive can recompute the highlighted link (SPA nav) without
@@ -214,6 +337,7 @@
     if (window.gzRail && window.gzRail.mount) window.gzRail.mount(railWrap, handle);
 
     wireLogout(sideWrap.querySelector(".gz-account-logout"));
+    wireFeedback(sideWrap.querySelector(".gz-side-feedback"));
 
     // Mobile account button lives in the top bar (top-left). Independent of the
     // desktop rail; CSS shows exactly one at a time.

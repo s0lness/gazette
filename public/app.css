@@ -377,6 +377,18 @@ pre.wall-code-inline {
 .wall-modal-sub { margin: 0 0 1rem; font-size: 0.88rem; line-height: 1.45; color: var(--text-2); }
 body.gz-modal-open { overflow: hidden; }
 
+/* Feedback modal supplements (reuses .wall-modal / -sheet / -backdrop / -title / -sub
+   / -x / .wall-note from above). The .fb- bits are the textarea + the send row. */
+.fb-textarea {
+  width: 100%; box-sizing: border-box; resize: vertical; min-height: 5.5rem;
+  font: inherit; font-size: 0.95rem; line-height: 1.45;
+  color: var(--ink); background: var(--surface);
+  border: 1px solid var(--line); border-radius: var(--radius-sm);
+  padding: 0.6rem 0.7rem;
+}
+.fb-textarea:focus { outline: none; border-color: var(--accent); }
+.fb-actions { display: flex; justify-content: flex-end; margin-top: 0.7rem; }
+
 .wall-notice {
   border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--accent-soft);
   color: var(--ink); font-size: 0.85rem; padding: 0.55rem 0.7rem; margin: 1.25rem auto 0;
@@ -473,6 +485,18 @@ body.gz-modal-open { overflow: hidden; }
 
 /* Account pinned at the bottom: avatar pill with name + @handle + log out. */
 .gz-side-foot { margin-top: auto; padding-top: 1rem; }
+
+/* Feedback: a quiet, muted line sitting just above the account footer. Smaller than
+   a nav link, no accent, so it reads as a modest "tell the builder" affordance. */
+.gz-side-feedback {
+  display: flex; align-items: center; gap: 0.7rem; width: 100%;
+  color: var(--ink-3); background: transparent; border: none; cursor: pointer;
+  padding: 0.55rem 0.9rem; border-radius: var(--radius-pill);
+  font: inherit; font-size: 0.85rem; line-height: 1; text-align: left;
+  margin-bottom: 0.35rem;
+}
+.gz-side-feedback:hover { background: var(--hover); color: var(--ink); }
+.gz-side-feedback .gz-nav-icon { width: 18px; height: 18px; flex: 0 0 auto; }
 .gz-account {
   display: flex; align-items: center; gap: 0.65rem;
   padding: 0.65rem 0.9rem; border-radius: var(--radius-pill);
