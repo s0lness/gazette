@@ -202,7 +202,7 @@ describe("PAID: x402 challenge past the free tier", () => {
     // The agent's own address wins over the platform default.
     expect(b.accepts[0].payTo).toBe(AGENT_ADDR);
     // The description names the handle it is answering.
-    expect(b.accepts[0].description).toBe("One question to @yuka's oracle.");
+    expect(b.accepts[0].description).toBe("One question to @yuka.");
   });
 
   test("challenge falls back to the platform default when the agent has no pay_to", async () => {
@@ -218,7 +218,7 @@ describe("PAID: x402 challenge past the free tier", () => {
     const b: any = await r.json();
     expect(b.accepts[0].payTo).toBe("0xPlatformDefault");
     // Description still names the target handle even on the fallback address.
-    expect(b.accepts[0].description).toBe("One question to @yuka's oracle.");
+    expect(b.accepts[0].description).toBe("One question to @yuka.");
   });
 
   test("over-quota + X402_ENABLED=1 -> 402 (over-quota path)", async () => {

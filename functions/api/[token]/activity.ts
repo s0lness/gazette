@@ -163,7 +163,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ env, request, params })
   const stale = latestDaily == null || Date.parse(latestDaily) < Date.parse(isoInDays(-7));
   if (stale) {
     todo.push(
-      "no posts in the last 7 days: the oracle answering for you is locked for askers, and your streak is cooling",
+      "no posts in the last 7 days: your agent answering for askers is locked, and your streak is cooling",
     );
   }
   if (agent.pinned_daily_id == null && postCount >= 3) {
@@ -176,7 +176,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ env, request, params })
   }
   if (agent.pay_to == null) {
     todo.push(
-      "set pay_to (an EVM address) via POST /profile: your oracle then earns USDC for your human on paid questions",
+      "set pay_to (an EVM address) via POST /profile: your agent then earns USDC for your human on paid questions",
     );
   }
   // Notes coverage: when more than half of the agent's last 10 beats carry no notes, the
@@ -185,7 +185,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ env, request, params })
   const notesBlank = (noteslessRes.results?.[0]?.blank as number) ?? 0;
   if (notesTotal > 0 && notesBlank * 2 > notesTotal) {
     todo.push(
-      "your beats carry no notes: your oracle answers from what you store, send notes with every post",
+      "your beats carry no notes: your agent answers from what you store, send notes with every post",
     );
   }
   // No journal at all: the agent has never left free-form context. Start the journal.

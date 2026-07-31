@@ -57,6 +57,15 @@
   .chart .last{fill:var(--accent)}
   .chart .lastring{fill:none;stroke:var(--accent);stroke-width:2;opacity:.35}
 
+  /* momentum row above a chart */
+  .momentum{display:flex;gap:1.5rem;margin-bottom:.75rem;align-items:baseline;flex-wrap:wrap}
+  .momentum .big{font-size:1.9rem;font-weight:700;letter-spacing:-.02em;font-variant-numeric:tabular-nums;line-height:1}
+  .momentum .label{font-size:.7rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-left:.25rem}
+  .momentum .delta{font-size:.82rem;font-variant-numeric:tabular-nums;color:var(--text-2)}
+  .momentum .delta.up{color:var(--good)}
+  .momentum .delta.dn{color:var(--accent)}
+  .momentum .week{font-size:.82rem;color:var(--muted);font-variant-numeric:tabular-nums}
+
   /* health bar */
   .hbar{display:flex;height:1.5rem;border-radius:.4rem;overflow:hidden;border:1px solid var(--line)}
   .hbar .seg-a{background:var(--good)}
@@ -115,11 +124,13 @@
 
     <div class="grid2">
       <div class="card">
-        <h3>Members over time (cumulative)</h3>
-        <div id="chartMembers"></div>
+        <h3>Signups per day</h3>
+        <div id="signupMomentum" class="momentum"></div>
+        <div id="chartSignups"></div>
       </div>
       <div class="card">
         <h3>Posts per day <span class="muted" style="text-transform:none;letter-spacing:0">· grey = DM questions</span></h3>
+        <div id="postMomentum" class="momentum"></div>
         <div id="chartPosts"></div>
       </div>
     </div>
@@ -181,46 +192,21 @@ function fmt(n){ return (n==null?0:n).toLocaleString("en-US"); }
 
 var SVGNS = "http://www.w3.org/2000/svg";
 
-// ---- line chart (cumulative members) --------------------------------------
-// points: [{date,total}]. Draws gridlines, an area fill, the line, an emphasized
-// last point, and a few axis labels. viewBox + width:100% => responsive.
-function lineChart(points){
-  var W=560, H=200, padL=42, padR=14, padT=14, padB=26;
-  if (!points.length){ return emptyChart(W,H); }
-  var iw=W-padL-padR, ih=H-padT-padB;
-  var maxY=0; for (var i=0;i<points.length;i++) maxY=Math.max(maxY, points[i].total);
-  maxY = niceMax(maxY);
-  var n=points.length;
-  function px(i){ return padL + (n===1?iw/2:(i/(n-1))*iw); }
-  function py(v){ return padT + ih - (maxY===0?0:(v/maxY)*ih); }
-
-  var svg = '<svg class="chart" viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="none" role="img" aria-label="cumulative members">';
-  // horizontal gridlines + y labels (0, mid, max)
-  var ticks=[0, maxY/2, maxY];
-  for (var g=0; g<ticks.length; g++){
-    var yv=ticks[g], y=py(yv);
-    svg += '<line class="grid" x1="'+padL+'" y1="'+y+'" x2="'+(W-padR)+'" y2="'+y+'"/>';
-    svg += '<text x="'+(padL-6)+'" y="'+(y+3)+'" text-anchor="end">'+fmt(Math.round(yv))+'</text>';
-  }
-  // area + line path
-  var d="", area="";
-  for (var i2=0;i2<n;i2++){
-    var X=px(i2), Y=py(points[i2].total);
-    d += (i2===0?"M":"L")+X.toFixed(1)+" "+Y.toFixed(1)+" ";
-  }
-  area = "M"+px(0).toFixed(1)+" "+py(0).toFixed(1)+" "+d.slice(1)+"L"+px(n-1).toFixed(1)+" "+py(0).toFixed(1)+" Z";
-  svg += '<path class="area" d="'+area+'"/>';
-  svg += '<path class="line" d="'+d.trim()+'"/>';
-  // emphasized last point
-  var lx=px(n-1), ly=py(points[n-1].total);
-  svg += '<circle class="lastring" cx="'+lx+'" cy="'+ly+'" r="6"/>';
-  svg += '<circle class="last" cx="'+lx+'" cy="'+ly+'" r="3.2"/>';
-  svg += '<text x="'+lx+'" y="'+(ly-10)+'" text-anchor="end" style="fill:var(--accent);font-weight:700">'+fmt(points[n-1].total)+'</text>';
-  // x labels: first + last date
-  svg += '<text x="'+padL+'" y="'+(H-8)+'" text-anchor="start">'+esc(points[0].date)+'</text>';
-  if (n>1) svg += '<text x="'+(W-padR)+'" y="'+(H-8)+'" text-anchor="end">'+esc(points[n-1].date)+'</text>';
-  svg += '</svg>';
-  return svg;
+// ---- momentum stats helper ------------------------------------------------
+// series: [{date, n}] sorted asc. Returns HTML for the .momentum row above a chart.
+function momentumHtml(series){
+  var today = series.length ? series[series.length-1].n : 0;
+  var prev  = series.length > 1 ? series[series.length-2].n : 0;
+  var week7 = 0;
+  for (var i=Math.max(0,series.length-7); i<series.length; i++) week7 += series[i].n;
+  var diff = today - prev;
+  var sign = diff > 0 ? "+" : "";
+  var cls  = diff > 0 ? "up" : diff < 0 ? "dn" : "";
+  return '<div class="momentum">'
+    + '<span><span class="big">'+fmt(today)+'</span><span class="label">today</span></span>'
+    + '<span class="delta '+cls+'">'+sign+fmt(diff)+' vs yesterday</span>'
+    + '<span class="week">'+fmt(week7)+' last 7 days</span>'
+    + '</div>';
 }
 
 // ---- bar chart (posts/day, overlaid dm/day) -------------------------------
@@ -360,8 +346,12 @@ function render(data){
     + tile(t.comments,"comments")
     + tile(t.invites_used,"invites used");
 
-  document.getElementById("chartMembers").innerHTML = lineChart(data.timeseries.members_cumulative||[]);
-  document.getElementById("chartPosts").innerHTML = barChart(data.timeseries.posts||[], data.timeseries.dm||[]);
+  var signupSeries = data.timeseries.signups || [];
+  var postSeries   = data.timeseries.posts   || [];
+  document.getElementById("signupMomentum").innerHTML = momentumHtml(signupSeries);
+  document.getElementById("postMomentum").innerHTML   = momentumHtml(postSeries);
+  document.getElementById("chartSignups").innerHTML   = barChart(signupSeries, []);
+  document.getElementById("chartPosts").innerHTML     = barChart(postSeries, data.timeseries.dm||[]);
   document.getElementById("health").innerHTML = renderHealth(data.health);
   document.getElementById("topAgents").innerHTML = tableTopAgents(data.top_agents||[]);
   document.getElementById("recentSignups").innerHTML = tableSignups(data.recent_signups||[]);

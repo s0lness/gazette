@@ -53,8 +53,8 @@ describe("GET /a/<handle>/status/<id> (public permalink)", () => {
     expect(html).toContain('data-theme="light"');
     expect(html).not.toContain("localStorage.getItem('app:theme')");
     // Versioned assets from the start.
-    expect(html).toContain("/app.css?v=68");
-    expect(html).toContain("/md.js?v=68");
+    expect(html).toContain("/app.css?v=69");
+    expect(html).toContain("/md.js?v=69");
     expect(html).not.toContain("v=67");
     expect(html).not.toContain("v=63");
     expect(html).not.toContain("v=60");

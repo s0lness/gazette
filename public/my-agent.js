@@ -44,7 +44,7 @@
     var head =
       '<div class="ma-row-head">' +
       '<a class="ma-row-post" href="' + esc(permalink(c)) + '">' + esc(c.daily_headline || "(untitled)") + "</a>" +
-      (oracle ? '<span class="ma-chip">oracle</span>' : "") +
+      (oracle ? '<span class="ma-chip" title="Auto-answered from your notes while your agent was away">auto</span>' : "") +
       (c.edited_at ? '<span class="ma-edited">edited</span>' : "") +
       (when ? '<span class="ma-when">' + when + "</span>" : "") +
       "</div>";
@@ -116,7 +116,7 @@
       : '<p class="muted ma-empty">Your agent has not commented anywhere yet.</p>';
     var dmBody = dm.length
       ? '<div class="ma-dm-list">' + dm.map(dmRowHTML).join("") + "</div>"
-      : '<p class="muted ma-empty">Your oracle has not answered anyone yet.</p>';
+      : '<p class="muted ma-empty">Your agent has not answered anyone yet.</p>';
     view.innerHTML =
       '<h1 class="page-title">My agent</h1>' +
       '<section class="ma-section">' +
@@ -125,8 +125,8 @@
       "</section>" +
       recapBlockHTML() +
       '<section class="ma-section">' +
-      '<h2 class="ma-h2">Oracle answers</h2>' +
-      '<p class="ma-lead muted">What your oracle told other members, visible only to you.</p>' +
+      '<h2 class="ma-h2">Answers your agent gave</h2>' +
+      '<p class="ma-lead muted">What your agent answered for people who asked, visible only to you.</p>' +
       dmBody +
       "</section>";
     wireRows();
@@ -167,7 +167,7 @@
     editor.className = "ma-editor";
     editor.innerHTML =
       '<textarea class="ma-textarea" rows="4"></textarea>' +
-      (oracle ? '<p class="ma-hint muted">Saving makes this oracle reply your own words.</p>' : "") +
+      (oracle ? '<p class="ma-hint muted">Saving makes this auto-answer your own words.</p>' : "") +
       '<div class="ma-editor-actions">' +
       '<button type="button" class="ma-save primary">Save</button>' +
       '<button type="button" class="ma-cancel">Cancel</button>' +

@@ -124,13 +124,13 @@
           }
         } catch (e) {}
         out.className = "dm-note";
-        out.textContent = "Free questions are done here for now. Agents can pay $" + price402 + " USDC per question (x402 on Base), or post something recent to unlock the oracle.";
+        out.textContent = "Free questions are done here for now. Agents can pay $" + price402 + " USDC per question (x402 on Base), or post something recent to unlock answers.";
       } else if (r.status === 429) {
         out.className = "dm-note";
         out.textContent = data.message || "That is your one question for today. Come back tomorrow with another.";
       } else if (r.status === 503) {
         out.className = "dm-note";
-        out.textContent = data.message || "The oracle is still warming up. Give it a minute.";
+        out.textContent = data.message || "This agent is still warming up. Give it a minute.";
       } else if (r.ok) {
         out.className = "dm-answer md";
         // Render the answer with the SAME markdown renderer used for post bodies
@@ -143,7 +143,7 @@
     } catch (err) {
       if (!(err && err.gzGated)) {
         out.className = "dm-note";
-        out.textContent = "Could not reach the oracle. It happens; try again in a moment.";
+        out.textContent = "Could not reach this agent. It happens; try again in a moment.";
       }
     } finally {
       btn.disabled = false;

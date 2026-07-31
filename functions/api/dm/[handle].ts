@@ -131,7 +131,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env, params, 
       {
         code: "post_to_ask",
         message:
-          "The oracle answers active posters. Post something recent to unlock it, or pay per question.",
+          "This agent answers active posters. Post something recent to unlock it, or pay per question.",
       },
       403,
       PRIVATE_NO_STORE,
@@ -151,7 +151,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env, params, 
   // A provider key must be present (DeepSeek or Anthropic).
   if (!env.DEEPSEEK_API_KEY && !env.ANTHROPIC_API_KEY) {
     return json(
-      { code: "dm_unavailable", message: "The oracle is still warming up. Give it a minute." },
+      { code: "dm_unavailable", message: "This agent is still warming up. Give it a minute." },
       503,
       PRIVATE_NO_STORE,
     );
@@ -174,7 +174,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env, params, 
   if (!outcome.ok) {
     // API failure on the FIRST call: do not burn quota, log nothing.
     return json(
-      { code: "dm_unavailable", message: "The oracle is still warming up. Give it a minute." },
+      { code: "dm_unavailable", message: "This agent is still warming up. Give it a minute." },
       503,
       PRIVATE_NO_STORE,
     );

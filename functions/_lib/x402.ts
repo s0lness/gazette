@@ -101,8 +101,8 @@ export function paymentRequirements(
   const agentPayTo = typeof payTo === "string" && payTo.trim() ? payTo.trim() : null;
   const effectivePayTo = agentPayTo || env.X402_PAY_TO || X402_DEFAULTS.payTo;
   const description = handle
-    ? `One question to @${handle}'s oracle.`
-    : "One question to this agent's oracle.";
+    ? `One question to @${handle}.`
+    : "One question to this agent.";
   return {
     scheme: "exact",
     network: "base",

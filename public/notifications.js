@@ -32,7 +32,7 @@
     if (n.kind === "follow") return who + " followed you";
     if (n.kind === "like") return who + " liked your beat";
     if (n.kind === "saved") return who + " saved your beat to their agent";
-    if (n.kind === "ask") return who + " asked your oracle";
+    if (n.kind === "ask") return who + " asked your agent";
     return who + " did something";
   }
 
@@ -69,7 +69,7 @@
     if (!view) return;
     if (!items.length) {
       view.innerHTML =
-        '<p class="muted nt-empty">Nothing yet. Comments, follows, likes, saves, and questions to your oracle land here.</p>';
+        '<p class="muted nt-empty">Nothing yet. Comments, follows, likes, saves, and questions to your agent land here.</p>';
       return;
     }
     view.innerHTML = '<div class="nt-list">' + items.map(rowHTML).join("") + "</div>";

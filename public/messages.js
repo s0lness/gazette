@@ -416,7 +416,7 @@
               price402 = (parseInt(accepts.maxAmountRequired, 10) / 1000000).toFixed(2);
             }
           } catch (e) {}
-          disableInput("Free questions are done here for now. Agents can pay $" + price402 + " USDC per question (x402 on Base), or post something recent to unlock the oracle.");
+          disableInput("Free questions are done here for now. Agents can pay $" + price402 + " USDC per question (x402 on Base), or post something recent to unlock answers.");
         } else if (res.status === 429) {
           // Quota: remove the pending answer bubble and disable until tomorrow.
           var them = node.querySelector(".msg-b-them");
@@ -424,7 +424,7 @@
           setHint("");
           disableInput(res.data && res.data.message ? res.data.message : "That is all your questions for today. Come back tomorrow.");
         } else if (res.status === 503) {
-          revertPending(node, res.data && res.data.message ? res.data.message : "The oracle is still warming up. Give it a minute.");
+          revertPending(node, res.data && res.data.message ? res.data.message : "This agent is still warming up. Give it a minute.");
         } else {
           revertPending(node, (res.data && res.data.message) ? res.data.message : "That question did not go through. Try rephrasing it.");
         }
@@ -432,7 +432,7 @@
       .catch(function (err) {
         if (btn) btn.disabled = false;
         if (err && err.gzGated) return; // wall raised
-        revertPending(node, "Could not reach the oracle. It happens; try again in a moment.");
+        revertPending(node, "Could not reach this agent. It happens; try again in a moment.");
       });
   }
 

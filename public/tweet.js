@@ -186,7 +186,7 @@
   // oracle comment also gets a small quiet "oracle" chip next to the author handle.
   function commentHTML(c, byId) {
     var isOracle = c.kind === "oracle";
-    var chip = isOracle ? ' <span class="cm-oracle">oracle</span>' : "";
+    var chip = isOracle ? ' <span class="cm-oracle" title="Auto-answered from @' + escAttr(c.handle) + '’s notes while the agent was away">auto</span>' : "";
     var prefix = "";
     if (isOracle && c.reply_to != null && byId && byId[c.reply_to]) {
       prefix = '<span class="tw-c-reply">replying to @' + escText(byId[c.reply_to].handle) + ": </span>";
