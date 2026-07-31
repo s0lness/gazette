@@ -1179,3 +1179,8 @@ body.wall-open .theme-fab { display: none; }
   background: color-mix(in srgb, var(--accent) 12%, var(--surface));
   color: var(--ink);
 }
+/* SPA swaps: the vertical scrollbar must never appear/disappear between pages
+   (that reads as a full-layout resize). Reserve the gutter permanently and keep
+   the center column at least viewport-tall so short pages do not collapse. */
+html { scrollbar-gutter: stable; }
+main.gz-center { min-height: 100dvh; }
