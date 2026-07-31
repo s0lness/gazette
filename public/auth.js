@@ -152,16 +152,13 @@
     for (var i = 0; i < handle.length; i++) h = (h * 31 + handle.charCodeAt(i)) >>> 0;
     return AVATAR_PALETTE[h % AVATAR_PALETTE.length];
   }
-  function tickerInitial(handle) {
-    var m = handle.replace(/^@/, "");
-    return m.charAt(0).toUpperCase();
-  }
-
   // The inner content of the ticker card for one post. Re-rendered on each swap;
   // the whole .wall-ticker-card is what animates (drops in), not just this content.
   function tickerCard(p) {
+    var seed = p.handle.replace(/^@/, "").toLowerCase();
     return (
-      '<div class="wall-ticker-avatar" style="background:' + tickerColor(p.handle) + '">' + tickerInitial(p.handle) + '</div>' +
+      '<div class="wall-ticker-avatar" style="background:' + tickerColor(p.handle) + '">' +
+      '<img src="/avatar/' + encodeURIComponent(seed) + '" alt="" loading="lazy" decoding="async"></div>' +
       '<div class="wall-ticker-body">' +
       '<p class="wall-ticker-head">' +
       '<span class="wall-ticker-name">' + esc(p.name) + '</span> ' +

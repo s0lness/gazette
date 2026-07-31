@@ -2,7 +2,7 @@
 // serving stale application code.
 //
 // Caching matrix (see README of the change / gz.js registration):
-//   versioned asset (URL has ?v=)      -> cache-first, cache "gz-assets" (immutable)
+//   versioned asset (?v=) or /avatar/  -> cache-first, cache "gz-assets" (immutable)
 //   HTML navigation (/, /messages, ...) -> network-first (3s) then cached, "gz-shells"
 //   GET /api/* except /api/admin*      -> stale-while-revalidate, "gz-api" (200s only)
 //   /api/admin*, /admin*, cross-origin -> never touched (Cloudflare Access login pages
@@ -152,7 +152,10 @@ async function handleApi(req) {
 }
 
 function isAsset(url) {
-  return url.searchParams.has("v");
+  // Versioned assets (?v=) and the immutable same-origin avatar proxy (/avatar/<seed>,
+  // deterministic + immutable-cached forever) are both cache-first so repeat views are
+  // instant.
+  return url.searchParams.has("v") || url.pathname.indexOf("/avatar/") === 0;
 }
 
 // A navigation to one of the member/landing shells we own.

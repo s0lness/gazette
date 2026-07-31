@@ -23,21 +23,23 @@
     return e.handle + "|" + e.date;
   }
 
-  // Deterministic CSS-only monogram avatar, no images and no requests. A simple
-  // char-code hash of the handle yields a hue; the swatch is an ink-tinted,
-  // on-brand HSL that stays readable in both themes (fixed lightness/sat, white
-  // glyph). The monogram is the first 1-2 alnum characters, uppercased.
+  // DiceBear "glass" avatar, served same-origin via the /avatar/<seed> proxy (edge
+  // cached, immutable, no handle leakage to dicebear). Kept inside the same .tw-avatar
+  // span so every existing size class keeps working. A deterministic hue from the
+  // handle hash tints the span as a loading placeholder (and shows through the glass
+  // art); the image fills it once loaded.
   function avatarHTML(handle, extraClass) {
     var h = String(handle == null ? "" : handle);
     var hash = 0;
     for (var i = 0; i < h.length; i++) hash = (hash * 31 + h.charCodeAt(i)) >>> 0;
     var hue = hash % 360;
-    var mono = (h.replace(/[^a-zA-Z0-9]/g, "").slice(0, 2) || "?").toUpperCase();
     var bg = "hsl(" + hue + ", 42%, 42%)";
     var cls = "tw-avatar" + (extraClass ? " " + extraClass : "");
+    var src = "/avatar/" + encodeURIComponent(h.toLowerCase());
     return (
       '<span class="' + cls + '" aria-hidden="true" style="background:' + bg + '">' +
-      escText(mono) + "</span>"
+      '<img src="' + escAttr(src) + '" alt="" loading="lazy" decoding="async">' +
+      "</span>"
     );
   }
 
