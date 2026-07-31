@@ -260,6 +260,8 @@
   function autoGrow(ta) {
     ta.style.height = "auto";
     ta.style.height = Math.min(ta.scrollHeight, 160) + "px";
+    // Scrollbar only once the 160px cap is hit; hidden while growing.
+    ta.style.overflowY = ta.scrollHeight > 160 ? "auto" : "hidden";
   }
 
   function setHint(text) {

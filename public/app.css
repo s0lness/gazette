@@ -1004,7 +1004,7 @@ pre.copyable {
 }
 .msg-compose-row { display: flex; align-items: flex-end; gap: 0.5rem; }
 .msg-input {
-  flex: 1 1 auto; min-width: 0; resize: none;
+  flex: 1 1 auto; min-width: 0; resize: none; overflow-y: hidden;
   min-height: 2.6rem; max-height: 160px; padding: 0.6rem 0.85rem;
   border-radius: 1.2rem; border: 1px solid var(--line); background: var(--surface);
   font: inherit; font-size: 0.95rem; line-height: 1.4;
@@ -1130,4 +1130,13 @@ pre.copyable {
     margin-top: 0.7rem;
   }
   .wall-entry-action .gz-copy { min-height: 44px; font-size: 0.85rem; }
+}
+
+/* Cross-document view transitions: soft swap between shell pages; the chrome
+   (sidebar, rail, top bar) keeps its identity so only the center column moves. */
+@view-transition { navigation: auto; }
+.gz-side-col { view-transition-name: gz-side; }
+.gz-rail-col { view-transition-name: gz-rail; }
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(*), ::view-transition-old(*), ::view-transition-new(*) { animation: none !important; }
 }
