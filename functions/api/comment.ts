@@ -1,7 +1,7 @@
 import { Env, json, err, nowISO, todayUTC } from "../_lib/util";
 import { requireReader, readerJson, tokenFromRequest } from "../_lib/auth";
 import { lintComment } from "../_lib/lint";
-import { maybeOracleReply } from "../_lib/oracle-reply";
+import { maybeOracleReply, catchUpOracleReply } from "../_lib/oracle-reply";
 import { fireNotify, notifyCommentAuthor, notifyDailyOwner, truncBody } from "../_lib/notify";
 
 // Members-only. POST { daily_id, body } inserts a comment (privacy + <=500 chars).
@@ -113,9 +113,23 @@ export const onRequestPost: PagesFunction<Env> = async ({ env, request, waitUnti
   // Fire-and-forget: while the daily's author is away, its oracle may answer this
   // comment from the author's corpus. Never blocks or affects the response; a throw is
   // swallowed inside maybeOracleReply. The oracle reply appears on the next poll.
+  //
+  // maybeOracleReply targets THIS just-posted comment; catchUpOracleReply also sweeps the
+  // OLDEST still-unanswered comment on the daily (a member's earlier question that landed
+  // while the key was absent). Both are idempotent and only answer non-author, non-oracle
+  // comments, so firing them for the author's own comment is a clean no-op. The GET
+  // /comments lazy trigger remains as a fallback.
   if (waitUntil && typeof id === "number" && id > 0) {
     try {
-      waitUntil(maybeOracleReply(env, dailyId, id));
+      // Sequential, NOT concurrent: catch-up runs only after maybeOracleReply settles, so
+      // the two never race to answer the SAME (just-posted) comment. maybeOracleReply
+      // answers it first, then the catch-up sees it answered and moves to any OLDER
+      // unanswered comment (or no-ops). One waitUntil chain keeps it fire-and-forget.
+      waitUntil(
+        maybeOracleReply(env, dailyId, id)
+          .then(() => catchUpOracleReply(env, dailyId))
+          .catch(() => {}),
+      );
     } catch {
       // waitUntil unavailable (e.g. tests): ignore, the response is unaffected.
     }

@@ -2,6 +2,7 @@ import { Env, err } from "../../_lib/util";
 import { getAgentByToken } from "../../_lib/db";
 import { postDaily } from "../../_lib/daily";
 import { GAZETTE_HANDLE, maybeGazetteComment } from "../../_lib/gazette-comment";
+import { catchUpOracleReply } from "../../_lib/oracle-reply";
 
 export const onRequestPost: PagesFunction<Env> = async ({ request, env, params, waitUntil }) => {
   const token = String(params.token);
@@ -38,7 +39,15 @@ export async function fireGazetteComment(
     // Only published posts (publish_at null or in the past). postDaily echoes publish_at.
     if (body.publish_at && Date.parse(body.publish_at) > Date.now()) return;
     const newId = body.id as number;
-    const p = Promise.resolve().then(() => maybeGazetteComment(env, newId)).catch(() => {});
+    // Ask @gazette's curious question, then EAGERLY generate the author's answer to it in
+    // the SAME chain, so a fresh beat gets question + answer without anyone opening the
+    // thread. catchUpOracleReply only runs when a gazette comment was actually posted, and
+    // is itself idempotent + guarded (bails cleanly with no key, no corpus, or nothing to
+    // answer). GET /comments still triggers it lazily as a fallback.
+    const p = Promise.resolve()
+      .then(() => maybeGazetteComment(env, newId))
+      .then((posted) => (posted ? catchUpOracleReply(env, newId) : null))
+      .catch(() => {});
     if (waitUntil) waitUntil(p);
   } catch {
     // Never let the auto-comment path affect the post response.
