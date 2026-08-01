@@ -30,6 +30,8 @@
     return set;
   }
 
+  // Initial thread skeleton is server-rendered in the forum shell (functions/forum);
+  // load() replaces #root with the real thread (or an error+retry) on fetch.
   let last = null;
   async function load() {
     let t, status;
@@ -39,7 +41,7 @@
       if (status !== 404) t = await r.json();
     } catch (err) {
       if (err && err.gzGated) return; // wall raised
-      if (last === null) root.innerHTML = '<p class="muted">This thread ducked out of sight. Give it a moment.</p>';
+      if (last === null) window.gzErrorState(root, "This thread ducked out of sight.", function () { load(); });
       return; // keep the last good render on a blip
     }
     if (status === 404) {

@@ -77,6 +77,29 @@
     );
   }
 
+  // Ghost conversation rows for the initial list load (nothing cached yet).
+  function skelListRows(n) {
+    var one =
+      '<div class="gz-skel-row" aria-hidden="true">' +
+      '<div class="gz-skel gz-skel-avatar"></div>' +
+      '<div class="gz-skel-body">' +
+      '<div class="gz-skel gz-skel-line w-30"></div>' +
+      '<div class="gz-skel gz-skel-line w-90"></div>' +
+      "</div></div>";
+    var out = "";
+    for (var i = 0; i < (n || 4); i++) out += one;
+    return out;
+  }
+  function renderListSkeleton() {
+    reveal();
+    view.innerHTML =
+      '<div class="msg-list-head">' +
+      '<h1 class="page-title">Messages</h1>' +
+      '<button type="button" class="msg-new-btn" id="msg-new" disabled>New message</button>' +
+      "</div>" +
+      '<div class="msg-list" role="status" aria-label="Loading conversations">' + skelListRows(4) + "</div>";
+  }
+
   var listSig = null;
   function renderList(conversations) {
     reveal();
@@ -128,9 +151,13 @@
       })
       .catch(function (err) {
         if (err && err.gzGated) return;
-        if (listSig === null) {
+        if (parseHash()) return; // navigated into a chat mid-flight
+        if (listSig === null && view) {
           reveal();
-          view.innerHTML = '<p class="muted">Your messages slipped away for a second. They will be back.</p>';
+          window.gzErrorState(view, "Your messages slipped away for a second.", function () {
+            renderListSkeleton();
+            loadList();
+          });
         }
       });
   }
@@ -138,10 +165,12 @@
   function startListPoll() {
     stopListPoll();
     // SWR: paint the last good conversation list immediately (no round trip), then
-    // loadList revalidates and re-renders only if the list actually changed.
-    if (window.gzCache && !parseHash()) {
-      var cached = window.gzCache.get("conversations", 10 * 60 * 1000);
+    // loadList revalidates and re-renders only if the list actually changed. With no
+    // cached copy, show ghost rows so a real wait reads as loading, not empty.
+    if (!parseHash()) {
+      var cached = window.gzCache ? window.gzCache.get("conversations", 10 * 60 * 1000) : null;
       if (cached) renderList(cached.conversations || []);
+      else if (listSig === null) renderListSkeleton();
     }
     loadList();
     listPollTimer = setInterval(function () { if (!parseHash() && !document.hidden) loadList(); }, 12000);
@@ -276,10 +305,21 @@
     );
   }
 
+  // Ghost chat bubbles for the initial thread load.
+  function skelBubbles() {
+    return (
+      '<div class="gz-skel-bubbles" role="status" aria-label="Loading conversation">' +
+      '<div class="gz-skel gz-skel-bubble them"></div>' +
+      '<div class="gz-skel gz-skel-bubble me"></div>' +
+      '<div class="gz-skel gz-skel-bubble them"></div>' +
+      "</div>"
+    );
+  }
+
   function chatShellHTML(handle) {
     return (
       chatHeadHTML(handle) +
-      '<div class="msg-thread" id="msg-thread"><p class="muted gz-loading">Reading back through the conversation...</p></div>' +
+      '<div class="msg-thread" id="msg-thread">' + skelBubbles() + "</div>" +
       '<div class="msg-compose">' +
       '<div class="msg-compose-row">' +
       '<textarea id="msg-input" class="msg-input" rows="1" placeholder="Ask ' + esc(handle) + ' anything..."></textarea>' +
@@ -523,8 +563,12 @@
       })
       .catch(function (err) {
         if (err && err.gzGated) return;
+        if (!chatState || chatState.handle !== handle) return; // navigated away
         var t = document.getElementById("msg-thread");
-        if (t) t.innerHTML = '<p class="muted">This conversation stepped out for a second. Give it a moment.</p>';
+        if (t) window.gzErrorState(t, "This conversation stepped out for a second.", function () {
+          t.innerHTML = skelBubbles();
+          loadChat(handle);
+        });
       });
   }
 
@@ -573,7 +617,7 @@
     // non-empty, re-renders including this fresh question).
     var t = document.getElementById("msg-thread");
     if (t) {
-      var loading = t.querySelector(".gz-loading");
+      var loading = t.querySelector(".gz-loading, .gz-skel-bubbles");
       if (loading) loading.remove();
     }
     ta.value = q;

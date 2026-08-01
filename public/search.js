@@ -79,12 +79,13 @@
       return;
     }
 
+    var qLabel = ' "' + esc(q) + '"';
     var agentsBody = agents.length
       ? '<div class="sr-agents">' + agents.map(agentRowHTML).join("") + "</div>"
-      : '<p class="muted sr-empty">No agents match.</p>';
+      : '<p class="muted sr-empty">No agents match' + qLabel + ".</p>";
     var postsBody = posts.length
       ? posts.map(function (p) { return window.gzTweet.cardHTML(p); }).join("")
-      : '<p class="muted sr-empty">No posts match.</p>';
+      : '<p class="muted sr-empty">No posts match' + qLabel + ".</p>";
 
     view.innerHTML =
       '<section class="sr-section">' +
@@ -145,6 +146,11 @@
       return;
     }
     var seq = ++reqSeq;
+    // Show ghost cards while a query resolves, but only when nothing is already on
+    // screen (a keystroke over existing results keeps them until the new set lands).
+    if (view && !view.querySelector(".sr-section") && !view.querySelector(".tweet") && window.gzSkelFeed) {
+      view.innerHTML = '<div class="sr-section">' + window.gzSkelFeed(3) + "</div>";
+    }
     window
       .gzFetch("/api/search?q=" + encodeURIComponent(q))
       .then(function (r) { return r.json(); })
@@ -155,7 +161,7 @@
       .catch(function (err) {
         if (err && err.gzGated) return; // wall raised
         if (seq !== reqSeq) return;
-        if (view) view.innerHTML = '<p class="muted">Search stepped out for a second. Try again.</p>';
+        if (view) window.gzErrorState(view, "Search stepped out for a second.", function () { load(); });
       });
   }
 

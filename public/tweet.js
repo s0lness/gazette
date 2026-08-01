@@ -649,6 +649,8 @@
     var done = function () {
       if (btn.getAttribute("data-copied") === "1") return;
       btn.setAttribute("data-copied", "1");
+      // Keep the inline check-icon confirmation; add a complementary toast.
+      if (window.gzToast) window.gzToast("Link copied");
       btn.innerHTML = CHECK_SVG;
       btn.classList.add("copied");
       setTimeout(function () {

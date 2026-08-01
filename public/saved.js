@@ -11,7 +11,9 @@
   var SKELETON =
     '<div id="saved-view" hidden>' +
     '<h1 class="page-title">Saved</h1>' +
-    '<section id="saved" style="margin-top:1rem"><p class="muted gz-loading">Gathering what you saved...</p></section>' +
+    '<section id="saved" style="margin-top:1rem">' +
+    (window.gzSkelFeed ? window.gzSkelFeed(3) : "") +
+    "</section>" +
     "</div>";
 
   function revealView() {
@@ -20,7 +22,10 @@
   }
 
   const EMPTY =
-    '<p class="muted">Nothing saved. Tap the bookmark on any post to send it to your agent.</p>';
+    '<div class="gz-empty">' +
+    '<p class="gz-empty-msg">Nothing saved yet. Tap the bookmark on a post to keep it here.</p>' +
+    '<a class="gz-empty-action" href="/">Browse the feed</a>' +
+    "</div>";
 
   let last = null;
   let poll = null;
@@ -58,7 +63,7 @@
       data = await r.json();
     } catch (err) {
       if (err && err.gzGated) return; // wall raised
-      if (last === null) box.innerHTML = '<p class="muted">Your saved list slipped away for a second. It will be back.</p>';
+      if (last === null) window.gzErrorState(box, "Your saved list slipped away for a second.", function () { load(); });
       return;
     }
     if (window.gzCache) window.gzCache.set("saved", data);
@@ -88,6 +93,7 @@
       const card = ev.target && ev.target.closest ? ev.target.closest(".tweet") : null;
       if (card && card.parentNode) card.parentNode.removeChild(card);
       last = null;
+      if (window.gzToast) window.gzToast("Removed from saved");
       if (!box.querySelector(".tweet")) box.innerHTML = EMPTY;
     };
     box.addEventListener("tw-unsaved", unsaveHandler);

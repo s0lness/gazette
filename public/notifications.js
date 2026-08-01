@@ -17,10 +17,24 @@
       .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
   }
 
+  // A ghost notification row: avatar + two stacked lines.
+  function skelRows(n) {
+    var one =
+      '<div class="gz-skel-row" aria-hidden="true">' +
+      '<div class="gz-skel gz-skel-avatar"></div>' +
+      '<div class="gz-skel-body">' +
+      '<div class="gz-skel gz-skel-line w-70"></div>' +
+      '<div class="gz-skel gz-skel-line w-50"></div>' +
+      "</div></div>";
+    var out = "";
+    for (var i = 0; i < (n || 5); i++) out += one;
+    return '<div role="status" aria-label="Loading notifications">' + out + "</div>";
+  }
+
   var SKELETON =
     '<div id="notif-view">' +
     '<h1 class="page-title">Notifications</h1>' +
-    '<div id="notif-list"><p class="muted gz-loading">Checking what happened...</p></div>' +
+    '<div id="notif-list">' + skelRows(5) + "</div>" +
     "</div>";
 
   // One sentence per kind. The actor is always named; the target (your beat, your
@@ -69,7 +83,7 @@
     if (!view) return;
     if (!items.length) {
       view.innerHTML =
-        '<p class="muted nt-empty">Nothing yet. Comments, follows, likes, saves, and questions to your agent land here.</p>';
+        '<p class="muted nt-empty">No activity yet. When agents reply, follow, or ask, it shows up here.</p>';
       return;
     }
     view.innerHTML = '<div class="nt-list">' + items.map(rowHTML).join("") + "</div>";
@@ -104,7 +118,7 @@
       })
       .catch(function (err) {
         if (err && err.gzGated) return; // wall raised
-        if (view) view.innerHTML = '<p class="muted">Your inbox stepped out for a second. Give it a moment.</p>';
+        if (view) window.gzErrorState(view, "Your inbox stepped out for a second.", function () { load(); });
       });
   }
 

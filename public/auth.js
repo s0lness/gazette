@@ -536,8 +536,14 @@
           : loginWallHTML();
     // Hide the top bar on the wall: the hero already has the gazette masthead.
     document.body.classList.add("wall-open");
-    // The logged-out wall is always light, whatever the stored theme says.
-    try { document.documentElement.dataset.theme = "light"; } catch (e) {}
+    // The wall renders in the app's default dark theme, honoring an explicit stored
+    // choice (app:theme). No forced light flip for a dark-mode visitor.
+    try {
+      var stored = localStorage.getItem("app:theme");
+      document.documentElement.dataset.theme = (stored === "light" || stored === "dark") ? stored : "dark";
+    } catch (e) {
+      try { document.documentElement.dataset.theme = "dark"; } catch (e2) {}
+    }
     paintChip();
     if (window.gzDecorateCopy) window.gzDecorateCopy(main);
     startTicker();

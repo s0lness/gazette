@@ -270,6 +270,72 @@
     },
   };
 
+  // ---- toast --------------------------------------------------------------
+  // One brief, non-blocking confirmation pill, bottom-center (above the mobile
+  // bottom nav via CSS). A new toast REPLACES the current one so rapid actions
+  // never stack a tower. Auto-dismisses after ~1.8s (instant when reduced motion).
+  // The queue/replace logic is pure enough to unit test via gzToast itself.
+  var gzToastEl = null;
+  var gzToastTimer = null;
+  var gzToastOutTimer = null;
+  function gzToast(msg) {
+    msg = String(msg == null ? "" : msg);
+    if (!msg) return;
+    try {
+      if (gzToastTimer) { clearTimeout(gzToastTimer); gzToastTimer = null; }
+      if (gzToastOutTimer) { clearTimeout(gzToastOutTimer); gzToastOutTimer = null; }
+      if (!gzToastEl) {
+        gzToastEl = document.createElement("div");
+        gzToastEl.className = "gz-toast";
+        gzToastEl.setAttribute("role", "status");
+        gzToastEl.setAttribute("aria-live", "polite");
+        document.body.appendChild(gzToastEl);
+      }
+      // Re-trigger the in-animation on a replace.
+      gzToastEl.classList.remove("gz-toast-out");
+      gzToastEl.textContent = msg;
+      var el = gzToastEl;
+      gzToastTimer = setTimeout(function () {
+        gzToastTimer = null;
+        if (!el) return;
+        var reduce = gzReduceMotion();
+        if (reduce) {
+          try { if (el.parentNode) el.parentNode.removeChild(el); } catch (e) {}
+          if (gzToastEl === el) gzToastEl = null;
+          return;
+        }
+        el.classList.add("gz-toast-out");
+        gzToastOutTimer = setTimeout(function () {
+          gzToastOutTimer = null;
+          try { if (el.parentNode) el.parentNode.removeChild(el); } catch (e) {}
+          if (gzToastEl === el) gzToastEl = null;
+        }, 200);
+      }, 1800);
+    } catch (e) {}
+  }
+
+  // ---- shared error state (with retry) ------------------------------------
+  // Render a compact, friendly error card into `container` with a Retry button
+  // wired to `onRetry`. Keeps the copy tone but adds a recovery action. Used by
+  // every view's fetch-failure path so the retry affordance is consistent.
+  function gzErrorState(container, msg, onRetry) {
+    if (!container) return;
+    var m = String(msg == null ? "Something slipped for a second." : msg);
+    container.innerHTML =
+      '<div class="gz-error" role="alert">' +
+      '<p class="gz-error-msg">' + escHtml(m) + "</p>" +
+      '<button type="button" class="gz-retry">Try again</button>' +
+      "</div>";
+    var btn = container.querySelector(".gz-retry");
+    if (btn && typeof onRetry === "function") {
+      btn.addEventListener("click", function () { onRetry(); });
+    }
+  }
+  function escHtml(s) {
+    return String(s == null ? "" : s)
+      .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  }
+
   // ---- update pill --------------------------------------------------------
   // Shows a small fixed pill bottom-center when a new SW has taken control
   // (i.e. a deploy landed while this tab was open). Clicking reloads the page.
@@ -332,7 +398,7 @@
       // the first controllerchange is just the sw claiming a freshly-loaded tab.
       var hadController = !!sw.controller;
 
-      sw.register("/sw.js?v=77").then(function (reg) {
+      sw.register("/sw.js?v=78").then(function (reg) {
         gzSwReg = reg;
 
         // (b) updatefound: a new SW is being installed. Wait for it to activate.
@@ -447,4 +513,6 @@
   window.gzReduceMotion = gzReduceMotion;
   window.gzRefreshTimes = refreshTimes;
   window.gzDecorateCopy = gzDecorateCopy;
+  window.gzToast = gzToast;
+  window.gzErrorState = gzErrorState;
 })();

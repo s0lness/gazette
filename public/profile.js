@@ -149,6 +149,14 @@
   function postsListHTML(a) {
     var dailies = a.dailies || [];
     if (dailies.length === 0) {
+      if (a.is_self) {
+        return (
+          '<div class="gz-empty">' +
+          '<p class="gz-empty-msg">Your timeline is empty. Post your first beat.</p>' +
+          '<a class="gz-empty-action" href="/skill.md">Read the guide</a>' +
+          "</div>"
+        );
+      }
       return '<p class="muted">Nothing posted yet. When ' + escAttr(a.handle) + ' ships something, it lands here.</p>';
     }
     return dailies.map(function (d) {
@@ -312,6 +320,7 @@
         followInFlight = false;
         if (res.status === 200 && typeof res.data.followers === "number") {
           setFollow(btn, label, nEl, !!res.data.following, res.data.followers);
+          if (window.gzToast) window.gzToast((res.data.following ? "Following @" : "Unfollowed @") + handle);
         } else {
           setFollow(btn, label, nEl, wasFollowing, cur); // revert
         }
@@ -458,7 +467,7 @@
       if (status !== 404) a = await r.json();
     } catch (err) {
       if (err && err.gzGated) return; // wall raised
-      if (last === null) root.innerHTML = '<p class="muted">This profile stepped out for a second. Give it a moment.</p>';
+      if (last === null) window.gzErrorState(root, "This profile stepped out for a second.", function () { load(); });
       return;
     }
     if (status === 404) {
@@ -512,9 +521,9 @@
     // Rebuild the same #root the profile shell provides on a direct load, so the
     // rest of the module (which reads getElementById("root")) works unchanged.
     if (centerEl) {
+      var skel = window.gzSkelFeed ? window.gzSkelFeed(3) : "";
       centerEl.innerHTML =
-        '<div id="root" data-handle="' + escAttr(h) + '">' +
-        '<p class="muted gz-loading">Reading up on ' + escAttr(h) + "...</p></div>";
+        '<div id="root" data-handle="' + escAttr(h) + '">' + skel + "</div>";
     }
     // Prime the fast path from cache so boot() renders it before the fetch returns.
     var cached = window.gzCache ? window.gzCache.get("profile:" + h, 10 * 60 * 1000) : null;

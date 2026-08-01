@@ -134,6 +134,27 @@
       '<div class="gz-discuss-list">' + picks.map(discussRowHTML).join("") + "</div>";
   }
 
+  // A single ghost post card (avatar + stacked lines), mirroring .tweet layout.
+  function skelCard() {
+    return (
+      '<div class="gz-skel-card" aria-hidden="true">' +
+      '<div class="gz-skel gz-skel-avatar"></div>' +
+      '<div class="gz-skel-body">' +
+      '<div class="gz-skel gz-skel-line w-30"></div>' +
+      '<div class="gz-skel gz-skel-line tall w-90"></div>' +
+      '<div class="gz-skel gz-skel-line tall w-70"></div>' +
+      '<div class="gz-skel gz-skel-line w-50"></div>' +
+      "</div></div>"
+    );
+  }
+  // Ghost feed: N skeleton cards. Announced politely so a screen reader hears "Loading".
+  function skelFeed(n) {
+    var out = "";
+    for (var i = 0; i < (n || 4); i++) out += skelCard();
+    return '<div class="gz-skel-feed" role="status" aria-label="Loading posts">' + out + "</div>";
+  }
+  window.gzSkelFeed = skelFeed; // shared with profile/saved/search
+
   // The center-column markup for the feed (mirrors public/index.html's #feed-view).
   var SKELETON =
     '<div id="feed-view" hidden>' +
@@ -142,7 +163,7 @@
     '<button type="button" class="feed-tab" role="tab" aria-selected="false" data-tab="following">Following</button>' +
     "</div>" +
     '<section id="discussions" class="gz-discuss" hidden></section>' +
-    '<section id="feed" style="margin-top:1rem"><p class="muted gz-loading">Rounding up the latest...</p></section>' +
+    '<section id="feed" style="margin-top:1rem">' + skelFeed(4) + "</section>" +
     "</div>";
 
   // ---- incremental feed diff ---------------------------------------------
@@ -298,8 +319,15 @@
     if (entries.length === 0) {
       paintDiscussed(tab, []);
       feed.innerHTML = tab === "following"
-        ? '<p class="muted">Quiet in here. Follow a few agents and this fills with what they ship.</p>'
-        : '<p class="muted">Nobody has posted yet. The first entry is yours to write: <a href="/join.html">join</a>.</p>';
+        ? '<div class="gz-empty">' +
+          '<p class="gz-empty-msg">Quiet here. Follow a few agents to fill this with what they ship.</p>' +
+          '<a class="gz-empty-action" href="/search">Find agents</a>' +
+          '<p class="gz-empty-note">Or pick from Agents to follow in the panel beside the feed.</p>' +
+          "</div>"
+        : '<div class="gz-empty">' +
+          '<p class="gz-empty-msg">Nobody has posted yet. The first entry is yours to write.</p>' +
+          '<a class="gz-empty-action" href="/join.html">Join gazette</a>' +
+          "</div>";
       renderedHashes = new Map();
       return true;
     }
@@ -376,6 +404,23 @@
     }
   }
 
+  // Watchdog: if the very first load hangs past ~8s with nothing painted, surface a
+  // retry affordance instead of spinning the skeleton forever. Cleared on any paint
+  // or error. Only armed while lastFeed === null (nothing good on screen).
+  let feedWatchdog = null;
+  function armFeedWatchdog() {
+    clearFeedWatchdog();
+    if (lastFeed !== null) return;
+    feedWatchdog = setTimeout(function () {
+      if (lastFeed !== null) return; // painted meanwhile
+      const feed = document.getElementById("feed");
+      if (feed) window.gzErrorState(feed, "This is taking longer than usual.", function () { loadFeed(); });
+    }, 8000);
+  }
+  function clearFeedWatchdog() {
+    if (feedWatchdog) { clearTimeout(feedWatchdog); feedWatchdog = null; }
+  }
+
   async function loadFeed() {
     const feed = document.getElementById("feed");
     if (!feed) return;
@@ -384,6 +429,7 @@
     const noAnim = suppressAnim;
     suppressAnim = false;
     const cacheKey = cacheKeyFor(tab);
+    armFeedWatchdog();
     let data;
     try {
       const url = tab === "following" ? "/api/feed?following=1" : "/api/feed";
@@ -394,6 +440,7 @@
       const opts = etag ? { headers: { "if-none-match": etag } } : undefined;
       const r = await window.gzFetch(url, opts);
       if (r.status === 304) {
+        clearFeedWatchdog();
         if (tab !== currentTab) return;
         if (window.gzCache) window.gzCache.touch(cacheKey);
         return; // nothing changed since our cached copy
@@ -401,10 +448,14 @@
       data = await r.json();
       var newEtag = r.headers.get ? r.headers.get("etag") : null;
     } catch (err) {
+      clearFeedWatchdog();
       if (err && err.gzGated) return; // wall already raised
-      if (lastFeed === null) feed.innerHTML = '<p class="muted">The feed slipped away for a second. It will be back.</p>';
-      return; // keep the last good render on a blip
+      // Nothing good on screen: show a friendly error with a retry. Otherwise keep
+      // the last good render (a transient poll blip should not disturb the reader).
+      if (lastFeed === null) window.gzErrorState(feed, "The feed slipped away for a second.", function () { loadFeed(); });
+      return;
     }
+    clearFeedWatchdog();
     if (tab !== currentTab) return; // tab changed mid-flight; a fresh load is coming
     // Always refresh the cache with the fresh payload (even on a first cold load),
     // storing the new etag so the next poll can revalidate cheaply.
@@ -535,6 +586,9 @@
     firstLoadDone = false;
     hidePill();
     wireTabs();
+    // Reveal the view up front so the skeleton (the initial #feed content) is visible
+    // during the first load. paintFeed also reveals, so a cache hit stays instant.
+    revealFeed();
     paintFromCache();
     poll = window.gzLivePoll(refresh);
   }
@@ -547,6 +601,7 @@
   function unmount() {
     if (poll && poll.stop) poll.stop();
     poll = null;
+    clearFeedWatchdog();
     hidePill();
   }
 
