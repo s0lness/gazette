@@ -684,7 +684,7 @@ body.wall-open main.page { max-width: 70rem; }
 
   /* The search view's own input: shown on mobile (the bottom-nav Search routes here
      without opening the top-bar box), hidden on desktop where the chrome owns search. */
-  .sr-mobile-search { display: block; margin: 0.75rem 0 0.25rem; }
+  .sr-mobile-search { display: block; position: relative; margin: 0.75rem 0 0.25rem; }
   .sr-mobile-search .sr-input {
     width: 100%; box-sizing: border-box;
     font: inherit; font-size: 0.95rem;
@@ -1832,6 +1832,59 @@ audio.status-media { width: 100%; }
 }
 .gz-search-input::-webkit-search-cancel-button { -webkit-appearance: none; }
 
+/* ---- Search typeahead (dropdown under the query box) ---------------------- */
+/* A Twitter-style autocomplete anchored under the search input. The input's wrapper is
+   position:relative (the desktop rail's .gz-side-search, the mobile row, the search
+   view's own row), so the panel positions off the input's parent. Dark-theme styled via
+   the tokens; sits above other content. */
+.gz-ta {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  z-index: 60;
+  max-height: 60vh;
+  overflow-y: auto;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md, 12px);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.28);
+  padding: 0.25rem;
+}
+.gz-ta[hidden] { display: none; }
+.gz-ta-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.45rem 0.55rem;
+  border-radius: var(--radius-sm, 8px);
+  cursor: pointer;
+  min-width: 0;
+}
+.gz-ta-row.on,
+.gz-ta-row:hover { background: var(--hover); }
+.gz-ta-avatar { flex: 0 0 auto; }
+.gz-ta-avatar .tw-avatar { width: 34px; height: 34px; }
+.gz-ta-names { display: flex; flex-direction: column; min-width: 0; line-height: 1.25; }
+.gz-ta-name {
+  font-weight: 700; color: var(--ink);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.gz-ta-handle { font-size: 0.82rem; color: var(--ink-3); }
+.gz-ta-followers {
+  flex: 0 0 auto; margin-left: auto; padding-left: 0.5rem;
+  font-size: 0.78rem; color: var(--ink-3); font-variant-numeric: tabular-nums;
+}
+
+/* Mobile: the query box lives in the top bar / search view. Keep the panel inside the
+   viewport (no horizontal overflow at 390px) and above the fixed bottom nav. */
+@media (max-width: 767px) {
+  .gz-ta {
+    max-height: 50vh;
+    z-index: 1200; /* over the bottom nav */
+  }
+}
+
 /* ---- Unread badge (bell) -------------------------------------------------- */
 .gz-badge {
   flex: 0 0 auto;
@@ -1868,7 +1921,7 @@ audio.status-media { width: 100%; }
   body[data-gz-nav="1"] header.bar { flex-wrap: wrap; }
   body[data-gz-nav="1"] .gz-mob-actions { display: inline-flex; }
   body[data-gz-nav="1"] .gz-mob-search:not([hidden]) {
-    display: block; flex: 0 0 100%; padding: 0.15rem 0 0.35rem;
+    display: block; position: relative; flex: 0 0 100%; padding: 0.15rem 0 0.35rem;
   }
   /* The rail's own search box never shows on mobile (the rail is hidden), so the
      expanded row owns the full width. */

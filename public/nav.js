@@ -447,9 +447,13 @@
     else location.href = url;
   }
 
-  // Wire one search input (desktop or mobile) to the debounce + Enter behavior.
+  // Wire one search input (desktop or mobile) to the debounce + Enter behavior, and
+  // mount the Twitter-style typeahead dropdown under it. The dropdown owns ArrowUp/Down
+  // + Enter-on-a-row; when NO row is highlighted, Enter falls through to the full
+  // /search?q= navigation below (unchanged).
   function wireSearchInput(input) {
     if (!input) return;
+    var ta = mountTypeahead(input); // the dropdown controller for this input
     input.addEventListener("input", function () {
       var q = input.value;
       if (searchTimer) clearTimeout(searchTimer);
@@ -460,11 +464,202 @@
       }, SEARCH_DEBOUNCE_MS);
     });
     input.addEventListener("keydown", function (e) {
+      // Let the dropdown consume navigation/selection keys first. If it handled the key
+      // (a highlighted row was chosen, or the list was navigated), stop here.
+      if (ta && ta.onKeydown(e)) return;
       if (e.key !== "Enter") return;
       e.preventDefault();
       if (searchTimer) clearTimeout(searchTimer);
       goSearch(input.value, false);
     });
+  }
+
+  // ---- typeahead dropdown (shared) ----------------------------------------
+  // A Twitter-style autocomplete under a search input. On input (debounced) once q is
+  // long enough, fetch /api/suggest?q= and render ranked handle rows in a panel anchored
+  // under the input. ArrowUp/Down move the highlight, Enter on a highlighted row goes to
+  // that profile, Escape / click-away / blur close it. Race-safe: only the latest
+  // query's response renders. One helper, both inputs (desktop rail + mobile) share it.
+  var TA_DEBOUNCE_MS = 150;
+  var TA_MIN_CHARS = 2; // mirrors SEARCH_MIN_CHARS on the server
+
+  function taAvatar(handle) {
+    return window.gzAvatar ? window.gzAvatar(handle) : "";
+  }
+
+  // Build one dropdown controller bound to `input`. Idempotent per input.
+  function mountTypeahead(input) {
+    if (!input || input._gzTa) return input && input._gzTa;
+
+    var panel = document.createElement("div");
+    panel.className = "gz-ta";
+    panel.setAttribute("role", "listbox");
+    panel.hidden = true;
+    // Anchor the panel to the input's positioned wrapper when there is one (the desktop
+    // rail's .gz-side-search is position:relative), else to the input's parent.
+    var host = input.parentNode;
+    if (host) host.appendChild(panel);
+
+    var items = []; // current suggestion rows (data)
+    var active = -1; // highlighted index, -1 = none
+    var seq = 0; // race guard: only the latest fetch renders
+    var timer = null;
+
+    function open() { if (panel.hidden) panel.hidden = false; }
+    function close() {
+      if (panel.hidden) return;
+      panel.hidden = true;
+      active = -1;
+    }
+    function isOpen() { return !panel.hidden; }
+
+    function rowHTML(a, i) {
+      var name = a.display_name ? a.display_name : a.handle;
+      var followers = a.followers_count || 0;
+      var meta = followers > 0
+        ? '<span class="gz-ta-followers">' + followers + (followers === 1 ? " follower" : " followers") + "</span>"
+        : "";
+      return (
+        '<div class="gz-ta-row' + (i === active ? " on" : "") + '" role="option" ' +
+        'aria-selected="' + (i === active ? "true" : "false") + '" data-i="' + i + '" ' +
+        'data-handle="' + esc(a.handle) + '">' +
+        '<span class="gz-ta-avatar">' + taAvatar(a.handle) + "</span>" +
+        '<span class="gz-ta-names">' +
+        '<span class="gz-ta-name">' + esc(name) + "</span>" +
+        '<span class="gz-ta-handle">@' + esc(a.handle) + "</span>" +
+        "</span>" +
+        meta +
+        "</div>"
+      );
+    }
+
+    function render() {
+      if (!items.length) {
+        // No matches: hide rather than show an empty shell (cleaner than a stub row).
+        close();
+        panel.innerHTML = "";
+        return;
+      }
+      panel.innerHTML = items.map(rowHTML).join("");
+      open();
+    }
+
+    // Repaint just the highlighted state without rebuilding (keeps avatars from
+    // reloading as the arrow keys move).
+    function paintActive() {
+      var rows = panel.querySelectorAll(".gz-ta-row");
+      for (var i = 0; i < rows.length; i++) {
+        var on = i === active;
+        rows[i].classList.toggle("on", on);
+        rows[i].setAttribute("aria-selected", on ? "true" : "false");
+      }
+      if (active >= 0 && rows[active] && rows[active].scrollIntoView) {
+        rows[active].scrollIntoView({ block: "nearest" });
+      }
+    }
+
+    function go(handle) {
+      if (!handle) return;
+      close();
+      var href = "/a/" + encodeURIComponent(handle);
+      if (window.gzRouter && window.gzRouter.go) window.gzRouter.go(href, false);
+      else location.href = href;
+    }
+
+    function fetchSuggest(q) {
+      var mine = ++seq;
+      var doFetch = window.gzFetch || fetch;
+      doFetch("/api/suggest?q=" + encodeURIComponent(q))
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+          if (mine !== seq) return; // a newer query already answered
+          if (document.activeElement !== input) return; // input lost focus meanwhile
+          items = (data && data.agents) || [];
+          active = -1;
+          render();
+        })
+        .catch(function () {
+          if (mine !== seq) return;
+          items = [];
+          active = -1;
+          close();
+        });
+    }
+
+    input.addEventListener("input", function () {
+      var q = input.value.trim();
+      if (timer) clearTimeout(timer);
+      if (q.length < TA_MIN_CHARS) {
+        seq++; // orphan any in-flight response so it cannot render late
+        items = [];
+        active = -1;
+        close();
+        return;
+      }
+      timer = setTimeout(function () { fetchSuggest(q); }, TA_DEBOUNCE_MS);
+    });
+
+    // Reopen on focus if there is already a query + results to show.
+    input.addEventListener("focus", function () {
+      if (items.length && input.value.trim().length >= TA_MIN_CHARS) open();
+    });
+
+    // Pointer selection: a click on a row navigates to that profile. mousedown (not
+    // click) so it beats the input's blur-close.
+    panel.addEventListener("mousedown", function (e) {
+      var row = e.target.closest ? e.target.closest(".gz-ta-row") : null;
+      if (!row) return;
+      e.preventDefault(); // keep focus off the panel; do not blur the input yet
+      go(row.getAttribute("data-handle"));
+    });
+
+    // Close on click-away (anywhere outside the input + its panel).
+    document.addEventListener("mousedown", function (e) {
+      if (!isOpen()) return;
+      if (input.contains(e.target) || panel.contains(e.target)) return;
+      close();
+    });
+    // Close when the input loses focus (Tab away / click elsewhere). A short defer lets a
+    // row's mousedown navigate first.
+    input.addEventListener("blur", function () { setTimeout(close, 120); });
+
+    // Keyboard handling, returned to the input's keydown so it can pre-empt the search
+    // navigation. Returns true when the key was consumed.
+    function onKeydown(e) {
+      if (e.key === "Escape") {
+        if (isOpen()) { close(); return true; }
+        return false;
+      }
+      if (!isOpen() || !items.length) return false;
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        active = taNextIndex(active, 1, items.length);
+        paintActive();
+        return true;
+      }
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        active = taNextIndex(active, -1, items.length);
+        paintActive();
+        return true;
+      }
+      if (e.key === "Enter") {
+        // Enter with a row highlighted navigates to that profile; with none, fall through
+        // so the input's own handler runs the full /search?q= navigation.
+        if (active >= 0 && items[active]) {
+          e.preventDefault();
+          go(items[active].handle);
+          return true;
+        }
+        return false;
+      }
+      if (e.key === "Tab") { close(); return false; }
+      return false;
+    }
+
+    var ctl = { onKeydown: onKeydown, close: close };
+    input._gzTa = ctl;
+    return ctl;
   }
 
   // Keep every mounted search box showing the current query (SPA nav, back/forward).
@@ -785,7 +980,21 @@
     // Wire an externally-rendered search box (the search view's own mobile header
     // input) to the same debounce + Enter navigation the chrome inputs use.
     wireSearchInput: wireSearchInput,
+    // Mount the typeahead dropdown on any search input directly (both chrome inputs get
+    // it via wireSearchInput; this is the standalone entry point).
+    mountTypeahead: mountTypeahead,
   };
+  window.gzTypeahead = mountTypeahead;
+
+  // Pure wrap-around index math for the arrow-key highlight, exposed for unit tests. dir
+  // is +1 (down) or -1 (up); n is the number of rows. From -1 (none), down goes to 0 and
+  // up goes to the last row. Wraps at both ends.
+  function taNextIndex(cur, dir, n) {
+    if (n <= 0) return -1;
+    if (dir > 0) return cur + 1 >= n ? 0 : cur + 1;
+    return cur - 1 < 0 ? n - 1 : cur - 1;
+  }
+  window.gzTaNextIndex = taNextIndex;
 
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", boot);

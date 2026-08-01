@@ -809,6 +809,77 @@ export function searchStmts(db: D1Reader, q: string, cred: ViewerCred): D1Prepar
   ];
 }
 
+// ---- SQL-folded typeahead suggest ----------------------------------------
+// A lightweight, agents-ONLY sibling of searchStmts for the typeahead dropdown. Where
+// search orders agents by follower tally, suggest orders by CLOSENESS to the query, so
+// the first row is the handle you were probably reaching for. D1 has no FTS5, so the
+// closeness is expressed as a CASE-rank over the same case-insensitive LIKE the search
+// uses. A typeahead fires on many keystrokes, so this runs ONE cheap statement (no posts
+// query) and caps small. Viewer is resolved in-SQL from the credential so it rides the
+// same speculative batch as auth, matching searchStmts.
+//
+// Rank (lower wins, best first):
+//   0  exact handle match          (LOWER(handle) = LOWER(q))
+//   1  handle starts with q        (LOWER(handle) LIKE LOWER(q) || '%')
+//   2  display_name starts with q
+//   3  handle contains q           (substring)
+//   4  display_name / bio contains q
+// Tiebreak: follower tally DESC, then handle ASC (stable, deterministic).
+export const SUGGEST_LIMIT = 7;
+
+// A suggested agent row: the columns the dropdown renders + its follower tally + whether
+// the viewer follows it + the computed rank (used only for ordering; not returned).
+export type SuggestAgentRow = AgentRow & {
+  followers_count: number;
+  viewer_follows: number;
+  rank: number;
+};
+
+// The single suggest statement. `q` is the RAW query; the SQL lowercases both sides.
+// Binds: ?1=token, ?2=sid, ?3=now (shared with VIEWER_ID), ?4=q. Only agents that match
+// SOMEWHERE (handle / display_name / bio contains q) enter the result; the CASE then
+// ranks them by closeness.
+export function suggestStmt(db: D1Reader, q: string, cred: ViewerCred): D1PreparedStatement {
+  const like = (col: string) => `LOWER(${col}) LIKE '%' || LOWER(?4) || '%'`;
+  const prefix = (col: string) => `LOWER(${col}) LIKE LOWER(?4) || '%'`;
+  const viewerFollows = `(SELECT COUNT(*) FROM follows fv WHERE fv.followed_id = a.id AND fv.follower_id = ${VIEWER_ID}) AS viewer_follows`;
+  const followerTally =
+    "(SELECT COUNT(*) FROM follows fx WHERE fx.followed_id = a.id) AS followers_count";
+  const rank =
+    `CASE
+       WHEN LOWER(a.handle) = LOWER(?4) THEN 0
+       WHEN ${prefix("a.handle")} THEN 1
+       WHEN ${prefix("COALESCE(a.display_name, '')")} THEN 2
+       WHEN ${like("a.handle")} THEN 3
+       ELSE 4
+     END AS rank`;
+  return db
+    .prepare(
+      `SELECT a.*, ${followerTally}, ${viewerFollows}, ${rank}
+       FROM agents a
+       WHERE ${like("a.handle")}
+          OR ${like("COALESCE(a.display_name, '')")}
+          OR ${like("COALESCE(a.bio, '')")}
+       ORDER BY rank ASC, followers_count DESC, a.handle ASC
+       LIMIT ${SUGGEST_LIMIT}`,
+    )
+    .bind(cred.token, cred.sid, cred.now, q);
+}
+
+// Fold suggest rows into the dropdown payload: only what a typeahead row renders
+// (handle, display_name, avatar_id) plus the follower tally and viewer-follow flag. Rank
+// is dropped (it was only for ordering). Order is preserved from the SQL.
+export function buildSuggest(agentRes: any) {
+  const rows = (agentRes?.results ?? []) as SuggestAgentRow[];
+  return rows.map((a) => ({
+    handle: a.handle,
+    display_name: a.display_name ?? null,
+    avatar_id: a.avatar_id ?? null,
+    followers_count: a.followers_count ?? 0,
+    viewer_follows: (a.viewer_follows ?? 0) > 0,
+  }));
+}
+
 // Fold matched agent rows into the search payload shape (same fields the follows list
 // uses, so the client renders both with one row component).
 export function buildSearchAgents(agentRes: any) {
