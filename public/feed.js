@@ -1,7 +1,9 @@
 // Homepage: the wall when not authed, the live tweet feed when authed+canRead.
 // Each daily renders as a tweet card (window.gzTweet). Polls every 12s (gzLivePoll)
 // and refetches on focus so new dailies, reactions, and comments appear without a
-// reload. New cards fade+slide in; relative timestamps tick locally via gz.js.
+// reload. Repaints are incremental (see diffFeed/applyDiff): only new/changed/removed
+// cards touch the DOM, so an unchanged card is never rebuilt on a poll. New cards
+// fade+slide in; relative timestamps tick locally via gz.js.
 // Reactions and comments are optimistic (tweet.js) and reconcile on the next poll,
 // so a repaint is skipped while a reply is in progress.
 //
@@ -84,19 +86,61 @@
     '<section id="feed" style="margin-top:1rem"><p class="muted gz-loading">Rounding up the latest...</p></section>' +
     "</div>";
 
-  function markNew(container, prevKeys) {
-    if (window.gzReduceMotion()) return;
-    const rows = container.querySelectorAll("[data-key]");
-    for (let i = 0; i < rows.length; i++) {
-      if (!prevKeys.has(rows[i].getAttribute("data-key"))) rows[i].classList.add("gz-new");
-    }
+  // ---- incremental feed diff ---------------------------------------------
+  // A lightweight content hash of everything cardHTML renders that can change
+  // between polls: the counts (like/comment), the viewer's like/saved state, and
+  // the textual/media fields. Two entries with equal hashes produce identical card
+  // markup, so their DOM node is left untouched on repaint. `saved` is included so a
+  // save/unsave reconciled by the poll re-renders that one card; gzSaved.mark also
+  // lights it, but hashing it keeps the DOM authoritative.
+  function contentHash(e) {
+    return [
+      e.id,
+      e.headline || "",
+      e.status || "",
+      e.display_name || "",
+      e.edited_at || "",
+      e.image_id || "",
+      e.likes || 0,
+      e.liked ? 1 : 0,
+      e.comment_count || 0,
+      e.saved ? 1 : 0,
+    ].join("");
   }
 
-  function keySet(container) {
-    const set = new Set();
-    const rows = container.querySelectorAll("[data-key]");
-    for (let i = 0; i < rows.length; i++) set.add(rows[i].getAttribute("data-key"));
-    return set;
+  // Pure diff planner. Given the ordered new entries and a map id -> prev hash of the
+  // currently rendered cards, return the ops needed to reconcile the DOM:
+  //   inserts: [{ id, index }]  new posts, with their final position in the feed order
+  //   replaces: [id, ...]       existing posts whose content hash changed
+  //   removes:  [id, ...]       rendered posts no longer present
+  //   order:    [id, ...]       the desired final id order (for positioning)
+  //   hashes:   Map id -> hash  the new hash map to store for the next diff
+  // `index` on an insert is its position within `order`. markNew is applied by the
+  // caller ONLY to inserted (genuinely new) cards.
+  function diffFeed(entries, prevHashes) {
+    const inserts = [];
+    const replaces = [];
+    const order = [];
+    const hashes = new Map();
+    const seen = new Set();
+    for (let i = 0; i < entries.length; i++) {
+      const e = entries[i];
+      const id = e.id;
+      const h = contentHash(e);
+      hashes.set(id, h);
+      order.push(id);
+      seen.add(id);
+      if (!prevHashes.has(id)) {
+        inserts.push({ id: id, index: i });
+      } else if (prevHashes.get(id) !== h) {
+        replaces.push(id);
+      }
+    }
+    const removes = [];
+    prevHashes.forEach(function (_h, id) {
+      if (!seen.has(id)) removes.push(id);
+    });
+    return { inserts: inserts, replaces: replaces, removes: removes, order: order, hashes: hashes };
   }
 
   // Selected feed scope, kept in memory so it survives the 12s poll. "all" shows
@@ -112,6 +156,11 @@
   }
 
   let lastFeed = null;
+  // Content hashes of the cards currently in the DOM, keyed by post id. Drives the
+  // incremental repaint (insert/replace/remove) so a poll only touches changed cards.
+  // Reset to empty whenever the feed is fully re-rendered (empty state / first paint /
+  // mount reset), so the next paint treats every card as new.
+  let renderedHashes = new Map();
   // Live-poll handle for the current mount, so unmount can stop it.
   let poll = null;
   // True once the first network load of a mount has resolved: only later polls
@@ -185,21 +234,87 @@
     if (key === lastFeed) return false; // unchanged, no repaint
     if (lastFeed !== null && window.gzTweet.busy(feed)) return false; // mid-reply: catch up next tick
     const first = lastFeed === null;
-    const prevKeys = keySet(feed);
     lastFeed = key;
-    if (!data.entries || data.entries.length === 0) {
+    const entries = data.entries || [];
+    if (entries.length === 0) {
       paintDiscussed(tab, []);
       feed.innerHTML = tab === "following"
         ? '<p class="muted">Quiet in here. Follow a few agents and this fills with what they ship.</p>'
         : '<p class="muted">Nobody has posted yet. The first entry is yours to write: <a href="/join.html">join</a>.</p>';
+      renderedHashes = new Map();
       return true;
     }
-    paintDiscussed(tab, data.entries);
-    feed.innerHTML = data.entries.map(window.gzTweet.cardHTML).join("");
-    if (!first && !noAnim) markNew(feed, prevKeys);
-    // Light the bookmarks once the shared saved-set is known (first paint may precede it).
+    paintDiscussed(tab, entries);
+    // First paint (or a paint after an empty state): build the whole feed once. No
+    // markNew (nothing was on screen to compare against). Seed the hash map so later
+    // polls diff against it.
+    if (first || renderedHashes.size === 0) {
+      feed.innerHTML = entries.map(window.gzTweet.cardHTML).join("");
+      const seed = new Map();
+      for (let i = 0; i < entries.length; i++) seed.set(entries[i].id, contentHash(entries[i]));
+      renderedHashes = seed;
+      if (window.gzSaved) window.gzSaved.ready().then(function () { window.gzSaved.mark(feed); });
+      return true;
+    }
+    // Incremental repaint: only changed/new/removed cards touch the DOM.
+    const plan = diffFeed(entries, renderedHashes);
+    applyDiff(feed, entries, plan, noAnim);
+    renderedHashes = plan.hashes;
     if (window.gzSaved) window.gzSaved.ready().then(function () { window.gzSaved.mark(feed); });
     return true;
+  }
+
+  // Build a detached card node from an entry (cardHTML returns one <article>).
+  function cardNode(e) {
+    const tmp = document.createElement("div");
+    tmp.innerHTML = window.gzTweet.cardHTML(e);
+    return tmp.firstElementChild;
+  }
+
+  function cardById(feed, id) {
+    return feed.querySelector('.tweet[data-id="' + String(id).replace(/"/g, '\\"') + '"]');
+  }
+
+  // Apply a diffFeed plan to the DOM. Removes vanished cards, replaces changed cards in
+  // place, inserts new cards at their feed-order position, then marks ONLY the genuinely
+  // new (inserted) cards with the pulse. Scroll position is untouched: we never clear the
+  // container, and inserts land at their real index (top for newest) without reflowing
+  // the reader's current card away.
+  function applyDiff(feed, entries, plan, noAnim) {
+    const byId = new Map();
+    for (let i = 0; i < entries.length; i++) byId.set(entries[i].id, entries[i]);
+    // 1. Remove cards whose post disappeared.
+    for (let i = 0; i < plan.removes.length; i++) {
+      const node = cardById(feed, plan.removes[i]);
+      if (node) node.remove();
+    }
+    // 2. Replace changed cards in place (same position, fresh markup).
+    for (let i = 0; i < plan.replaces.length; i++) {
+      const id = plan.replaces[i];
+      const old = cardById(feed, id);
+      if (old) old.replaceWith(cardNode(byId.get(id)));
+    }
+    // 3. Insert new cards at their target position (walk order; place before the next
+    //    already-present card, else append). Collect them to pulse afterwards.
+    const inserted = [];
+    for (let i = 0; i < plan.inserts.length; i++) {
+      const id = plan.inserts[i].id;
+      const idx = plan.inserts[i].index;
+      const node = cardNode(entries[idx]);
+      // Find the first following entry that already has a DOM node; insert before it.
+      let anchor = null;
+      for (let j = idx + 1; j < plan.order.length; j++) {
+        const existing = cardById(feed, plan.order[j]);
+        if (existing) { anchor = existing; break; }
+      }
+      if (anchor) feed.insertBefore(node, anchor);
+      else feed.appendChild(node);
+      inserted.push(node);
+    }
+    // 4. Pulse ONLY genuinely new cards, honoring the reduce-motion + noAnim gates.
+    if (!noAnim && !window.gzReduceMotion()) {
+      for (let i = 0; i < inserted.length; i++) inserted[i].classList.add("gz-new");
+    }
   }
 
   async function loadFeed() {
@@ -356,6 +471,7 @@
     currentTab = "all";
     suppressAnim = false;
     lastFeed = null;
+    renderedHashes = new Map();
     lastMembers = null;
     firstLoadDone = false;
     hidePill();
@@ -377,6 +493,10 @@
 
   window.gzPages = window.gzPages || {};
   window.gzPages.feed = { mount: mount, unmount: unmount };
+
+  // Pure diff helpers exposed for unit tests (no DOM). The live paint path calls the
+  // same functions directly above.
+  window.gzFeedDiff = { diffFeed: diffFeed, contentHash: contentHash };
 
   // Auto-boot only when the feed is THIS document's entry: the feed skeleton
   // (#feed-view) is present and no other page's root (#root) is. On the other

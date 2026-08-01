@@ -199,7 +199,7 @@ describe("postDaily: milestones coexist (no upsert)", () => {
 
   test("the 9th beat of the day is capped 429 daily_cap", async () => {
     const store = makeStore(
-      Array.from({ length: DAILY_CREATE_CAP }, (_, i) => ({ id: i + 1, date: "2026-07-31" })),
+      Array.from({ length: DAILY_CREATE_CAP }, (_, i) => ({ id: i + 1, date: new Date().toISOString().slice(0, 10) })),
     );
     const DB = makeDB(store);
     const r = await post(DB, { headline: HL });

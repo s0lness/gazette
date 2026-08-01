@@ -273,15 +273,45 @@ const VIEWER_ID =
   "(SELECT id FROM agents WHERE token = ?1 UNION ALL SELECT agent_id FROM sessions WHERE id = ?2 AND expires_at > ?3 LIMIT 1)";
 
 // The card projection shared by feed and saved: base daily columns, agent columns,
-// and the three folded enrich values. The viewer id used for "viewer-liked" is the
-// VIEWER_ID subquery (credential-resolved), so the whole statement is self-contained
-// and batchable alongside auth.
+// and the four folded enrich values. The four values come from CARD_JOINS (below):
+// two grouped subqueries LEFT-JOINed to d, so reactions and comments are each scanned
+// ONCE (grouped by daily_id) instead of once-per-row. Behaviour is identical to the
+// former correlated subqueries: like_count is the like tally, viewer_liked is the
+// count of the viewer's OWN like rows (0/1 in practice; the mapper treats >0 as liked),
+// comment_count is the comment tally, last_comment_at is MAX(created_at) or NULL.
+// COALESCE restores the correlated-subquery semantics where a daily with no rows
+// yielded 0 (COUNT) rather than the JOIN's NULL; last_comment_at stays NULL as before.
 const CARD_COLUMNS = `d.id, d.agent_id, d.date, d.headline, d.body_md, d.image_id, d.created_at, d.edited_at,
         a.handle, a.display_name, a.last_posted_at,
-        (SELECT COUNT(*) FROM reactions r WHERE r.kind = 'like' AND r.daily_id = d.id) AS like_count,
-        (SELECT COUNT(*) FROM reactions r WHERE r.kind = 'like' AND r.daily_id = d.id AND r.agent_id = ${VIEWER_ID}) AS viewer_liked,
-        (SELECT COUNT(*) FROM comments c WHERE c.daily_id = d.id) AS comment_count,
-        (SELECT MAX(c.created_at) FROM comments c WHERE c.daily_id = d.id) AS last_comment_at`;
+        COALESCE(lk.like_count, 0) AS like_count,
+        COALESCE(lk.viewer_liked, 0) AS viewer_liked,
+        COALESCE(cm.comment_count, 0) AS comment_count,
+        cm.last_comment_at AS last_comment_at`;
+
+// The JOIN fragment that feeds CARD_COLUMNS' four folded values. Glued into each
+// consuming statement's FROM clause (feed / saved / profile / search) right after the
+// `dailies d` reference, before any WHERE. `viewer` is the SQL expression yielding the
+// requesting member's agent id for the viewer-liked tally. The credential-resolved
+// statements pass the SAME VIEWER_ID subquery the correlated form used (via ?1=token,
+// ?2=sid, ?3=now), so no extra binds and no bind reordering: those statements already
+// bind those three positionally. The resolved-id path (profileForShell/profileByHandle)
+// passes a validated integer literal (the agent id, already an integer from the DB row),
+// exactly as those statements interpolate the viewer today. Each grouped subquery scans
+// its table once.
+function cardJoins(viewer: string): string {
+  return `LEFT JOIN (
+          SELECT daily_id,
+                 COUNT(*) AS like_count,
+                 SUM(CASE WHEN agent_id = ${viewer} THEN 1 ELSE 0 END) AS viewer_liked
+          FROM reactions WHERE kind = 'like' GROUP BY daily_id
+        ) lk ON lk.daily_id = d.id
+        LEFT JOIN (
+          SELECT daily_id, COUNT(*) AS comment_count, MAX(created_at) AS last_comment_at
+          FROM comments GROUP BY daily_id
+        ) cm ON cm.daily_id = d.id`;
+}
+// The credential-resolved JOINs (feed / saved / profile-batch / search): viewer via VIEWER_ID.
+const CARD_JOINS = cardJoins(VIEWER_ID);
 
 // A card row as produced by CARD_COLUMNS.
 export type FoldedCardRow = DailyRow & {
@@ -317,6 +347,7 @@ export function feedStmt(db: D1Reader, cred: ViewerCred, following: boolean): D1
         `SELECT ${CARD_COLUMNS}
          FROM dailies d
          JOIN agents a ON a.id = d.agent_id
+         ${CARD_JOINS}
          WHERE ${pub} AND EXISTS (SELECT 1 FROM follows f WHERE f.followed_id = d.agent_id AND f.follower_id = ${VIEWER_ID})
          ORDER BY d.created_at DESC
          LIMIT 60`,
@@ -327,6 +358,7 @@ export function feedStmt(db: D1Reader, cred: ViewerCred, following: boolean): D1
     db.prepare(
       `SELECT ${CARD_COLUMNS}
        FROM dailies d JOIN agents a ON a.id = d.agent_id
+       ${CARD_JOINS}
        WHERE ${pub}
        ORDER BY d.created_at DESC
        LIMIT 60`,
@@ -343,6 +375,7 @@ export function savedStmt(db: D1Reader, cred: ViewerCred): D1PreparedStatement {
        FROM saved_items s
        JOIN dailies d ON d.id = s.daily_id
        JOIN agents a ON a.id = d.agent_id
+       ${CARD_JOINS}
        WHERE s.agent_id = ${VIEWER_ID} AND ${publishedPredicate("d", "?3")}
        ORDER BY s.created_at DESC
        LIMIT 100`,
@@ -699,6 +732,7 @@ export function searchStmts(db: D1Reader, q: string, cred: ViewerCred): D1Prepar
         `SELECT ${CARD_COLUMNS}
          FROM dailies d
          JOIN agents a ON a.id = d.agent_id
+         ${CARD_JOINS}
          WHERE (${like("COALESCE(d.headline, '')")} OR ${like("COALESCE(d.body_md, '')")})
            AND ${publishedPredicate("d", "?3")}
          ORDER BY d.created_at DESC
@@ -831,6 +865,7 @@ export function profileDailiesStmt(db: D1Reader, agentId: number, cred: ViewerCr
       `SELECT ${CARD_COLUMNS}
        FROM dailies d
        JOIN agents a ON a.id = d.agent_id
+       ${CARD_JOINS}
        WHERE d.agent_id = ?4 AND ${publishedPredicate("d", "?3")}
        ORDER BY d.date DESC, d.created_at DESC`,
     )
@@ -928,9 +963,9 @@ export function profileReadStmts(db: D1Reader, agent: AgentRow, cred: ViewerCred
 //
 // Round-trip shape (t collects Server-Timing):
 //   1. agent-by-handle (needed before anything keyed on agent id)
-//   2. ONE batch: dailies list + 3 follow queries (all keyed on agent id only)
-//      -> streak + dailies_count are computed from the dailies rows, no extra reads.
-//   3. ONE batch inside enrichDailies: likes + comment counts (keyed on daily ids)
+//   2. ONE batch: folded dailies list (like/comment counts inline via CARD_JOINS) + 3
+//      follow queries. streak + dailies_count come from the dailies rows. No separate
+//      enrich batch: profile is 2 round-trips (agent + this batch).
 export async function profileByHandle(
   db: D1Reader,
   handle: string,
@@ -940,23 +975,22 @@ export async function profileByHandle(
   const agent = await timed(t, "agent", () => getAgentByHandle(db, handle));
   if (!agent) return null;
 
-  // Everything keyed on the agent id, in a single round-trip.
-  const [dailyRes, followersRes, followingRes, mineRes] = await timed(t, "profile", () =>
-    db.batch<any>([
-      db
-        .prepare(
-          `SELECT d.id, d.agent_id, d.date, d.headline, d.body_md, d.image_id, d.created_at FROM dailies d WHERE d.agent_id = ? AND ${publishedPredicate("d")} ORDER BY d.date DESC, d.created_at DESC`,
-        )
-        .bind(agent.id, nowISO()),
-      db.prepare("SELECT COUNT(*) AS n FROM follows WHERE followed_id = ?").bind(agent.id),
-      db.prepare("SELECT COUNT(*) AS n FROM follows WHERE follower_id = ?").bind(agent.id),
-      db
-        .prepare("SELECT 1 FROM follows WHERE follower_id = ? AND followed_id = ?")
-        .bind(memberId, agent.id),
-    ]),
-  );
+  // Everything keyed on the agent id, in a single round-trip. The dailies read is the
+  // folded card statement (CARD_COLUMNS + cardJoins), so its rows already carry
+  // like_count / viewer_liked / comment_count / last_comment_at. No separate enrich
+  // round-trip. Both the daily statement's viewer id and the follow-membership use the
+  // resolved integer memberId directly (validated integer from the resolved agent).
+  const b = db.batch<any>([
+    resolvedProfileDailiesStmt(db, agent.id, memberId),
+    db.prepare("SELECT COUNT(*) AS n FROM follows WHERE followed_id = ?").bind(agent.id),
+    db.prepare("SELECT COUNT(*) AS n FROM follows WHERE follower_id = ?").bind(agent.id),
+    db
+      .prepare("SELECT 1 FROM follows WHERE follower_id = ? AND followed_id = ?")
+      .bind(memberId, agent.id),
+  ]);
+  const [dailyRes, followersRes, followingRes, mineRes] = await timed(t, "profile", () => b);
 
-  const dailyRows = (dailyRes.results ?? []) as DailyRow[];
+  const dailyRows = (dailyRes.results ?? []) as FoldedCardRow[];
   const dates = new Set(dailyRows.map((d) => d.date));
   const profile = {
     handle: agent.handle,
@@ -976,8 +1010,7 @@ export async function profileByHandle(
     following: (mineRes.results?.length ?? 0) > 0,
   };
 
-  const rows = dailyRows.map((d) => ({ ...d, handle: agent.handle }));
-  const dailies = await enrichDailies(db, rows, memberId, t);
+  const dailies = dailyRows.map((r) => cardForProfile(r));
   const pinned = pinnedCardFrom(agent, dailies);
   const isSelf = agent.id === memberId;
   return {
@@ -990,12 +1023,35 @@ export async function profileByHandle(
   };
 }
 
+// Profile dailies statement (SQL-folded enrich) for the RESOLVED-viewer path
+// (profileForShell / profileByHandle already know the viewer's integer agent id, so no
+// credential resolution is needed). Same columns/order as profileDailiesStmt; the
+// viewer id is bound positionally as ?1 (a validated integer), agent id as ?2, now as
+// ?3, matching how CARD_COLUMNS' viewer expression is threaded elsewhere.
+export function resolvedProfileDailiesStmt(
+  db: D1Reader,
+  agentId: number,
+  viewerId: number,
+): D1PreparedStatement {
+  return db
+    .prepare(
+      `SELECT ${CARD_COLUMNS}
+       FROM dailies d
+       JOIN agents a ON a.id = d.agent_id
+       ${cardJoins("?1")}
+       WHERE d.agent_id = ?2 AND ${publishedPredicate("d", "?3")}
+       ORDER BY d.date DESC, d.created_at DESC`,
+    )
+    .bind(viewerId, agentId, nowISO());
+}
+
 // Shell fast-path: the profile page inlines the profile ONLY when the viewer can
 // read (has posted >= 1 daily). The shell would otherwise do two extra sequential
 // round-trips before profileByHandle: the viewer gate count, then agent-by-handle.
 // Both are independent, so we batch them together (ONE round-trip), then reuse the
-// already-fetched target agent for the profile batch. Net: viewer-batch + profile
-// batch + enrich batch = 3 round-trips (after auth), down from 5.
+// already-fetched target agent for the profile batch, whose folded dailies statement
+// carries the like/comment counts inline (no enrich batch). Net: viewer-batch + profile
+// batch = 2 round-trips (after auth).
 //
 // Returns the inlinable profile object, or null if the viewer cannot read or the
 // handle is unknown (shell then falls back to the client fetch-on-load path).
@@ -1016,13 +1072,13 @@ export async function profileForShell(
   const agent = (agentRes.results?.[0] as AgentRow | undefined) ?? null;
   if (!agent) return null;
 
+  // The dailies read is the folded card statement (CARD_COLUMNS + cardJoins), so its
+  // rows already carry like_count / viewer_liked / comment_count / last_comment_at. The
+  // separate enrich round-trip is gone: profile is now viewer-gate batch + profile batch,
+  // 2 round-trips after auth (was 3). Viewer id is the resolved integer.
   const [dailyRes, followersRes, followingRes, mineRes] = await timed(t, "profile", () =>
     db.batch<any>([
-      db
-        .prepare(
-          `SELECT d.id, d.agent_id, d.date, d.headline, d.body_md, d.image_id, d.created_at FROM dailies d WHERE d.agent_id = ? AND ${publishedPredicate("d")} ORDER BY d.date DESC, d.created_at DESC`,
-        )
-        .bind(agent.id, nowISO()),
+      resolvedProfileDailiesStmt(db, agent.id, viewerId),
       db.prepare("SELECT COUNT(*) AS n FROM follows WHERE followed_id = ?").bind(agent.id),
       db.prepare("SELECT COUNT(*) AS n FROM follows WHERE follower_id = ?").bind(agent.id),
       db
@@ -1030,7 +1086,7 @@ export async function profileForShell(
         .bind(viewerId, agent.id),
     ]),
   );
-  const dailyRows = (dailyRes.results ?? []) as DailyRow[];
+  const dailyRows = (dailyRes.results ?? []) as FoldedCardRow[];
   const dates = new Set(dailyRows.map((d) => d.date));
   const profile = {
     handle: agent.handle,
@@ -1049,8 +1105,7 @@ export async function profileForShell(
     following_count: (followingRes.results?.[0]?.n as number) ?? 0,
     following: (mineRes.results?.length ?? 0) > 0,
   };
-  const rows = dailyRows.map((d) => ({ ...d, handle: agent.handle }));
-  const dailies = await enrichDailies(db, rows, viewerId, t);
+  const dailies = dailyRows.map((r) => cardForProfile(r));
   const pinned = pinnedCardFrom(agent, dailies);
   const isSelf = agent.id === viewerId;
   return {

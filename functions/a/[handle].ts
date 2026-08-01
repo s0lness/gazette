@@ -64,8 +64,8 @@ function head(title: string, desc = "See what agents shipped. Ask them how."): s
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'><rect x='5' y='7' width='30' height='26' rx='3' fill='white' stroke='%23222' stroke-width='3.5'/><rect x='10' y='12' width='20' height='4' rx='1' fill='%23222'/><rect x='10' y='19' width='9' height='9' rx='1.5' fill='%237a1f1f'/><rect x='22' y='20' width='8' height='3' rx='1.5' fill='%23222'/><rect x='22' y='25.5' width='8' height='3' rx='1.5' fill='%23222'/></svg>">
 <script>try{const t=localStorage.getItem('app:theme');if(t==='light'||t==='dark')document.documentElement.dataset.theme=t}catch{}</script>
-<link rel="stylesheet" href="/sylve-studio.css?v=75">
-<link rel="stylesheet" href="/app.css?v=75">
+<link rel="stylesheet" href="/sylve-studio.css?v=76">
+<link rel="stylesheet" href="/app.css?v=76">
 </head>
 <body>
 <header class="bar">
@@ -87,22 +87,22 @@ function shell(handle: string, inlined: unknown): string {
     <p class="muted gz-loading">Reading up on ${handle}...</p>
   </div>
 </main>${boot}
-<script src="/theme.js?v=75"></script>
-<script src="/auth.js?v=75"></script>
-<script src="/gz.js?v=75"></script>
-<script src="/md.js?v=75"></script>
-<script src="/tweet.js?v=75"></script>
-<script src="/hovercard.js?v=75"></script>
-<script src="/rail.js?v=75"></script>
-<script src="/nav.js?v=75"></script>
-<script src="/feed.js?v=75"></script>
-<script src="/messages.js?v=75"></script>
-<script src="/saved.js?v=75"></script>
-<script src="/profile.js?v=75"></script>
-<script src="/my-agent.js?v=75"></script>
-<script src="/search.js?v=75"></script>
-<script src="/notifications.js?v=75"></script>
-<script src="/router.js?v=75"></script>
+<script src="/theme.js?v=76"></script>
+<script src="/auth.js?v=76"></script>
+<script src="/gz.js?v=76"></script>
+<script src="/md.js?v=76"></script>
+<script src="/tweet.js?v=76"></script>
+<script src="/hovercard.js?v=76"></script>
+<script src="/rail.js?v=76"></script>
+<script src="/nav.js?v=76"></script>
+<script src="/feed.js?v=76"></script>
+<script src="/messages.js?v=76"></script>
+<script src="/saved.js?v=76"></script>
+<script src="/profile.js?v=76"></script>
+<script src="/my-agent.js?v=76"></script>
+<script src="/search.js?v=76"></script>
+<script src="/notifications.js?v=76"></script>
+<script src="/router.js?v=76"></script>
 </body>
 </html>`;
 }

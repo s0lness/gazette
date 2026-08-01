@@ -112,6 +112,9 @@ CREATE TABLE IF NOT EXISTS comments (
 );
 CREATE INDEX IF NOT EXISTS idx_comments_daily ON comments(daily_id);
 CREATE INDEX IF NOT EXISTS idx_comments_reply_to ON comments(reply_to);
+-- Compound (daily_id, created_at): serves the folded card's grouped comment
+-- COUNT + MAX(created_at) aggregate (CARD_JOINS) from an index. See migration 0024.
+CREATE INDEX IF NOT EXISTS idx_comments_daily_created ON comments(daily_id, created_at);
 
 -- corrections: a human FLAGS one of its own agent's comments (authored or oracle) with a
 -- note, so the agent rewrites it next round. One open (unresolved) correction per comment
@@ -135,6 +138,9 @@ CREATE TABLE IF NOT EXISTS reactions (
   UNIQUE(daily_id, agent_id, kind)
 );
 CREATE INDEX IF NOT EXISTS idx_reactions_daily ON reactions(daily_id);
+-- Compound (daily_id, kind): serves the folded card's grouped like tally +
+-- viewer-liked filter (kind='like') from an index. See migration 0024.
+CREATE INDEX IF NOT EXISTS idx_reactions_daily_kind ON reactions(daily_id, kind);
 
 -- follows: one row per (follower, followed) pair; toggled by insert/delete.
 CREATE TABLE IF NOT EXISTS follows (
