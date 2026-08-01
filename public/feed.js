@@ -20,54 +20,113 @@
   }
 
   // ---- "Being discussed" strip --------------------------------------------
-  // A compact list of the posts with the most RECENT reply activity, shown once at
-  // the top of the Home feed (the "all" tab only). Selection: comment_count >= 1 AND
-  // last_comment_at within the last 48h; top 3, newest activity first, tiebreak by
-  // comment_count. Renders nothing when none qualify. Each row links to the thread.
+  // A compact list of the posts with the most momentum, shown once at the top of the
+  // feed on BOTH the All and Following tabs (Following is already scoped to the
+  // followed set by the feed, so we just rank whatever the current tab loaded).
+  //
+  // Primary selection: comment_count >= 1 AND last_comment_at within the last 48h;
+  // newest activity first, tiebreak by comment_count. These carry an "active Xh ago"
+  // meta. Never-empty backfill: if fewer than the cap qualify, fill the remaining
+  // slots from the loaded entries by engagement (comment_count, then likes, then most
+  // recent) so the strip still shows up to 3 as long as ANY posts exist. Backfilled
+  // items with no recent comment show "N replies" or "N likes" (no "active ... ago").
+  // Renders nothing only when there are literally zero posts.
   var DISCUSS_WINDOW_MS = 48 * 60 * 60 * 1000;
   var DISCUSS_CAP = 3;
 
-  function pickDiscussed(entries) {
-    var now = Date.now();
-    var picks = (entries || []).filter(function (e) {
+  // Pure: returns up to DISCUSS_CAP entries, each tagged with `_recent` (true when it
+  // qualifies by the 48h recent-discussion rule, so the row shows "active ... ago").
+  // Exposed on window.gzDiscuss for unit tests; the paint path calls it directly.
+  function pickDiscussed(entries, now) {
+    now = typeof now === "number" ? now : Date.now();
+    var list = entries || [];
+    var chosen = [];
+    var used = {};
+
+    // 1. Genuinely-recent discussions: has a comment AND last activity within 48h.
+    var recent = list.filter(function (e) {
       if (!e || (e.comment_count || 0) < 1 || !e.last_comment_at) return false;
       var t = Date.parse(e.last_comment_at);
       return !isNaN(t) && now - t <= DISCUSS_WINDOW_MS;
     });
-    picks.sort(function (a, b) {
+    recent.sort(function (a, b) {
       var ta = Date.parse(a.last_comment_at) || 0;
       var tb = Date.parse(b.last_comment_at) || 0;
       if (tb !== ta) return tb - ta;
       return (b.comment_count || 0) - (a.comment_count || 0);
     });
-    return picks.slice(0, DISCUSS_CAP);
+    for (var i = 0; i < recent.length && chosen.length < DISCUSS_CAP; i++) {
+      var re = recent[i];
+      var rk = String(re.id);
+      if (used[rk]) continue;
+      used[rk] = 1;
+      chosen.push(withRecent(re, true));
+    }
+
+    // 2. Backfill by engagement (comment_count, then likes, then most recent) so the
+    //    strip is never empty when posts exist. These are not "recent discussion".
+    if (chosen.length < DISCUSS_CAP) {
+      var rest = list.filter(function (e) { return e && !used[String(e.id)]; });
+      rest.sort(function (a, b) {
+        var ca = a.comment_count || 0, cb = b.comment_count || 0;
+        if (cb !== ca) return cb - ca;
+        var la = a.likes || 0, lb = b.likes || 0;
+        if (lb !== la) return lb - la;
+        var ta = Date.parse(a.created_at || a.last_comment_at) || 0;
+        var tb = Date.parse(b.created_at || b.last_comment_at) || 0;
+        return tb - ta;
+      });
+      for (var j = 0; j < rest.length && chosen.length < DISCUSS_CAP; j++) {
+        chosen.push(withRecent(rest[j], false));
+      }
+    }
+    return chosen;
+  }
+
+  function withRecent(e, recent) {
+    var o = {};
+    for (var k in e) if (Object.prototype.hasOwnProperty.call(e, k)) o[k] = e[k];
+    o._recent = recent;
+    return o;
   }
 
   function discussRowHTML(e) {
-    var name = e.display_name ? e.display_name : e.handle;
     var href = "/a/" + encodeURIComponent(e.handle) + "/status/" + encodeURIComponent(e.id);
     var cc = e.comment_count || 0;
-    var replyStr = cc === 1 ? "1 reply" : cc + " replies";
     var avatar = window.gzAvatar ? window.gzAvatar(e.handle, "gz-discuss-avatar") : "";
-    var rel = window.gzRelTime ? window.gzRelTime(e.last_comment_at) : "";
-    var active = rel === "just now" ? "active just now" : "active " + rel + " ago";
+    var meta;
+    if (e._recent && e.last_comment_at) {
+      // Genuine recent discussion: "N replies · active Xh ago".
+      var replyStr = cc === 1 ? "1 reply" : cc + " replies";
+      var rel = window.gzRelTime ? window.gzRelTime(e.last_comment_at) : "";
+      var active = rel === "just now" ? "active just now" : "active " + rel + " ago";
+      meta = replyStr + " · " + active;
+    } else if (cc > 0) {
+      // Backfilled with replies but no fresh activity: just the reply count.
+      meta = cc === 1 ? "1 reply" : cc + " replies";
+    } else {
+      // Backfilled by likes (or nothing): show likes, else a neutral marker.
+      var lk = e.likes || 0;
+      meta = lk > 0 ? (lk === 1 ? "1 like" : lk + " likes") : "new";
+    }
     return (
       '<a class="gz-discuss-row" href="' + escAttr(href) + '">' +
       avatar +
       '<span class="gz-discuss-main">' +
       '<span class="gz-discuss-headline">' + escText(e.headline) + "</span>" +
-      '<span class="gz-discuss-meta">' + escText(replyStr) + " · " + escText(active) + "</span>" +
+      '<span class="gz-discuss-meta">' + escText(meta) + "</span>" +
       "</span>" +
       "</a>"
     );
   }
 
-  // Paint (or clear) the discussions strip above the feed. Only the "all" (Home)
-  // tab shows it; other scopes and empty selections render nothing.
+  // Paint (or clear) the discussions strip above the feed. Shown on both tabs; the
+  // current tab's loaded entries already define the scope (Following is pre-filtered
+  // by the feed). Renders nothing only when there are zero posts to rank.
   function paintDiscussed(tab, entries) {
     var box = document.getElementById("discussions");
     if (!box) return;
-    var picks = tab === "all" ? pickDiscussed(entries) : [];
+    var picks = pickDiscussed(entries);
     if (!picks.length) { box.hidden = true; box.innerHTML = ""; return; }
     box.hidden = false;
     box.innerHTML =
@@ -497,6 +556,10 @@
   // Pure diff helpers exposed for unit tests (no DOM). The live paint path calls the
   // same functions directly above.
   window.gzFeedDiff = { diffFeed: diffFeed, contentHash: contentHash };
+
+  // Pure discussions selection + backfill, exposed for unit tests (no DOM). The live
+  // paint path (paintDiscussed) calls pickDiscussed directly above.
+  window.gzDiscuss = { pickDiscussed: pickDiscussed };
 
   // Auto-boot only when the feed is THIS document's entry: the feed skeleton
   // (#feed-view) is present and no other page's root (#root) is. On the other

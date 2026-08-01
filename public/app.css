@@ -589,13 +589,25 @@ body.wall-open .theme-fab { display: none; }
    its own narrow ch-based max-widths and stays centered). */
 body.wall-open main.page { max-width: 70rem; }
 
-/* Medium (768px .. 1099px): two columns, left sidebar + center feed. */
-@media (min-width: 768px) and (max-width: 1099px) {
+/* Medium (768px .. 999px): two columns, left sidebar + center feed. Below 1000px the
+   right rail does not fit alongside a comfortable feed, so it is hidden here. */
+@media (min-width: 768px) and (max-width: 999px) {
   .gz-shell {
     grid-template-columns: 15rem minmax(0, 43rem);
     max-width: 62rem;
   }
   .gz-rail-col { display: none; }
+}
+
+/* Laptop band (1000px .. 1199px): three columns on a tighter grid so the rail shows on
+   common ~1024-1280px laptops (it used to appear only from 1100px). Narrower sidebar
+   and rail keep the center readable and the row free of horizontal overflow. */
+@media (min-width: 1000px) and (max-width: 1199px) {
+  .gz-shell {
+    grid-template-columns: 13rem minmax(0, 1fr) 16rem;
+    gap: 1.25rem;
+    max-width: 61rem;
+  }
 }
 
 /* Below the sidebar breakpoint: no rails, single column, mobile top bar. The
@@ -624,7 +636,67 @@ body.wall-open main.page { max-width: 70rem; }
   body[data-gz-nav="1"] header.bar .brand,
   body[data-gz-nav="1"] header.bar .live-indicator,
   body[data-gz-nav="1"] header.bar .spacer { display: none; }
+
+  /* ---- Mobile bottom nav (X-style tab bar) --------------------------------
+     A fixed bar at the bottom carrying five icon tabs. Visible only here (phones).
+     --gz-bnav-h names the bar height so the content padding and the FAB/banner
+     offsets below stay in lockstep with it, plus the iOS safe area. */
+  body[data-gz-nav="1"] { --gz-bnav-h: 3.25rem; }
+  .gz-bnav { display: none; }
+  body[data-gz-nav="1"] .gz-bnav {
+    display: flex; align-items: stretch; justify-content: space-around;
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 45;
+    height: calc(var(--gz-bnav-h) + env(safe-area-inset-bottom, 0px));
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    background: color-mix(in srgb, var(--bg) 94%, transparent);
+    -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
+    border-top: 1px solid var(--line);
+  }
+  .gz-bnav-link {
+    flex: 1 1 0; position: relative;
+    display: inline-flex; align-items: center; justify-content: center;
+    color: var(--ink-2); min-width: 0;
+  }
+  .gz-bnav-link:active { background: var(--hover); }
+  .gz-bnav-link.on { color: var(--accent); }
+  .gz-bnav-link.on .gz-nav-icon { stroke-width: 2.25; }
+  .gz-bnav-link .gz-nav-icon { width: 25px; height: 25px; }
+  /* The unread badge rides the top-right of the bell icon. */
+  .gz-bnav-link .gz-badge {
+    position: absolute; top: 0.35rem; left: 50%; margin-left: 0.15rem;
+  }
+
+  /* Keep the last feed card / DM composer clear of the fixed bar. */
+  body[data-gz-nav="1"] .gz-shell > .gz-center.page {
+    padding-bottom: calc(4rem + var(--gz-bnav-h) + env(safe-area-inset-bottom, 0px));
+  }
+
+  /* Raise the theme FAB (bottom-right) and the recency/update pill (bottom-center)
+     ABOVE the bottom nav so they never sit under it. */
+  body[data-gz-nav="1"] .theme-fab {
+    bottom: calc(1rem + var(--gz-bnav-h) + env(safe-area-inset-bottom, 0px));
+  }
+  body[data-gz-nav="1"] .gz-update-pill {
+    bottom: calc(1rem + var(--gz-bnav-h) + env(safe-area-inset-bottom, 0px));
+  }
+  /* The "new posts" pill is a TOP pill (see .feed-pill), so the bottom bar never
+     touches it; no offset needed here. */
+
+  /* The search view's own input: shown on mobile (the bottom-nav Search routes here
+     without opening the top-bar box), hidden on desktop where the chrome owns search. */
+  .sr-mobile-search { display: block; margin: 0.75rem 0 0.25rem; }
+  .sr-mobile-search .sr-input {
+    width: 100%; box-sizing: border-box;
+    font: inherit; font-size: 0.95rem;
+    color: var(--ink); background: var(--surface);
+    border: 1px solid var(--line); border-radius: var(--radius-pill);
+    padding: 0.6rem 0.9rem;
+  }
+  .sr-mobile-search .sr-input:focus { outline: none; border-color: var(--accent); }
 }
+
+/* Desktop / laptop: the search view's own input is redundant (the chrome has one). */
+@media (min-width: 768px) { .sr-mobile-search { display: none; } }
 
 /* ---- Column delineation (desktop) ----------------------------------------
    Left sidebar reads as its own warm-paper column (surface + divider + shadow).
@@ -642,8 +714,9 @@ body.wall-open main.page { max-width: 70rem; }
   }
 }
 
-/* Right rail card: sticky near the top so it stays in view as the feed scrolls. */
-@media (min-width: 1100px) {
+/* Right rail card: sticky near the top so it stays in view as the feed scrolls.
+   Lowered to 1000px so the rail is present + sticky on standard laptops. */
+@media (min-width: 1000px) {
   .gz-rail-col .gz-rail-card {
     position: sticky;
     top: 1.25rem;

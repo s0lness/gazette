@@ -158,6 +158,35 @@
     );
   }
 
+  // ---- mobile bottom nav (X-style tab bar) --------------------------------
+  // A fixed bottom bar for phones only (CSS shows it under the sidebar breakpoint).
+  // Five icon buttons reusing the SAME icons + routes as the sidebar: Home, Search,
+  // Notifications (with the unread badge), Messages, Profile. The active route gets the
+  // accent. Search routes to /search (the mobile top-bar magnifier surfaces the input;
+  // tapping Home->Search lands on a usable box). Only mounted for logged-in members.
+  function bottomNavHTML(handle) {
+    var active = activeKey(handle);
+    var profileHref = "/a/" + encodeURIComponent(handle);
+    function item(href, key, icon, label, extra) {
+      var on = active === key;
+      return (
+        '<a href="' + href + '" class="gz-bnav-link' + (on ? " on" : "") + '"' +
+        (on ? ' aria-current="page"' : "") + ' aria-label="' + esc(label) + '" data-bnav="' + key + '">' +
+        icon + (extra || "") +
+        "</a>"
+      );
+    }
+    return (
+      '<nav class="gz-bnav" aria-label="primary mobile">' +
+      item("/", "home", active === "home" ? ICON_HOME_FILLED : ICON_HOME, "Home") +
+      item("/search", "search", iconSearch("gz-nav-icon"), "Search") +
+      item("/notifications", "notifications", ICON_BELL, "Notifications", badgeHTML("gz-badge-bnav")) +
+      item("/messages", "messages", ICON_MESSAGES, "Messages") +
+      item(profileHref, "profile", ICON_PROFILE, "Profile") +
+      "</nav>"
+    );
+  }
+
   // ---- mobile account menu ------------------------------------------------
 
   function mobileHTML(handle) {
@@ -378,6 +407,14 @@
       links[i].classList.toggle("on", on);
       if (on) links[i].setAttribute("aria-current", "page");
       else links[i].removeAttribute("aria-current");
+    }
+    // Mirror the active state onto the mobile bottom nav's tab.
+    var blinks = document.querySelectorAll(".gz-bnav .gz-bnav-link");
+    for (var k = 0; k < blinks.length; k++) {
+      var bon = blinks[k].getAttribute("data-bnav") === active;
+      blinks[k].classList.toggle("on", bon);
+      if (bon) blinks[k].setAttribute("aria-current", "page");
+      else blinks[k].removeAttribute("aria-current");
     }
     // Keep the mobile top-bar title in sync, and close the account popover on any
     // route change so it never lingers open across a navigation (defect A + B).
@@ -669,6 +706,14 @@
       mountMobileActions(bar, title);
     }
 
+    // Mobile bottom nav (phones only, CSS-gated): a fixed X-style tab bar so mobile
+    // members can reach Home/Search/Notifications/Messages/Profile, and the unread
+    // badge is visible on the bell (it was invisible on mobile before). Appended to
+    // <body> so it is fixed to the viewport, independent of the shell.
+    var bnav = document.createElement("div");
+    bnav.innerHTML = bottomNavHTML(handle);
+    document.body.appendChild(bnav.firstChild);
+
     // A direct load of /search?q=... arrives with the query already in the URL: show it
     // in the box the moment the rail exists.
     syncSearchInputs();
@@ -734,7 +779,13 @@
   // The router (router.js) drives the active-state refresh on client-side navs.
   // setActive also syncs the mobile title and closes the account popover, so the
   // router needs no extra calls; closeMenu is exposed for completeness.
-  window.gzNav = { setActive: setActive, closeMenu: function () { closeMobileMenu(); } };
+  window.gzNav = {
+    setActive: setActive,
+    closeMenu: function () { closeMobileMenu(); },
+    // Wire an externally-rendered search box (the search view's own mobile header
+    // input) to the same debounce + Enter navigation the chrome inputs use.
+    wireSearchInput: wireSearchInput,
+  };
 
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", boot);

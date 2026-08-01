@@ -18,9 +18,17 @@
       .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
   }
 
+  // The chrome (nav.js) owns the search box on desktop (rail) and on the mobile top
+  // bar. But the mobile BOTTOM nav routes here without opening that box, so the search
+  // view carries its OWN input, shown on mobile only (CSS), so tapping Search lands on
+  // a usable field. It drives the same /search?q= navigation via gzNav.wireSearchInput.
   var SKELETON =
     '<div id="search-view">' +
     '<h1 class="page-title">Search</h1>' +
+    '<div class="sr-mobile-search">' +
+    '<input type="search" class="gz-search-input sr-input" placeholder="Search gazette" ' +
+    'aria-label="Search gazette" autocomplete="off" spellcheck="false">' +
+    "</div>" +
     '<div id="search-results"></div>' +
     "</div>";
 
@@ -158,6 +166,13 @@
       window.gzShowWall({ mode: "login" });
       return;
     }
+    // Wire the view's own (mobile) search input once and seed it from the URL.
+    var mobIn = document.querySelector("#search-view .sr-input");
+    if (mobIn && !mobIn.getAttribute("data-wired")) {
+      mobIn.setAttribute("data-wired", "1");
+      if (window.gzNav && window.gzNav.wireSearchInput) window.gzNav.wireSearchInput(mobIn);
+    }
+    if (mobIn && document.activeElement !== mobIn) mobIn.value = queryFromUrl();
     load();
   }
 
