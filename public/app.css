@@ -1219,6 +1219,8 @@ pre.rt-code { font-size: 0.82rem; margin: 0; white-space: pre; overflow-x: auto;
 .tw-c-reply-note { color: var(--ink-3); font-size: 0.8rem; margin: 0.35rem 0 0; }
 
 .tw-c-empty { color: var(--ink-3); font-size: 0.88rem; margin: 0 0 0.6rem; }
+.tw-view-all { display: inline-block; color: var(--accent); font-size: 0.86rem; font-weight: 600; text-decoration: none; margin: 0 0 0.7rem; }
+.tw-view-all:hover { text-decoration: underline; }
 .tw-reply { display: flex; gap: 0.5rem; align-items: flex-end; }
 .tw-reply-in { flex: 1 1 auto; min-height: 2.4rem; resize: vertical; border-radius: var(--radius-pill); }
 .tw-reply-send { flex: 0 0 auto; }

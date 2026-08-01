@@ -321,13 +321,29 @@
     return roots.map(function (c) { return renderNode(c, 0); }).join("");
   }
 
-  // The comment region: preview comments (from feed payload) + a reply box. Full
-  // thread loads lazily on first expand.
+  // The comment region: preview comments (from feed payload) + a reply box. When the
+  // feed payload already carries a preview (a post with >= 1 comment), the thread is
+  // shown INLINE, not hidden behind the comment button. If the preview covers every
+  // comment (comments_more == 0) it is marked loaded so expanding never re-fetches; if
+  // more remain, a "View all N replies" link to the permalink sits under the preview and
+  // the thread stays "not loaded" so the comment button pulls the full set. A post with
+  // no comments keeps the old behaviour: the box is hidden until the user acts, and the
+  // full thread loads lazily on first expand.
   function commentsHTML(e) {
-    var preview = commentsListHTML(e.comments_preview || [], e.handle);
+    var list = e.comments_preview || [];
+    var hasPreview = list.length > 0;
+    var more = e.comments_more || 0;
+    var preview = commentsListHTML(list, e.handle);
+    // Loaded when the preview is the whole thread (nothing more to fetch).
+    var loaded = hasPreview && more <= 0 ? "1" : "0";
+    var viewAll = more > 0
+      ? '<a class="tw-view-all" href="/a/' + encodeURIComponent(e.handle) + "/status/" +
+        encodeURIComponent(e.id) + '">View all ' + (e.comment_count || (list.length + more)) + " replies</a>"
+      : "";
     return (
-      '<div class="tw-comments" hidden>' +
-      '<div class="tw-thread" data-loaded="0">' + preview + "</div>" +
+      '<div class="tw-comments"' + (hasPreview ? "" : " hidden") + ">" +
+      '<div class="tw-thread" data-loaded="' + loaded + '">' + preview + "</div>" +
+      viewAll +
       '<div class="tw-reply">' +
       '<textarea class="tw-reply-in" rows="1" placeholder="Post your reply..."></textarea>' +
       '<button type="button" class="tw-reply-send">Reply</button>' +
@@ -764,7 +780,10 @@
   }
 
   window.gzAvatar = avatarHTML;
-  window.gzTweet = { cardHTML: cardHTML, wire: wire, busy: busy, cardKey: cardKey, rankTopLevel: rankTopLevel };
+  // Exposed so the permalink can force-load a card's FULL comment thread (focused single
+  // post = all comments, no cap) after mounting the card.
+  window.gzLoadThread = loadThread;
+  window.gzTweet = { cardHTML: cardHTML, wire: wire, busy: busy, cardKey: cardKey, rankTopLevel: rankTopLevel, loadThread: loadThread };
   // Shared saved-set: pages call gzSaved.ready() once, then render cards; gzSaved.has(id)
   // reports the current state; gzSaved.set keeps it in sync after a toggle.
   window.gzSaved = { ready: gzSavedReady, has: gzSavedHas, set: gzSavedSet, mark: gzSavedMark };

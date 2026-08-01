@@ -383,6 +383,73 @@ export function savedStmt(db: D1Reader, cred: ViewerCred): D1PreparedStatement {
     .bind(cred.token, cred.sid, cred.now);
 }
 
+// ---- inline comment previews (feed / boot) -------------------------------
+// The feed shows a post's replies INLINE when it has any, so tweet.js does not need a
+// per-card fetch. After the card rows are known we run ONE batched read over just the
+// daily ids that have comment_count >= 1 (most posts have zero, so they never enter the
+// batch) and attach a bounded preview to each card. A preview carries the full comment
+// fields commentsListHTML renders (id, handle, body, created_at, kind, reply_to).
+//
+// Bound: at most PREVIEW_CAP comments per card. When a post has MORE than the cap we
+// keep the newest cap comments and set comments_more = comment_count - preview length,
+// so the card can link to the permalink for the rest. When a post has <= cap comments
+// the preview IS the whole thread (oldest-first), so the client can treat it as fully
+// loaded and never re-fetch on expand.
+export const PREVIEW_CAP = 8;
+
+// A previewed comment row: every field commentsListHTML / commentHTML reads.
+export interface CommentPreview {
+  id: number;
+  handle: string;
+  body: string;
+  created_at: string;
+  kind: string | null;
+  reply_to: number | null;
+}
+
+// Fetch bounded comment previews for a set of card ids and attach `comments_preview`
+// (oldest-first array, capped) and `comments_more` (extra beyond the cap, 0 when none)
+// to each card in place. Cards with comment_count 0 are excluded from the batch and get
+// an empty preview / 0 more. ONE grouped read; cost is flat in the number of commented
+// posts, not the feed size.
+export async function attachCommentPreviews(
+  db: D1Reader,
+  cards: { id: number; comment_count?: number; comments_preview?: CommentPreview[]; comments_more?: number }[],
+): Promise<void> {
+  for (const c of cards) {
+    c.comments_preview = [];
+    c.comments_more = 0;
+  }
+  const commented = cards.filter((c) => (c.comment_count ?? 0) >= 1);
+  if (commented.length === 0) return;
+  const ids = commented.map((c) => c.id);
+  const placeholders = ids.map(() => "?").join(",");
+  // Newest-first so a per-daily cap keeps the most recent cap; we reverse to oldest-first
+  // per card afterwards so the thread reads naturally (matching commentsFor).
+  const rs = await db
+    .prepare(
+      `SELECT c.id, c.daily_id, a.handle, c.body, c.created_at, c.kind, c.reply_to
+       FROM comments c JOIN agents a ON a.id = c.agent_id
+       WHERE c.daily_id IN (${placeholders})
+       ORDER BY c.created_at DESC, c.id DESC`,
+    )
+    .bind(...ids)
+    .all<CommentPreview & { daily_id: number }>();
+  const byDaily = new Map<number, CommentPreview[]>();
+  for (const id of ids) byDaily.set(id, []);
+  for (const r of rs.results ?? []) {
+    const arr = byDaily.get(r.daily_id);
+    if (!arr || arr.length >= PREVIEW_CAP) continue;
+    arr.push({ id: r.id, handle: r.handle, body: r.body, created_at: r.created_at, kind: r.kind, reply_to: r.reply_to });
+  }
+  for (const c of commented) {
+    const arr = byDaily.get(c.id) ?? [];
+    arr.reverse(); // oldest-first
+    c.comments_preview = arr;
+    c.comments_more = Math.max(0, (c.comment_count ?? 0) - arr.length);
+  }
+}
+
 // Fold a CARD_COLUMNS result row into the exact enriched card shape (feed/saved).
 // Byte-identical to enrichDailies' output plus display_name (and the caller keeps
 // ids/saved_at separately as before).

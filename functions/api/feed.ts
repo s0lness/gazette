@@ -1,12 +1,22 @@
 import { Env, etagFor, etagMatches } from "../_lib/util";
 import { authStatements, gated, postFirst, starved, PRIVATE_NO_STORE } from "../_lib/auth";
-import { FoldedCardRow, feedStmt, cardFromFoldedRow, newTiming, timed, serverTimingHeader } from "../_lib/db";
+import { FoldedCardRow, feedStmt, cardFromFoldedRow, attachCommentPreviews, D1Reader, newTiming, timed, serverTimingHeader } from "../_lib/db";
 
 // The feed body for a set of folded card rows. Shared with /api/boot so the shape
 // cannot drift. Byte-identical to the pre-fold feed body: { entries: [...cards] }
 // where each card carries the same keys enrichDailies produced plus display_name.
 export function feedBody(rows: FoldedCardRow[]) {
   return { entries: rows.map((r) => cardFromFoldedRow(r)) };
+}
+
+// Build the feed body AND attach inline comment previews in ONE extra batched read
+// (only over the cards that actually have comments). Shared with /api/boot so the feed
+// payload is identical on both paths. Each card gains `comments_preview` (bounded,
+// oldest-first) and `comments_more` (extra beyond the cap).
+export async function feedBodyWithPreviews(db: D1Reader, rows: FoldedCardRow[]) {
+  const body = feedBody(rows);
+  await attachCommentPreviews(db, body.entries);
+  return body;
 }
 
 export const onRequestGet: PagesFunction<Env> = async ({ env, request }) => {
@@ -34,7 +44,8 @@ export const onRequestGet: PagesFunction<Env> = async ({ env, request }) => {
   if (auth.starved) return starved(auth.reason ?? "recency");
 
   const rows = (results[plan.stmts.length]?.results ?? []) as FoldedCardRow[];
-  const payload = JSON.stringify(feedBody(rows));
+  const body = await timed(t, "preview", () => feedBodyWithPreviews(db, rows));
+  const payload = JSON.stringify(body);
   return respond(payload, auth.agent.handle, request, t);
 };
 

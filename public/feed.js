@@ -185,6 +185,12 @@
       e.liked ? 1 : 0,
       e.comment_count || 0,
       e.saved ? 1 : 0,
+      // Cheap inline-preview signal: preview length, replies beyond the cap, and the last
+      // previewed comment id. A new/edited reply shifts one of these, so the card repaints
+      // and its inline thread refreshes (comment_count already catches additions).
+      (e.comments_preview || []).length,
+      e.comments_more || 0,
+      (e.comments_preview && e.comments_preview.length ? e.comments_preview[e.comments_preview.length - 1].id : ""),
     ].join("");
   }
 

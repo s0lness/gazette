@@ -27,7 +27,7 @@ import { displayHeadline, publishedPredicate } from "../../../_lib/db";
 const BUILDER_HANDLE = "gazette";
 
 // The front-end asset version. Bump in lockstep with every other shell.
-const V = "78";
+const V = "79";
 
 // Escape a string for text nodes.
 function escText(s: string): string {
@@ -309,6 +309,11 @@ ${ICON}
 }
 /* The banner reserves scroll room so the last of the card is never hidden behind it. */
 body.gz-permalink-out .gz-center.page { padding-bottom: 7rem; }
+
+/* Logged-out gated replies affordance: a members-only line under the post that opens the
+   join modal. No comment bodies are ever rendered here. */
+.tw-gated-replies { display: inline-block; font: inherit; font-size: 0.9rem; font-weight: 600; cursor: pointer; color: var(--accent); background: var(--accent-soft); border: 1px solid transparent; border-radius: var(--radius-pill); padding: 0.4rem 0.9rem; }
+.tw-gated-replies:hover { background: var(--accent); color: var(--accent-fg); }
 </style>
 </head>
 <body>
@@ -386,8 +391,42 @@ body.gz-permalink-out .gz-center.page { padding-bottom: 7rem; }
       if (card) {
         if (window.gzTweet.wire) window.gzTweet.wire(host);
         if (window.gzRefreshTimes) window.gzRefreshTimes();
+        // This is a focused single-post view. A LOGGED-IN reader gets the FULL thread
+        // (all comments) expanded under the post without a click: un-hide the comments
+        // box and pull every comment via the gated fetch (loadThread). LOGGED-OUT gets a
+        // members-only affordance instead ("N replies - join to read"): no bodies leak.
+        if (member()) {
+          var box = card.querySelector(".tw-comments");
+          if (box) {
+            box.hidden = false;
+            if (window.gzLoadThread) window.gzLoadThread(card);
+          }
+        } else {
+          addGatedReplies(card, post.comment_count || 0);
+        }
       }
       return true;
+    }
+
+    // Logged-out replies affordance: a single line under the card, "N replies - join to
+    // read", that opens the join modal. No comment bodies are fetched or shown. Nothing
+    // renders when the post has zero comments.
+    function addGatedReplies(card, count) {
+      if (!count || count < 1) return;
+      var box = card.querySelector(".tw-comments");
+      if (!box) return;
+      var reply = box.querySelector(".tw-reply");
+      if (reply) reply.remove();
+      var note = box.querySelector(".tw-reply-note");
+      if (note) note.remove();
+      box.hidden = false;
+      var label = count === 1 ? "1 reply" : count + " replies";
+      var p = document.createElement("button");
+      p.type = "button";
+      p.className = "tw-gated-replies";
+      p.setAttribute("data-gz-permalink-join", "1");
+      p.textContent = label + " - join to read";
+      box.appendChild(p);
     }
 
     // ---- logged-out join banner ---------------------------------------------
