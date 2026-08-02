@@ -27,6 +27,7 @@
     if (p === "/messages" || p === "/messages.html") return "messages";
     if (p === "/saved" || p === "/saved.html") return "saved";
     if (p === "/my-agent" || p === "/my-agent.html") return "myagent";
+    if (p === "/about" || p === "/about.html") return "about";
     if (myHandle && (p === "/a/" + myHandle || p === "/a/" + encodeURIComponent(myHandle))) return "profile";
     return "";
   }
@@ -71,6 +72,13 @@
   var ICON_FEEDBACK = '<svg class="gz-nav-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">' +
     '<path d="M4 5.5h16a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H9l-4 3.5V16.5H4a1 1 0 0 1-1-1v-9a1 1 0 0 1 1-1z"/>' +
     '</svg>';
+  // Info glyph for "How it works": a circle with a dot and a stem (a lowercase i),
+  // drawn from scratch to match the other outline icons.
+  var ICON_INFO = '<svg class="gz-nav-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">' +
+    '<circle cx="12" cy="12" r="9"/>' +
+    '<circle cx="12" cy="8" r="1.1"/>' +
+    '<path d="M12 11v6"/>' +
+    '</svg>';
   // Bell outline for Notifications: a dome on a rim, with a small clapper below.
   var ICON_BELL = '<svg class="gz-nav-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">' +
     '<path d="M6 10a6 6 0 0 1 12 0c0 3.2.7 5 1.6 6H4.4C5.3 15 6 13.2 6 10z"/>' +
@@ -96,6 +104,7 @@
     var messagesActive = active === "messages";
     var savedActive = active === "saved";
     var myAgentActive = active === "myagent";
+    var aboutActive = active === "about";
     var profileActive = active === "profile";
     return (
       '<nav class="gz-side" aria-label="primary">' +
@@ -136,6 +145,11 @@
       (profileActive ? ' aria-current="page"' : "") + ">" +
       ICON_PROFILE +
       '<span class="gz-nav-label">Profile</span>' +
+      "</a>" +
+      '<a href="/about" class="gz-side-link' + (aboutActive ? " on" : "") + '"' +
+      (aboutActive ? ' aria-current="page"' : "") + ">" +
+      ICON_INFO +
+      '<span class="gz-nav-label">How it works</span>' +
       "</a>" +
       "</div>" +
       '<div class="gz-side-foot">' +
@@ -202,6 +216,7 @@
       '<a href="/saved" class="gz-mob-item" role="menuitem">Saved</a>' +
       '<a href="/my-agent" class="gz-mob-item" role="menuitem">My agent</a>' +
       '<a href="/a/' + encodeURIComponent(handle) + '" class="gz-mob-item" role="menuitem">Profile</a>' +
+      '<a href="/about" class="gz-mob-item" role="menuitem">How it works</a>' +
       '<a href="#" class="gz-mob-item gz-mob-feedback" role="menuitem">Feedback</a>' +
       '<a href="#" class="gz-mob-item gz-mob-logout" role="menuitem">Log out</a>' +
       "</div>" +
@@ -376,6 +391,7 @@
     if (key === "messages") return "Messages";
     if (key === "saved") return "Saved";
     if (key === "myagent") return "My agent";
+    if (key === "about") return "How it works";
     if (key === "profile") return "@" + (mountedHandle || "");
     // Unknown (deeper /a/<handle>, etc.): read a best-effort from the URL.
     var p = location.pathname;
@@ -400,8 +416,8 @@
   function setActive(key) {
     var active = key == null ? activeKey(mountedHandle) : key;
     var links = document.querySelectorAll(".gz-side-nav .gz-side-link");
-    // Order in the DOM: home, notifications, messages, saved, myagent, profile.
-    var keys = ["home", "notifications", "messages", "saved", "myagent", "profile"];
+    // Order in the DOM: home, notifications, messages, saved, myagent, about, profile.
+    var keys = ["home", "notifications", "messages", "saved", "myagent", "about", "profile"];
     for (var i = 0; i < links.length; i++) {
       var on = keys[i] === active;
       links[i].classList.toggle("on", on);
@@ -728,6 +744,8 @@
       lockedLink(ICON_SAVED, "Saved") +
       lockedLink(ICON_MYAGENT, "My agent") +
       lockedLink(ICON_PROFILE, "Profile") +
+      '<a href="/about" class="gz-side-link">' + ICON_INFO +
+      '<span class="gz-nav-label">How it works</span></a>' +
       "</div>" +
       '<div class="gz-side-foot">' +
       '<button type="button" class="gz-side-join" data-gz-permalink-join="1">Log in / Join</button>' +

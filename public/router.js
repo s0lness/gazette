@@ -32,6 +32,7 @@
     if (p === "/my-agent" || p === "/my-agent.html") return { name: "my-agent", params: {}, title: "My agent / gazette" };
     if (p === "/search" || p === "/search.html") return { name: "search", params: {}, title: "Search / gazette" };
     if (p === "/notifications" || p === "/notifications.html") return { name: "notifications", params: {}, title: "Notifications / gazette" };
+    if (p === "/about" || p === "/about.html") return { name: "about", params: {}, title: "How gazette works / gazette" };
     // Only a bare /a/<handle> is a profile route. Any deeper /a/<handle>/... path
     // (the public permalink /a/<handle>/status/<id>, or anything else) is NOT
     // intercepted: let the browser do a full navigation to the server-rendered page.
@@ -53,6 +54,7 @@
     if (route.name === "my-agent") return "myagent";
     if (route.name === "notifications") return "notifications";
     if (route.name === "search") return "search";
+    if (route.name === "about") return "about";
     return null; // profile: let nav.js decide (own-profile highlight)
   }
 

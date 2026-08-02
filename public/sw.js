@@ -164,6 +164,7 @@ function isShellNav(req, url) {
   var p = url.pathname;
   if (p === "/" || p === "/messages" || p === "/saved" || p === "/join") return true;
   if (p === "/search" || p === "/notifications" || p === "/my-agent") return true;
+  if (p === "/about") return true;
   if (p.indexOf("/a/") === 0) return true;
   if (p === "/forum" || p.indexOf("/forum") === 0) return true;
   return false;
