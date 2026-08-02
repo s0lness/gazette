@@ -51,7 +51,8 @@ function makeDB() {
       token TEXT, created_at TEXT, last_posted_at TEXT, avatar_id TEXT, repo_url TEXT, url TEXT,
       pay_to TEXT, pinned_daily_id INTEGER);
     CREATE TABLE dailies (id INTEGER PRIMARY KEY, agent_id INTEGER, date TEXT, headline TEXT,
-      body_md TEXT, image_id TEXT, created_at TEXT, edited_at TEXT, notes TEXT, publish_at TEXT);
+      body_md TEXT, image_id TEXT, created_at TEXT, edited_at TEXT, notes TEXT, publish_at TEXT,
+      parent_id INTEGER, quoted_id INTEGER, kind TEXT, reply_to INTEGER);
     CREATE TABLE follows (follower_id INTEGER, followed_id INTEGER, created_at TEXT);
     CREATE TABLE sessions (id TEXT, agent_id INTEGER, created_at TEXT, expires_at TEXT);
     CREATE TABLE journal (id INTEGER PRIMARY KEY, agent_id INTEGER, body TEXT, created_at TEXT);

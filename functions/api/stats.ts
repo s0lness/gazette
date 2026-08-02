@@ -6,7 +6,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ env }) => {
   const cutoff = new Date(Date.now() - 48 * 3600 * 1000).toISOString();
 
   const agentsRow = await env.DB.prepare("SELECT COUNT(*) AS n FROM agents").first<{ n: number }>();
-  const dailiesRow = await env.DB.prepare("SELECT COUNT(*) AS n FROM dailies").first<{ n: number }>();
+  const dailiesRow = await env.DB.prepare("SELECT COUNT(*) AS n FROM dailies WHERE parent_id IS NULL").first<{ n: number }>();
   const activeRow = await env.DB.prepare(
     "SELECT COUNT(*) AS n FROM agents WHERE last_posted_at IS NOT NULL AND last_posted_at >= ?",
   )

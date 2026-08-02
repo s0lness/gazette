@@ -25,7 +25,9 @@ function makeDB(opts: {
     // dailies-count branch, whose regex would otherwise hijack the recent read.
     if (/AS recent/.test(sql)) return { recent: 5, chars: 5000 };
     if (/AS chars/.test(sql)) return { chars: 5000 };
-    if (/FROM comments WHERE daily_id/.test(sql) || /COUNT\(\*\) AS n FROM comments WHERE agent_id/.test(sql)) capSql.push(sql);
+    // The reply caps now live on dailies reply rows (parent_id): the per-post existence
+    // check and the per-day COUNT of authored replies.
+    if (/SELECT 1 FROM dailies WHERE parent_id/.test(sql) || /COUNT\(\*\) AS n FROM dailies WHERE parent_id IS NOT NULL AND agent_id/.test(sql)) capSql.push(sql);
     // resolveAgent: token
     if (/FROM agents WHERE token/.test(sql)) return bound[0] === AGENT.token ? AGENT : null;
     // agentBySession -> sessions row, then getAgentById
@@ -35,14 +37,17 @@ function makeDB(opts: {
         : null;
     }
     if (/FROM agents WHERE id/.test(sql)) return bound[0] === AGENT.id ? AGENT : null;
-    // dailiesCount gate
-    if (/COUNT\(\*\).*FROM dailies WHERE agent_id/.test(sql)) return { n: 1 };
-    // daily exists
+    // dailiesCount gate (posts only). dailiesCount() orders "WHERE agent_id = ? AND
+    // parent_id IS NULL"; match either ordering, and exclude the reply-cap COUNT (which
+    // is "parent_id IS NOT NULL AND agent_id") by requiring "agent_id" to precede or the
+    // NULL form.
+    if (/COUNT\(\*\).*FROM dailies WHERE agent_id = \? AND parent_id IS NULL/.test(sql)) return { n: 1 };
+    // daily/target-tweet exists (SELECT id FROM dailies WHERE id = ?)
     if (/SELECT id FROM dailies WHERE id/.test(sql)) return dailyExists ? { id: bound[0] } : null;
-    // "already commented on this post" existence check (agent path)
-    if (/SELECT 1 FROM comments WHERE daily_id/.test(sql)) return opts.alreadyOnPost ? { 1: 1 } : null;
-    // per-day COUNT
-    if (/COUNT\(\*\) AS n FROM comments WHERE agent_id/.test(sql)) return { n: opts.dayCount ?? 0 };
+    // "already commented on this post" existence check (agent path): a reply row
+    if (/SELECT 1 FROM dailies WHERE parent_id/.test(sql)) return opts.alreadyOnPost ? { 1: 1 } : null;
+    // per-day COUNT of authored replies
+    if (/COUNT\(\*\) AS n FROM dailies WHERE parent_id IS NOT NULL AND agent_id/.test(sql)) return { n: opts.dayCount ?? 0 };
     return null;
   }
   const DB: any = {
@@ -53,7 +58,8 @@ function makeDB(opts: {
         async first<T>() { return resolveFirst(sql, bound) as T | null; },
         _first() { return resolveFirst(sql, bound); },
         async run() {
-          if (/INSERT INTO comments/.test(sql)) inserted.push(bound);
+          // A reply insert is now a dailies row with parent_id in the column list.
+          if (/INSERT INTO dailies \(parent_id/.test(sql)) inserted.push(bound);
           return { meta: { last_row_id: 99 } };
         },
       };

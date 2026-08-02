@@ -35,16 +35,16 @@ function makeEnv() {
     if (/SELECT id FROM dailies WHERE id/.test(sql)) return { id: bound[0] };
     if (/SELECT id, agent_id, headline, body_md FROM dailies WHERE id/.test(sql)) return DAILY;
     // "already commented on this post" existence check (agent path): none yet.
-    if (/SELECT 1 FROM comments WHERE daily_id/.test(sql)) return null;
+    if (/SELECT 1 FROM dailies WHERE parent_id = \? AND agent_id = \? AND kind IS NULL/.test(sql)) return null;
     // per-day authored-comment COUNT: under cap.
-    if (/COUNT\(\*\) AS n FROM comments WHERE agent_id = \? AND kind IS NULL/.test(sql)) return { n: 0 };
+    if (/COUNT\(\*\) AS n FROM dailies WHERE parent_id IS NOT NULL AND agent_id = \? AND kind IS NULL/.test(sql)) return { n: 0 };
     // loadComment (join agents) -> the just-posted comment.
-    if (/FROM comments c JOIN agents a ON a\.id = c\.agent_id WHERE c\.id/.test(sql)) return NEW_COMMENT;
+    if (/FROM dailies c JOIN agents a ON a\.id = c\.agent_id WHERE c\.id/.test(sql)) return NEW_COMMENT;
     // loadAgentById -> the daily author.
     if (/FROM agents WHERE id/.test(sql)) return bound[0] === AUTHOR.id ? AUTHOR : null;
     // catch-up oldest-unanswered candidate -> the just-posted comment, unless it is now
     // answered (models D1 excluding it via NOT EXISTS after the first oracle insert).
-    if (/NOT EXISTS \(SELECT 1 FROM comments r WHERE r\.reply_to/.test(sql))
+    if (/NOT EXISTS \(SELECT 1 FROM dailies r WHERE r\.parent_id IS NOT NULL AND r\.reply_to/.test(sql))
       return answered.has(NEW_COMMENT.id) ? null : NEW_COMMENT;
     return null;
   }
@@ -71,12 +71,12 @@ function makeEnv() {
         async all<T>() { return resolveAll(sql, bound) as { results: T[] }; },
         _resolveAll() { return resolveAll(sql, bound); },
         async run() {
-          if (/INSERT INTO comments/.test(sql)) {
+          if (/INSERT INTO dailies \(parent_id/.test(sql)) {
             inserted.push({ sql, bound });
-            // An oracle insert marks its reply_to comment as answered (bound[4]).
-            if (/'oracle'/.test(sql)) answered.add(Number(bound[4]));
+            // An oracle insert marks its reply_to comment as answered (bound[5]).
+            if (/'oracle'/.test(sql)) answered.add(Number(bound[5]));
             // The asker's own comment insert gets NEW_COMMENT.id back.
-            if (/VALUES \(\?, \?, \?, \?\)$/.test(sql)) return { meta: { last_row_id: NEW_COMMENT.id } };
+            if (/VALUES \(\?, \?, \?, \?, \?\)$/.test(sql)) return { meta: { last_row_id: NEW_COMMENT.id } };
           }
           return { meta: { last_row_id: 999 } };
         },
@@ -138,7 +138,7 @@ describe("member comment POST: eager oracle answer (no GET needed)", () => {
     const ob = oracleInserts[0].bound as any[];
     expect(ob[0]).toBe(DAILY.id); // daily_id
     expect(ob[1]).toBe(AUTHOR.id); // authored by the daily author
-    expect(ob[4]).toBe(NEW_COMMENT.id); // reply_to = the member's comment
+    expect(ob[5]).toBe(NEW_COMMENT.id); // reply_to = the member's comment
   });
 
   test("catchUpOracleReply is scheduled even when it will no-op (fallback sweep)", async () => {

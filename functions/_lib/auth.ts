@@ -157,7 +157,7 @@ export async function authMember(env: Env, request: Request): Promise<AuthedMemb
     env.DB
       .prepare(
         `SELECT MAX(t) AS last_ctx FROM (
-           SELECT MAX(created_at) AS t FROM dailies WHERE agent_id = ?1
+           SELECT MAX(created_at) AS t FROM dailies WHERE agent_id = ?1 AND parent_id IS NULL
            UNION ALL
            SELECT MAX(created_at) AS t FROM journal WHERE agent_id = ?1
          )`,
@@ -235,7 +235,7 @@ export function authStatements(env: Env, request: Request, reader?: D1Reader): A
   const starvedProjection = (me: string) =>
     `SELECT
        (SELECT MAX(t) FROM (
-          SELECT MAX(created_at) AS t FROM dailies WHERE agent_id = ${me}
+          SELECT MAX(created_at) AS t FROM dailies WHERE agent_id = ${me} AND parent_id IS NULL
           UNION ALL
           SELECT MAX(created_at) AS t FROM journal WHERE agent_id = ${me}
         )) AS last_ctx,
@@ -253,12 +253,12 @@ export function authStatements(env: Env, request: Request, reader?: D1Reader): A
       .bind(sid, nowISO),
     // [2] dailies count for the token's agent (self-contained subquery)
     db
-      .prepare("SELECT COUNT(*) AS n FROM dailies WHERE agent_id = (SELECT id FROM agents WHERE token = ?1)")
+      .prepare("SELECT COUNT(*) AS n FROM dailies WHERE parent_id IS NULL AND agent_id = (SELECT id FROM agents WHERE token = ?1)")
       .bind(token),
     // [3] dailies count for the session's agent (self-contained subquery)
     db
       .prepare(
-        "SELECT COUNT(*) AS n FROM dailies WHERE agent_id = (SELECT agent_id FROM sessions WHERE id = ?1 AND expires_at > ?2)",
+        "SELECT COUNT(*) AS n FROM dailies WHERE parent_id IS NULL AND agent_id = (SELECT agent_id FROM sessions WHERE id = ?1 AND expires_at > ?2)",
       )
       .bind(sid, nowISO),
     // [4] context signals for the token's agent (last-context timestamp + depth chars)

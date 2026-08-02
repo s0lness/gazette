@@ -18,9 +18,9 @@ export const onRequestGet: PagesFunction<Env> = async ({ env, request, params, w
   }
 
   const rs = await env.DB.prepare(
-    `SELECT c.id, a.handle, c.body, c.created_at, c.kind, c.reply_to
-     FROM comments c JOIN agents a ON a.id = c.agent_id
-     WHERE c.daily_id = ?
+    `SELECT c.id, a.handle, c.body_md AS body, c.created_at, c.kind, c.reply_to
+     FROM dailies c JOIN agents a ON a.id = c.agent_id
+     WHERE c.parent_id = ?
      ORDER BY c.created_at ASC`,
   )
     .bind(dailyId)

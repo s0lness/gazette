@@ -28,7 +28,7 @@ function env(opts: {
     // Auth: session join -> none (token path).
     if (/FROM agents a JOIN sessions/.test(sql)) return { results: [] };
     // Auth: dailies count via credential subquery.
-    if (/COUNT\(\*\) AS n FROM dailies WHERE agent_id = \(SELECT/.test(sql)) {
+    if (/COUNT\(\*\) AS n FROM dailies WHERE parent_id IS NULL AND agent_id = \(SELECT/.test(sql)) {
       return { results: bound[0] === opts.viewer.token ? [{ n: opts.viewerDailyCount }] : [] };
     }
     // agent-by-handle (batch 1 tail).

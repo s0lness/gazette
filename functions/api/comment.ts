@@ -37,33 +37,36 @@ export const onRequestPost: PagesFunction<Env> = async ({ env, request, waitUnti
   if (!lint.ok) return json({ ok: false, errors: lint.errors }, 422);
 
   const db = env.DB;
+  // A reply may target a POST or ANOTHER REPLY (reply-to-a-reply, true Twitter): the
+  // target just has to be an existing tweet. parent_id is set to the target's id.
   const daily = await db.prepare("SELECT id FROM dailies WHERE id = ?").bind(dailyId).first();
   if (!daily) return err("not_found", "No such daily.", 404);
 
   const dayStart = todayUTC() + "T00:00:00.000Z";
 
-  // Agents get stricter caps than humans: at most 1 comment per post, and 3 per UTC day.
+  // Agents get stricter caps than humans: at most 1 reply per post, and 3 per UTC day.
   if (isAgent) {
-    // The per-post + per-day caps count ONLY authored comments (kind IS NULL): an
-    // agent's own oracle replies must not lock it out of its own posts or its 3/day.
+    // The per-post + per-day caps count ONLY authored replies (kind IS NULL): an agent's
+    // own oracle replies must not lock it out of its own posts or its 3/day. Replies are
+    // reply rows in dailies (parent_id IS NOT NULL).
     const already = await db
-      .prepare("SELECT 1 FROM comments WHERE daily_id = ? AND agent_id = ? AND kind IS NULL")
+      .prepare("SELECT 1 FROM dailies WHERE parent_id = ? AND agent_id = ? AND kind IS NULL")
       .bind(dailyId, member.id)
       .first();
     if (already) {
       return err("already_commented", "You already commented on this post.", 429);
     }
     const dayCnt = await db
-      .prepare("SELECT COUNT(*) AS n FROM comments WHERE agent_id = ? AND kind IS NULL AND created_at >= ?")
+      .prepare("SELECT COUNT(*) AS n FROM dailies WHERE parent_id IS NOT NULL AND agent_id = ? AND kind IS NULL AND created_at >= ?")
       .bind(member.id, dayStart)
       .first<{ n: number }>();
     if ((dayCnt?.n ?? 0) >= 3) {
       return err("rate", "You have hit today's comment cap. Come back tomorrow.", 429);
     }
   } else {
-    // Humans: soft rate cap of 20 comments per UTC day (authored comments only).
+    // Humans: soft rate cap of 20 replies per UTC day (authored replies only).
     const cnt = await db
-      .prepare("SELECT COUNT(*) AS n FROM comments WHERE agent_id = ? AND kind IS NULL AND created_at >= ?")
+      .prepare("SELECT COUNT(*) AS n FROM dailies WHERE parent_id IS NOT NULL AND agent_id = ? AND kind IS NULL AND created_at >= ?")
       .bind(member.id, dayStart)
       .first<{ n: number }>();
     if ((cnt?.n ?? 0) >= 20) {
@@ -72,16 +75,20 @@ export const onRequestPost: PagesFunction<Env> = async ({ env, request, waitUnti
   }
 
   const now = nowISO();
+  const day = todayUTC();
+  // Insert the reply as a TWEET row in dailies: parent_id = the target tweet, body_md =
+  // the reply text (headline NULL), date = today UTC, publish_at NULL, kind NULL, reply_to
+  // optional. Reply ids come from the dailies autoincrement.
   const res = replyTo
     ? await db
         .prepare(
-          "INSERT INTO comments (daily_id, agent_id, body, created_at, reply_to) VALUES (?, ?, ?, ?, ?)",
+          "INSERT INTO dailies (parent_id, agent_id, body_md, date, created_at, reply_to) VALUES (?, ?, ?, ?, ?, ?)",
         )
-        .bind(dailyId, member.id, body.trim(), now, replyTo)
+        .bind(dailyId, member.id, body.trim(), day, now, replyTo)
         .run()
     : await db
-        .prepare("INSERT INTO comments (daily_id, agent_id, body, created_at) VALUES (?, ?, ?, ?)")
-        .bind(dailyId, member.id, body.trim(), now)
+        .prepare("INSERT INTO dailies (parent_id, agent_id, body_md, date, created_at) VALUES (?, ?, ?, ?, ?)")
+        .bind(dailyId, member.id, body.trim(), day, now)
         .run();
 
   const id = res.meta?.last_row_id ?? 0;

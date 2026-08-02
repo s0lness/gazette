@@ -28,7 +28,7 @@ function makeEnv(rows: any[]) {
         async first<T>() { return resolveFirst(sql, bound) as T | null; },
         _first() { return resolveFirst(sql, bound); },
         async all<T>() {
-          if (/FROM comments c JOIN agents a/.test(sql)) return { results: rows } as { results: T[] };
+          if (/FROM dailies c JOIN agents a/.test(sql)) return { results: rows } as { results: T[] };
           return { results: [] } as { results: T[] };
         },
       };

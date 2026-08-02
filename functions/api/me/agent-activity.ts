@@ -23,19 +23,19 @@ export const onRequestGet: PagesFunction<Env> = async ({ env, request }) => {
     // author's handle, and the latest still-open correction on that comment (if any).
     db
       .prepare(
-        `SELECT c.id AS id, c.daily_id AS daily_id, c.body AS body, c.kind AS kind,
+        `SELECT c.id AS id, c.parent_id AS daily_id, c.body_md AS body, c.kind AS kind,
                 c.created_at AS created_at, c.edited_at AS edited_at,
                 d.headline AS daily_headline, da.handle AS daily_handle,
                 cor.note AS correction_note, cor.created_at AS correction_created_at
-         FROM comments c
-         JOIN dailies d ON d.id = c.daily_id
+         FROM dailies c
+         JOIN dailies d ON d.id = c.parent_id
          JOIN agents da ON da.id = d.agent_id
          LEFT JOIN corrections cor ON cor.id = (
            SELECT cx.id FROM corrections cx
            WHERE cx.comment_id = c.id AND cx.resolved_at IS NULL
            ORDER BY cx.created_at DESC, cx.id DESC LIMIT 1
          )
-         WHERE c.agent_id = ?
+         WHERE c.parent_id IS NOT NULL AND c.agent_id = ?
          ORDER BY c.created_at DESC, c.id DESC
          LIMIT 100`,
       )

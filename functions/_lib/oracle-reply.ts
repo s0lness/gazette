@@ -45,21 +45,22 @@ interface DailyRow {
   body_md: string | null;
 }
 
-// Load a comment (with its author handle) by id.
+// Load a reply (with its author handle) by id. A reply is a first-class tweet: a dailies
+// row with parent_id IS NOT NULL. daily_id is the reply's parent post.
 async function loadComment(db: D1Database, commentId: number): Promise<CommentRow | null> {
   return db
     .prepare(
-      `SELECT c.id, c.daily_id, c.agent_id, c.body, c.created_at, c.kind, c.reply_to, a.handle
-       FROM comments c JOIN agents a ON a.id = c.agent_id WHERE c.id = ?`,
+      `SELECT c.id, c.parent_id AS daily_id, c.agent_id, c.body_md AS body, c.created_at, c.kind, c.reply_to, a.handle
+       FROM dailies c JOIN agents a ON a.id = c.agent_id WHERE c.id = ? AND c.parent_id IS NOT NULL`,
     )
     .bind(commentId)
     .first<CommentRow>();
 }
 
-// Load a daily's id/author/head.
+// Load a post's id/author/head. Posts only (parent_id IS NULL).
 async function loadDaily(db: D1Database, dailyId: number): Promise<DailyRow | null> {
   return db
-    .prepare("SELECT id, agent_id, headline, body_md FROM dailies WHERE id = ?")
+    .prepare("SELECT id, agent_id, headline, body_md FROM dailies WHERE id = ? AND parent_id IS NULL")
     .bind(dailyId)
     .first<DailyRow>();
 }
@@ -92,17 +93,17 @@ async function generateFor(
   // OR this author already hit the daily oracle cap. All three are cheap COUNT reads.
   const [answeredRes, authorAfterRes, capRes] = await db.batch<any>([
     db
-      .prepare("SELECT COUNT(*) AS n FROM comments WHERE reply_to = ? AND kind = 'oracle'")
+      .prepare("SELECT COUNT(*) AS n FROM dailies WHERE parent_id IS NOT NULL AND reply_to = ? AND kind = 'oracle'")
       .bind(comment.id),
     db
       .prepare(
-        `SELECT COUNT(*) AS n FROM comments
-         WHERE daily_id = ? AND agent_id = ? AND (kind IS NULL OR kind != 'oracle') AND created_at > ?`,
+        `SELECT COUNT(*) AS n FROM dailies
+         WHERE parent_id = ? AND agent_id = ? AND (kind IS NULL OR kind != 'oracle') AND created_at > ?`,
       )
       .bind(daily.id, author.id, comment.created_at),
     db
       .prepare(
-        "SELECT COUNT(*) AS n FROM comments WHERE agent_id = ? AND kind = 'oracle' AND created_at >= ?",
+        "SELECT COUNT(*) AS n FROM dailies WHERE parent_id IS NOT NULL AND agent_id = ? AND kind = 'oracle' AND created_at >= ?",
       )
       .bind(author.id, nowISO().slice(0, 10) + "T00:00:00.000Z"),
   ]);
@@ -115,7 +116,7 @@ async function generateFor(
   const [corpusRes, journalRes] = await db.batch<any>([
     db
       .prepare(
-        "SELECT date, headline, body_md, notes FROM dailies WHERE agent_id = ? AND (publish_at IS NULL OR publish_at <= ?) ORDER BY date DESC, created_at DESC",
+        "SELECT date, headline, body_md, notes FROM dailies WHERE agent_id = ? AND parent_id IS NULL AND (publish_at IS NULL OR publish_at <= ?) ORDER BY date DESC, created_at DESC",
       )
       .bind(author.id, nowISO()),
     db
@@ -147,11 +148,12 @@ async function generateFor(
   const answer = truncateAtSentence(outcome.answer!, 500);
   if (!answer) return false;
 
+  const insNow = nowISO();
   const ins = await db
     .prepare(
-      "INSERT INTO comments (daily_id, agent_id, body, created_at, kind, reply_to) VALUES (?, ?, ?, ?, 'oracle', ?)",
+      "INSERT INTO dailies (parent_id, agent_id, body_md, date, created_at, kind, reply_to) VALUES (?, ?, ?, ?, ?, 'oracle', ?)",
     )
-    .bind(daily.id, author.id, answer, nowISO(), comment.id)
+    .bind(daily.id, author.id, answer, insNow.slice(0, 10), insNow, comment.id)
     .run();
 
   // The human whose comment just got answered sees it in their inbox. Already inside a
@@ -203,12 +205,12 @@ export async function catchUpOracleReply(env: Env, dailyId: number): Promise<boo
     // Oldest non-author, non-oracle comment on this daily with no oracle reply yet.
     const cand = await db
       .prepare(
-        `SELECT c.id, c.daily_id, c.agent_id, c.body, c.created_at, c.kind, c.reply_to, a.handle
-         FROM comments c JOIN agents a ON a.id = c.agent_id
-         WHERE c.daily_id = ?
+        `SELECT c.id, c.parent_id AS daily_id, c.agent_id, c.body_md AS body, c.created_at, c.kind, c.reply_to, a.handle
+         FROM dailies c JOIN agents a ON a.id = c.agent_id
+         WHERE c.parent_id = ?
            AND c.agent_id != ?
            AND (c.kind IS NULL OR c.kind != 'oracle')
-           AND NOT EXISTS (SELECT 1 FROM comments r WHERE r.reply_to = c.id AND r.kind = 'oracle')
+           AND NOT EXISTS (SELECT 1 FROM dailies r WHERE r.parent_id IS NOT NULL AND r.reply_to = c.id AND r.kind = 'oracle')
          ORDER BY c.created_at ASC, c.id ASC
          LIMIT 1`,
       )

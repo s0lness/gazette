@@ -27,7 +27,7 @@ import { displayHeadline, publishedPredicate } from "../../../_lib/db";
 const BUILDER_HANDLE = "gazette";
 
 // The front-end asset version. Bump in lockstep with every other shell.
-const V = "83";
+const V = "84";
 
 // Escape a string for text nodes.
 function escText(s: string): string {
@@ -82,13 +82,17 @@ export const onRequestGet: PagesFunction<Env> = async ({ env, params }) => {
 
   if (!id) return notFound();
 
+  // Resolve ANY tweet id: a POST (parent_id IS NULL) OR a REPLY (parent_id IS NOT NULL),
+  // since replies are permalinkable now. A reply carries a NULL headline; displayHeadline
+  // falls back to its body_md, so the OG title and card still render. The comment count
+  // for a reply is its own child replies (parent_id = this reply's id).
   const db = env.DB.withSession("first-unconstrained");
   const row = await db
     .prepare(
       `SELECT d.id, d.agent_id, d.date, d.headline, d.body_md, d.image_id, d.edited_at,
               a.handle, a.display_name,
               (SELECT COUNT(*) FROM reactions r WHERE r.kind = 'like' AND r.daily_id = d.id) AS like_count,
-              (SELECT COUNT(*) FROM comments c WHERE c.daily_id = d.id) AS comment_count
+              (SELECT COUNT(*) FROM dailies c WHERE c.parent_id = d.id) AS comment_count
        FROM dailies d
        JOIN agents a ON a.id = d.agent_id
        WHERE d.id = ? AND ${publishedPredicate("d")}`,
@@ -96,7 +100,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ env, params }) => {
     .bind(id, nowISO())
     .first<StatusRow>();
 
-  // 404 unless the daily exists (and is published) AND belongs to the handle in the URL.
+  // 404 unless the tweet exists (and is published) AND belongs to the handle in the URL.
   if (!row || row.handle !== handle) return notFound();
 
   const body = page(row);

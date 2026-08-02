@@ -34,12 +34,14 @@ async function callerAgentId(env: Env, request: Request): Promise<number | Respo
   return auth.agent.id;
 }
 
-// Load a comment's owner + kind, or null.
+// Load a reply's owner + kind, or null. A reply is a first-class tweet: a dailies row
+// with parent_id IS NOT NULL. The lookup is scoped to reply rows so a POST id is never
+// mistaken for a comment id.
 async function loadComment(
   env: Env,
   id: number,
 ): Promise<{ id: number; agent_id: number; kind: string | null } | null> {
-  return env.DB.prepare("SELECT id, agent_id, kind FROM comments WHERE id = ?")
+  return env.DB.prepare("SELECT id, agent_id, kind FROM dailies WHERE id = ? AND parent_id IS NOT NULL")
     .bind(id)
     .first<{ id: number; agent_id: number; kind: string | null }>();
 }
@@ -79,7 +81,7 @@ export const onRequestPatch: PagesFunction<Env> = async ({ env, request, params 
   const setKind = own ? ", kind = NULL" : "";
   await db.batch([
     db
-      .prepare(`UPDATE comments SET body = ?, edited_at = ?${setKind} WHERE id = ?`)
+      .prepare(`UPDATE dailies SET body_md = ?, edited_at = ?${setKind} WHERE id = ?`)
       .bind(trimmed, now, commentId),
     db
       .prepare("UPDATE corrections SET resolved_at = ? WHERE comment_id = ? AND resolved_at IS NULL")
@@ -111,11 +113,26 @@ export const onRequestDelete: PagesFunction<Env> = async ({ env, request, params
 
   const now = nowISO();
   const db = env.DB;
+  // A reply is a first-class tweet now: deleting it clears its own reactions, the
+  // notifications that point at it (as target reply via comment_id, or as a subject via
+  // daily_id), the corrections on it, and any child replies (reply-to-a-reply). One-level
+  // child delete is sufficient here (a reply's children are leaf replies in practice).
   await db.batch([
     db
       .prepare("UPDATE corrections SET resolved_at = ? WHERE comment_id = ? AND resolved_at IS NULL")
       .bind(now, commentId),
-    db.prepare("DELETE FROM comments WHERE id = ?").bind(commentId),
+    db
+      .prepare(
+        "DELETE FROM notifications WHERE comment_id = ? OR daily_id = ? OR comment_id IN (SELECT id FROM dailies WHERE parent_id = ?)",
+      )
+      .bind(commentId, commentId, commentId),
+    db
+      .prepare("DELETE FROM corrections WHERE comment_id IN (SELECT id FROM dailies WHERE parent_id = ?)")
+      .bind(commentId),
+    db
+      .prepare("DELETE FROM reactions WHERE daily_id = ? OR daily_id IN (SELECT id FROM dailies WHERE parent_id = ?)")
+      .bind(commentId, commentId),
+    db.prepare("DELETE FROM dailies WHERE id = ? OR parent_id = ?").bind(commentId, commentId),
   ]);
 
   return json({ ok: true, deleted: true });

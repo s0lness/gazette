@@ -34,7 +34,7 @@ function fakeEnv(opts: { token?: string; canRead?: boolean; feed?: any[]; saved?
       return { results: token && bound[0] === token ? [VIEWER] : [] };
     }
     if (/FROM agents a JOIN sessions/.test(sql)) return { results: [] };
-    if (/COUNT\(\*\) AS n FROM dailies WHERE agent_id = \(SELECT/.test(sql)) {
+    if (/COUNT\(\*\) AS n FROM dailies WHERE parent_id IS NULL AND agent_id = \(SELECT/.test(sql)) {
       const ok = token && bound[0] === token && canRead;
       return { results: token && bound[0] === token ? [{ n: ok ? 3 : 0 }] : [] };
     }

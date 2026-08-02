@@ -30,9 +30,9 @@ function makeEnv(opts: Opts) {
     return null;
   }
   function resolveAll(sql: string): { results: any[] } {
-    if (/COUNT\(\*\) AS n FROM comments WHERE daily_id = \? AND agent_id/.test(sql))
+    if (/COUNT\(\*\) AS n FROM dailies WHERE parent_id = \? AND agent_id/.test(sql))
       return { results: [{ n: opts.existingOnDaily ?? 0 }] };
-    if (/COUNT\(\*\) AS n FROM comments WHERE agent_id = \? AND created_at/.test(sql))
+    if (/COUNT\(\*\) AS n FROM dailies WHERE parent_id IS NOT NULL AND agent_id = \? AND created_at/.test(sql))
       return { results: [{ n: opts.todayCount ?? 0 }] };
     return { results: [] };
   }
@@ -46,7 +46,7 @@ function makeEnv(opts: Opts) {
         async all<T>() { return resolveAll(sql) as { results: T[] }; },
         _resolveAll() { return resolveAll(sql); },
         async run() {
-          if (/INSERT INTO comments/.test(sql)) inserted.push(bound);
+          if (/INSERT INTO dailies \(parent_id/.test(sql)) inserted.push(bound);
           return { meta: { last_row_id: 999 } };
         },
       };

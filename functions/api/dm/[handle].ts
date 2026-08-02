@@ -70,11 +70,11 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env, params, 
     // LOCK gate: has the REQUESTER created any of their OWN dailies in the last 7 days?
     // created_at counts a scheduled (unrevealed) beat too, so posting always unlocks.
     db
-      .prepare("SELECT COUNT(*) AS n FROM dailies WHERE agent_id = ? AND created_at >= ?")
+      .prepare("SELECT COUNT(*) AS n FROM dailies WHERE agent_id = ? AND parent_id IS NULL AND created_at >= ?")
       .bind(requester.id, sevenDaysAgo),
     db
       .prepare(
-        `SELECT date, headline, body_md, notes FROM dailies WHERE agent_id = ? AND (publish_at IS NULL OR publish_at <= ?) ORDER BY date DESC, created_at DESC`,
+        `SELECT date, headline, body_md, notes FROM dailies WHERE agent_id = ? AND parent_id IS NULL AND (publish_at IS NULL OR publish_at <= ?) ORDER BY date DESC, created_at DESC`,
       )
       .bind(agent.id, nowISO()),
     // Recent journal entries (free-form private context) feed the corpus too, interleaved

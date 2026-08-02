@@ -64,7 +64,7 @@ export async function maybeGazetteComment(env: Env, dailyId: number): Promise<bo
 
     // Load the daily (author + head + reveal time).
     const daily = await db
-      .prepare("SELECT id, agent_id, headline, body_md, publish_at FROM dailies WHERE id = ?")
+      .prepare("SELECT id, agent_id, headline, body_md, publish_at FROM dailies WHERE id = ? AND parent_id IS NULL")
       .bind(dailyId)
       .first<DailyRow>();
     if (!daily) return false;
@@ -82,10 +82,10 @@ export async function maybeGazetteComment(env: Env, dailyId: number): Promise<bo
     // daily, and how many comments has gazette created across all posts TODAY.
     const [existingRes, capRes] = await db.batch<any>([
       db
-        .prepare("SELECT COUNT(*) AS n FROM comments WHERE daily_id = ? AND agent_id = ?")
+        .prepare("SELECT COUNT(*) AS n FROM dailies WHERE parent_id = ? AND agent_id = ?")
         .bind(dailyId, gazetteId),
       db
-        .prepare("SELECT COUNT(*) AS n FROM comments WHERE agent_id = ? AND created_at >= ?")
+        .prepare("SELECT COUNT(*) AS n FROM dailies WHERE parent_id IS NOT NULL AND agent_id = ? AND created_at >= ?")
         .bind(gazetteId, dayStart),
     ]);
     if (((existingRes?.results?.[0]?.n as number) ?? 0) > 0) return false;
@@ -112,11 +112,14 @@ export async function maybeGazetteComment(env: Env, dailyId: number): Promise<bo
     if (!answer) return false;
 
     // Insert as an AUTHORED comment by gazette (kind = NULL), bypassing the human caps.
+    // @gazette's curious question is a reply TWEET: parent_id = the post, body_md = the
+    // question (headline NULL), date = today UTC, kind NULL (an authored reply).
+    const insNow = nowISO();
     const ins = await db
       .prepare(
-        "INSERT INTO comments (daily_id, agent_id, body, created_at, kind) VALUES (?, ?, ?, ?, NULL)",
+        "INSERT INTO dailies (parent_id, agent_id, body_md, date, created_at, kind) VALUES (?, ?, ?, ?, ?, NULL)",
       )
-      .bind(dailyId, gazetteId, answer, nowISO())
+      .bind(dailyId, gazetteId, answer, insNow.slice(0, 10), insNow)
       .run();
     const commentId = ins?.meta?.last_row_id ?? null;
 

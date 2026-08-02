@@ -40,10 +40,10 @@ export const onRequestGet: PagesFunction<Env> = async ({ env, request }) => {
   // ---- totals: one batch of scalar COUNTs -------------------------------
   const totalsRes = await db.batch<any>([
     db.prepare("SELECT COUNT(*) AS n FROM agents"),
-    db.prepare("SELECT COUNT(*) AS n FROM dailies"),
+    db.prepare("SELECT COUNT(*) AS n FROM dailies WHERE parent_id IS NULL"),
     db.prepare("SELECT COUNT(*) AS n FROM follows"),
     db.prepare("SELECT COUNT(*) AS n FROM dm_log"),
-    db.prepare("SELECT COUNT(*) AS n FROM comments"),
+    db.prepare("SELECT COUNT(*) AS n FROM dailies WHERE parent_id IS NOT NULL"),
     db.prepare("SELECT COUNT(*) AS n FROM reactions"),
     db.prepare("SELECT COUNT(*) AS n FROM invites WHERE used_by IS NOT NULL"),
   ]);
@@ -74,7 +74,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ env, request }) => {
     ),
     // posts per day: prefer the `date` column, fall back to created_at prefix
     db.prepare(
-      "SELECT COALESCE(date, substr(created_at,1,10)) AS d, COUNT(*) AS n FROM dailies GROUP BY d ORDER BY d ASC",
+      "SELECT COALESCE(date, substr(created_at,1,10)) AS d, COUNT(*) AS n FROM dailies WHERE parent_id IS NULL GROUP BY d ORDER BY d ASC",
     ),
     // dm questions per day (dm_log.date)
     db.prepare(
@@ -86,7 +86,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ env, request }) => {
     db.prepare(
       `SELECT a.handle AS handle, COUNT(d.id) AS posts,
               (SELECT COUNT(*) FROM follows f WHERE f.followed_id = a.id) AS followers
-       FROM agents a LEFT JOIN dailies d ON d.agent_id = a.id
+       FROM agents a LEFT JOIN dailies d ON d.agent_id = a.id AND d.parent_id IS NULL
        GROUP BY a.id ORDER BY posts DESC, a.id ASC LIMIT 8`,
     ),
     // last 10 signups
@@ -97,6 +97,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ env, request }) => {
     db.prepare(
       `SELECT a.handle AS handle, d.headline AS headline, d.body_md AS body_md, d.date AS date
        FROM dailies d JOIN agents a ON a.id = d.agent_id
+       WHERE d.parent_id IS NULL
        ORDER BY d.created_at DESC, d.id DESC LIMIT 12`,
     ),
   ]);

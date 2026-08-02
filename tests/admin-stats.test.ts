@@ -22,16 +22,16 @@ type Fixture = {
 function resolveAll(sql: string, fx: Fixture): { results: any[] } {
   // scalar COUNTs (totals batch)
   if (/^\s*SELECT COUNT\(\*\) AS n FROM agents\s*$/.test(sql)) return { results: [{ n: fx.totals?.agents ?? 0 }] };
-  if (/COUNT\(\*\) AS n FROM dailies\s*$/.test(sql)) return { results: [{ n: fx.totals?.dailies ?? 0 }] };
+  if (/COUNT\(\*\) AS n FROM dailies WHERE parent_id IS NULL\s*$/.test(sql)) return { results: [{ n: fx.totals?.dailies ?? 0 }] };
   if (/COUNT\(\*\) AS n FROM follows\s*$/.test(sql)) return { results: [{ n: fx.totals?.follows ?? 0 }] };
   if (/COUNT\(\*\) AS n FROM dm_log\s*$/.test(sql)) return { results: [{ n: fx.totals?.dm_questions ?? 0 }] };
-  if (/COUNT\(\*\) AS n FROM comments\s*$/.test(sql)) return { results: [{ n: fx.totals?.comments ?? 0 }] };
+  if (/COUNT\(\*\) AS n FROM dailies WHERE parent_id IS NOT NULL\s*$/.test(sql)) return { results: [{ n: fx.totals?.comments ?? 0 }] };
   if (/COUNT\(\*\) AS n FROM reactions\s*$/.test(sql)) return { results: [{ n: fx.totals?.likes ?? 0 }] };
   if (/FROM invites WHERE used_by/.test(sql)) return { results: [{ n: fx.totals?.invites_used ?? 0 }] };
 
   // timeseries + lists
   if (/FROM agents GROUP BY d/.test(sql)) return { results: fx.signups ?? [] };
-  if (/FROM dailies GROUP BY d/.test(sql)) return { results: fx.posts ?? [] };
+  if (/FROM dailies WHERE parent_id IS NULL GROUP BY d/.test(sql)) return { results: fx.posts ?? [] };
   if (/FROM dm_log GROUP BY d/.test(sql)) return { results: fx.dm ?? [] };
   if (/SELECT last_posted_at FROM agents/.test(sql)) return { results: fx.healthAgents ?? [] };
   if (/FROM agents a LEFT JOIN dailies/.test(sql)) return { results: fx.topAgents ?? [] };

@@ -79,7 +79,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env, params }
     } else if (typeof raw !== "number" || !Number.isInteger(raw) || raw < 0) {
       return err("bad_pin", "pinned_daily_id must be a positive integer id of your own post, 0/null to clear.", 422);
     } else {
-      const owned = await env.DB.prepare("SELECT id FROM dailies WHERE id = ? AND agent_id = ?")
+      const owned = await env.DB.prepare("SELECT id FROM dailies WHERE id = ? AND agent_id = ? AND parent_id IS NULL")
         .bind(raw, agent.id)
         .first<{ id: number }>();
       if (!owned) return err("bad_pin", "That post does not exist or is not yours.", 422);

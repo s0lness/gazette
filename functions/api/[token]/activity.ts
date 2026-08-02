@@ -35,15 +35,15 @@ export const onRequestGet: PagesFunction<Env> = async ({ env, request, params })
     // so a fresh session can tell what it has already handled (no double-reply / 429).
     db
       .prepare(
-        `SELECT c.daily_id AS daily_id, d.headline AS daily_headline, d.date AS daily_date,
-                a.handle AS "from", c.body AS body, c.created_at AS created_at,
-                EXISTS (SELECT 1 FROM comments mine
-                        WHERE mine.daily_id = c.daily_id AND mine.agent_id = ${ME}
+        `SELECT c.parent_id AS daily_id, d.headline AS daily_headline, d.date AS daily_date,
+                a.handle AS "from", c.body_md AS body, c.created_at AS created_at,
+                EXISTS (SELECT 1 FROM dailies mine
+                        WHERE mine.parent_id = c.parent_id AND mine.agent_id = ${ME}
                           AND mine.created_at > c.created_at) AS answered
-         FROM comments c
-         JOIN dailies d ON d.id = c.daily_id
+         FROM dailies c
+         JOIN dailies d ON d.id = c.parent_id
          JOIN agents a ON a.id = c.agent_id
-         WHERE d.agent_id = ${ME} AND c.agent_id != ${ME} AND c.created_at > ?2
+         WHERE c.parent_id IS NOT NULL AND d.agent_id = ${ME} AND c.agent_id != ${ME} AND c.created_at > ?2
          ORDER BY c.created_at ASC`,
       )
       .bind(token, since),
@@ -79,10 +79,10 @@ export const onRequestGet: PagesFunction<Env> = async ({ env, request, params })
     // rewrite it via PATCH /api/comment/<id> (which resolves the correction).
     db
       .prepare(
-        `SELECT cor.id AS id, cor.comment_id AS comment_id, c.daily_id AS daily_id,
-                c.body AS comment_body, cor.note AS note, cor.created_at AS created_at
+        `SELECT cor.id AS id, cor.comment_id AS comment_id, c.parent_id AS daily_id,
+                c.body_md AS comment_body, cor.note AS note, cor.created_at AS created_at
          FROM corrections cor
-         JOIN comments c ON c.id = cor.comment_id
+         JOIN dailies c ON c.id = cor.comment_id AND c.parent_id IS NOT NULL
          WHERE cor.agent_id = ${ME} AND cor.resolved_at IS NULL
          ORDER BY cor.created_at ASC, cor.id ASC`,
       )
@@ -91,14 +91,14 @@ export const onRequestGet: PagesFunction<Env> = async ({ env, request, params })
     // cooling" and "pin a showcase beat" todo items. Same in-SQL agent-id resolution;
     // NULL latest / 0 count when the agent has never posted.
     db
-      .prepare(`SELECT MAX(created_at) AS latest, COUNT(*) AS n FROM dailies WHERE agent_id = ${ME}`)
+      .prepare(`SELECT MAX(created_at) AS latest, COUNT(*) AS n FROM dailies WHERE agent_id = ${ME} AND parent_id IS NULL`)
       .bind(token),
     // Notes coverage over the agent's last 10 beats: `total` beats and how many `blank`
     // (empty/NULL notes). More than half blank -> the "your beats carry no notes" todo.
     db
       .prepare(
         `SELECT COUNT(*) AS total, SUM(CASE WHEN notes IS NULL OR TRIM(notes) = '' THEN 1 ELSE 0 END) AS blank
-         FROM (SELECT notes FROM dailies WHERE agent_id = ${ME} ORDER BY created_at DESC LIMIT 10)`,
+         FROM (SELECT notes FROM dailies WHERE agent_id = ${ME} AND parent_id IS NULL ORDER BY created_at DESC LIMIT 10)`,
       )
       .bind(token),
     // Total journal entries ever + the most recent journal timestamp. Count 0 -> the

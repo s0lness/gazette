@@ -174,7 +174,7 @@ export async function commentsFor(
   const placeholders = dailyIds.map(() => "?").join(",");
   const counts = await db
     .prepare(
-      `SELECT daily_id, COUNT(*) AS n FROM comments WHERE daily_id IN (${placeholders}) GROUP BY daily_id`,
+      `SELECT parent_id AS daily_id, COUNT(*) AS n FROM dailies WHERE parent_id IN (${placeholders}) GROUP BY parent_id`,
     )
     .bind(...dailyIds)
     .all<{ daily_id: number; n: number }>();
@@ -182,12 +182,13 @@ export async function commentsFor(
     const e = out.get(r.daily_id);
     if (e) e.count = r.n;
   }
-  // Latest 2 per daily: fetch recent and slice per-daily client-side.
+  // Latest 2 per daily: fetch recent and slice per-daily client-side. Replies are now
+  // reply rows in dailies (parent_id = the post id, body = body_md).
   const rs = await db
     .prepare(
-      `SELECT c.id, c.daily_id, a.handle, c.body, c.created_at
-       FROM comments c JOIN agents a ON a.id = c.agent_id
-       WHERE c.daily_id IN (${placeholders})
+      `SELECT c.id, c.parent_id AS daily_id, a.handle, c.body_md AS body, c.created_at
+       FROM dailies c JOIN agents a ON a.id = c.agent_id
+       WHERE c.parent_id IN (${placeholders})
        ORDER BY c.created_at DESC`,
     )
     .bind(...dailyIds)
@@ -240,7 +241,7 @@ export function commentCountsStmt(db: D1Reader, dailyIds: number[]) {
   const placeholders = dailyIds.map(() => "?").join(",");
   return db
     .prepare(
-      `SELECT daily_id, COUNT(*) AS n FROM comments WHERE daily_id IN (${placeholders}) GROUP BY daily_id`,
+      `SELECT parent_id AS daily_id, COUNT(*) AS n FROM dailies WHERE parent_id IN (${placeholders}) GROUP BY parent_id`,
     )
     .bind(...dailyIds);
 }
@@ -306,8 +307,8 @@ function cardJoins(viewer: string): string {
           FROM reactions WHERE kind = 'like' GROUP BY daily_id
         ) lk ON lk.daily_id = d.id
         LEFT JOIN (
-          SELECT daily_id, COUNT(*) AS comment_count, MAX(created_at) AS last_comment_at
-          FROM comments GROUP BY daily_id
+          SELECT parent_id AS daily_id, COUNT(*) AS comment_count, MAX(created_at) AS last_comment_at
+          FROM dailies WHERE parent_id IS NOT NULL GROUP BY parent_id
         ) cm ON cm.daily_id = d.id`;
 }
 // The credential-resolved JOINs (feed / saved / profile-batch / search): viewer via VIEWER_ID.
@@ -348,7 +349,7 @@ export function feedStmt(db: D1Reader, cred: ViewerCred, following: boolean): D1
          FROM dailies d
          JOIN agents a ON a.id = d.agent_id
          ${CARD_JOINS}
-         WHERE ${pub} AND EXISTS (SELECT 1 FROM follows f WHERE f.followed_id = d.agent_id AND f.follower_id = ${VIEWER_ID})
+         WHERE d.parent_id IS NULL AND ${pub} AND EXISTS (SELECT 1 FROM follows f WHERE f.followed_id = d.agent_id AND f.follower_id = ${VIEWER_ID})
          ORDER BY d.created_at DESC
          LIMIT 60`,
       ),
@@ -359,7 +360,7 @@ export function feedStmt(db: D1Reader, cred: ViewerCred, following: boolean): D1
       `SELECT ${CARD_COLUMNS}
        FROM dailies d JOIN agents a ON a.id = d.agent_id
        ${CARD_JOINS}
-       WHERE ${pub}
+       WHERE d.parent_id IS NULL AND ${pub}
        ORDER BY d.created_at DESC
        LIMIT 60`,
     ),
@@ -376,7 +377,7 @@ export function savedStmt(db: D1Reader, cred: ViewerCred): D1PreparedStatement {
        JOIN dailies d ON d.id = s.daily_id
        JOIN agents a ON a.id = d.agent_id
        ${CARD_JOINS}
-       WHERE s.agent_id = ${VIEWER_ID} AND ${publishedPredicate("d", "?3")}
+       WHERE s.agent_id = ${VIEWER_ID} AND d.parent_id IS NULL AND ${publishedPredicate("d", "?3")}
        ORDER BY s.created_at DESC
        LIMIT 100`,
     )
@@ -428,9 +429,9 @@ export async function attachCommentPreviews(
   // per card afterwards so the thread reads naturally (matching commentsFor).
   const rs = await db
     .prepare(
-      `SELECT c.id, c.daily_id, a.handle, c.body, c.created_at, c.kind, c.reply_to
-       FROM comments c JOIN agents a ON a.id = c.agent_id
-       WHERE c.daily_id IN (${placeholders})
+      `SELECT c.id, c.parent_id AS daily_id, a.handle, c.body_md AS body, c.created_at, c.kind, c.reply_to
+       FROM dailies c JOIN agents a ON a.id = c.agent_id
+       WHERE c.parent_id IN (${placeholders})
        ORDER BY c.created_at DESC, c.id DESC`,
     )
     .bind(...ids)
@@ -551,7 +552,7 @@ export async function getAgentByHandle(db: D1Reader, handle: string): Promise<Ag
 
 export async function getDailyDates(db: D1Database, agentId: number): Promise<Set<string>> {
   const rs = await db
-    .prepare(`SELECT date FROM dailies WHERE agent_id = ? AND ${publishedPredicate("")}`)
+    .prepare(`SELECT date FROM dailies WHERE agent_id = ? AND parent_id IS NULL AND ${publishedPredicate("")}`)
     .bind(agentId, nowISO())
     .all<{ date: string }>();
   return new Set((rs.results ?? []).map((r) => r.date));
@@ -568,7 +569,7 @@ export async function computeStreak(db: D1Database, agentId: number): Promise<nu
 // dailies-date reads instead (assembleProfile / buildAgentsListing).
 export async function dailiesCount(db: D1Database, agentId: number): Promise<number> {
   const row = await db
-    .prepare("SELECT COUNT(*) AS n FROM dailies WHERE agent_id = ?")
+    .prepare("SELECT COUNT(*) AS n FROM dailies WHERE agent_id = ? AND parent_id IS NULL")
     .bind(agentId)
     .first<{ n: number }>();
   return row?.n ?? 0;
@@ -646,7 +647,7 @@ export async function publicAgent(db: D1Database, a: AgentRow, viewerId?: number
 export function agentsListingStmts(db: D1Reader, cred: ViewerCred): D1PreparedStatement[] {
   return [
     db.prepare("SELECT * FROM agents ORDER BY last_posted_at DESC NULLS LAST, created_at DESC"),
-    db.prepare(`SELECT agent_id, date FROM dailies WHERE ${publishedPredicate("")}`).bind(nowISO()),
+    db.prepare(`SELECT agent_id, date FROM dailies WHERE parent_id IS NULL AND ${publishedPredicate("")}`).bind(nowISO()),
     db
       .prepare(`SELECT followed_id FROM follows WHERE follower_id = ${VIEWER_ID}`)
       .bind(cred.token, cred.sid, cred.now),
@@ -800,7 +801,8 @@ export function searchStmts(db: D1Reader, q: string, cred: ViewerCred): D1Prepar
          FROM dailies d
          JOIN agents a ON a.id = d.agent_id
          ${CARD_JOINS}
-         WHERE (${like("COALESCE(d.headline, '')")} OR ${like("COALESCE(d.body_md, '')")})
+         WHERE d.parent_id IS NULL
+           AND (${like("COALESCE(d.headline, '')")} OR ${like("COALESCE(d.body_md, '')")})
            AND ${publishedPredicate("d", "?3")}
          ORDER BY d.created_at DESC
          LIMIT ${SEARCH_POST_LIMIT}`,
@@ -913,7 +915,7 @@ export async function publicAgents(db: D1Reader, rows: AgentRow[], viewerId?: nu
   const ph = ids.map(() => "?").join(",");
   const stmts = [
     db
-      .prepare(`SELECT agent_id, date FROM dailies WHERE agent_id IN (${ph}) AND ${publishedPredicate("")}`)
+      .prepare(`SELECT agent_id, date FROM dailies WHERE agent_id IN (${ph}) AND parent_id IS NULL AND ${publishedPredicate("")}`)
       .bind(...ids, nowISO()),
   ];
   if (viewerId != null) {
@@ -1004,7 +1006,7 @@ export function profileDailiesStmt(db: D1Reader, agentId: number, cred: ViewerCr
        FROM dailies d
        JOIN agents a ON a.id = d.agent_id
        ${CARD_JOINS}
-       WHERE d.agent_id = ?4 AND ${publishedPredicate("d", "?3")}
+       WHERE d.agent_id = ?4 AND d.parent_id IS NULL AND ${publishedPredicate("d", "?3")}
        ORDER BY d.date DESC, d.created_at DESC`,
     )
     .bind(cred.token, cred.sid, cred.now, agentId);
@@ -1177,7 +1179,7 @@ export function resolvedProfileDailiesStmt(
        FROM dailies d
        JOIN agents a ON a.id = d.agent_id
        ${cardJoins("?1")}
-       WHERE d.agent_id = ?2 AND ${publishedPredicate("d", "?3")}
+       WHERE d.agent_id = ?2 AND d.parent_id IS NULL AND ${publishedPredicate("d", "?3")}
        ORDER BY d.date DESC, d.created_at DESC`,
     )
     .bind(viewerId, agentId, nowISO());
@@ -1201,7 +1203,7 @@ export async function profileForShell(
 ) {
   const [gateRes, agentRes] = await timed(t, "gate", () =>
     db.batch<any>([
-      db.prepare("SELECT COUNT(*) AS n FROM dailies WHERE agent_id = ?").bind(viewerId),
+      db.prepare("SELECT COUNT(*) AS n FROM dailies WHERE agent_id = ? AND parent_id IS NULL").bind(viewerId),
       db.prepare("SELECT * FROM agents WHERE handle = ?").bind(handle),
     ]),
   );

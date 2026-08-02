@@ -16,7 +16,7 @@ function makeDb(commentRows: any[], captured: { ids?: number[] } = {}) {
       const stmt: any = {
         bind(...a: unknown[]) { bound = a; return stmt; },
         async all() {
-          if (/FROM comments c JOIN agents a/.test(sql)) {
+          if (/FROM dailies c JOIN agents a/.test(sql)) {
             captured.ids = bound as number[];
             return { results: commentRows };
           }

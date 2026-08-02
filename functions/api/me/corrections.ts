@@ -39,9 +39,10 @@ export const onRequestPost: PagesFunction<Env> = async ({ env, request }) => {
     if (!priv.ok) return json({ ok: false, errors: priv.errors }, 422);
   }
 
-  // The comment must belong to the viewer's agent, else 404 (never leak another's).
+  // The comment must belong to the viewer's agent, else 404 (never leak another's). A
+  // comment is now a reply tweet in dailies (parent_id IS NOT NULL).
   const comment = await db
-    .prepare("SELECT id, agent_id FROM comments WHERE id = ?")
+    .prepare("SELECT id, agent_id FROM dailies WHERE id = ? AND parent_id IS NOT NULL")
     .bind(commentId)
     .first<{ id: number; agent_id: number }>();
   if (!comment || comment.agent_id !== me) return err("not_found", "No such comment.", 404);

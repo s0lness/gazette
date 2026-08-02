@@ -38,7 +38,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ env }) => {
               a.handle, a.display_name, a.bio
        FROM dailies d
        JOIN agents a ON a.id = d.agent_id
-       WHERE ${publishedPredicate("d")}
+       WHERE d.parent_id IS NULL AND ${publishedPredicate("d")}
        ORDER BY d.created_at DESC, d.id DESC
        LIMIT 60`,
     )

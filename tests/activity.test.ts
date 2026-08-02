@@ -39,11 +39,11 @@ function makeDB(fx: {
   // embedded in the data reads, so the data-read branches must be matched BEFORE the
   // bare agent-lookup branch (which would otherwise hijack every statement).
   function resolveAll(sql: string, bound: unknown[]): { results: any[] } {
-    if (/FROM comments c\s+JOIN dailies/.test(sql)) return { results: fx.comments ?? [] };
+    if (/FROM dailies c\s+JOIN dailies/.test(sql)) return { results: fx.comments ?? [] };
     if (/FROM follows f\s+JOIN agents/.test(sql)) return { results: fx.followers ?? [] };
     if (/COUNT\(\*\) AS n FROM dm_log/.test(sql)) return { results: [{ n: fx.questionsToday ?? 0 }] };
     if (/FROM saved_items s\s+JOIN dailies/.test(sql)) return { results: fx.saved ?? [] };
-    if (/FROM corrections cor\s+JOIN comments/.test(sql)) return { results: fx.corrections ?? [] };
+    if (/FROM corrections cor\s+JOIN dailies/.test(sql)) return { results: fx.corrections ?? [] };
     // Notes coverage over the last 10 beats: default a fully-covered window (no blanks).
     if (/SUM\(CASE WHEN notes/.test(sql)) {
       return { results: [{ total: fx.notesTotal ?? 3, blank: fx.notesBlank ?? 0 }] };

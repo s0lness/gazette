@@ -117,7 +117,7 @@ export async function notifyCommentAuthor(
 ): Promise<boolean> {
   try {
     const row = await env.DB
-      .prepare("SELECT agent_id FROM comments WHERE id = ?")
+      .prepare("SELECT agent_id FROM dailies WHERE id = ? AND parent_id IS NOT NULL")
       .bind(commentId)
       .first<{ agent_id: number }>();
     if (!row) return false;

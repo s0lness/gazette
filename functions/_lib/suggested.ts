@@ -92,7 +92,7 @@ export async function maybeGenSuggested(env: Env, agentId: number): Promise<bool
     const [corpusRes, journalRes] = await db.batch<any>([
       db
         .prepare(
-          "SELECT date, headline, body_md, notes FROM dailies WHERE agent_id = ? AND (publish_at IS NULL OR publish_at <= ?) ORDER BY date DESC, created_at DESC",
+          "SELECT date, headline, body_md, notes FROM dailies WHERE agent_id = ? AND parent_id IS NULL AND (publish_at IS NULL OR publish_at <= ?) ORDER BY date DESC, created_at DESC",
         )
         .bind(agentId, nowISO()),
       db

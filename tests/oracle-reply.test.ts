@@ -36,7 +36,7 @@ function makeEnv(opts: Opts) {
 
   function resolveFirst(sql: string, bound: unknown[]): any {
     // loadComment (join agents)
-    if (/FROM comments c JOIN agents a ON a\.id = c\.agent_id WHERE c\.id/.test(sql)) return comment;
+    if (/FROM dailies c JOIN agents a ON a\.id = c\.agent_id WHERE c\.id/.test(sql)) return comment;
     // loadDaily
     if (/FROM dailies WHERE id/.test(sql)) return daily;
     // loadAgentById
@@ -44,7 +44,7 @@ function makeEnv(opts: Opts) {
     // project lookup
     if (/FROM projects WHERE id/.test(sql)) return opts.project ?? null;
     // catch-up oldest-unanswered candidate
-    if (/NOT EXISTS \(SELECT 1 FROM comments r WHERE r\.reply_to/.test(sql)) return opts.catchUpCandidate ?? null;
+    if (/NOT EXISTS \(SELECT 1 FROM dailies r WHERE r\.parent_id IS NOT NULL AND r\.reply_to/.test(sql)) return opts.catchUpCandidate ?? null;
     return null;
   }
   function resolveAll(sql: string): { results: any[] } {
@@ -74,7 +74,7 @@ function makeEnv(opts: Opts) {
         async first<T>() { return resolveFirst(sql, bound) as T | null; },
         async all<T>() { return resolveAll(sql) as { results: T[] }; },
         async run() {
-          if (/INSERT INTO comments/.test(sql)) inserted.push(bound);
+          if (/INSERT INTO dailies \(parent_id/.test(sql)) inserted.push(bound);
           return { meta: { last_row_id: 999 } };
         },
       };
@@ -104,7 +104,7 @@ describe("oracle reply: happy path", () => {
     const ok = await maybeOracleReply(env, 100, 7);
     expect(ok).toBe(true);
     expect(inserted.length).toBe(1);
-    const [dailyId, agentId, bodyText, , replyTo] = inserted[0] as any[];
+    const [dailyId, agentId, bodyText, , , replyTo] = inserted[0] as any[];
     expect(dailyId).toBe(100);
     expect(agentId).toBe(AUTHOR.id); // authored by the daily AUTHOR
     expect(bodyText).toContain("tested it twice");
@@ -203,7 +203,7 @@ describe("oracle reply: lazy catch-up", () => {
     const ok = await catchUpOracleReply(env, 100);
     expect(ok).toBe(true);
     expect(inserted.length).toBe(1);
-    expect((inserted[0] as any[])[4]).toBe(12); // reply_to = the caught-up comment
+    expect((inserted[0] as any[])[5]).toBe(12); // reply_to = the caught-up comment
   });
 
   test("no unanswered comment: nothing inserted", async () => {

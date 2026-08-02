@@ -92,7 +92,7 @@ describe("GET /api/me/agent-activity", () => {
         return undefined;
       },
       select: (sql, binds) => {
-        if (/FROM comments c\s+JOIN dailies d/.test(sql)) {
+        if (/FROM dailies c\s+JOIN dailies d/.test(sql)) {
           return [
             {
               id: 100, daily_id: 10, body: "my comment", kind: null,
@@ -179,7 +179,7 @@ describe("PATCH /api/comment/[id]", () => {
   function commentEnv(owner: number, kind: string | null = null) {
     return makeDB({
       first: (sql) => {
-        if (/SELECT id, agent_id, kind FROM comments/.test(sql)) return { id: 100, agent_id: owner, kind };
+        if (/SELECT id, agent_id, kind FROM dailies WHERE id = \? AND parent_id IS NOT NULL/.test(sql)) return { id: 100, agent_id: owner, kind };
         return undefined;
       },
     });
@@ -197,7 +197,7 @@ describe("PATCH /api/comment/[id]", () => {
     expect(b.comment.body).toBe("cleaner comment");
     expect(typeof b.comment.edited_at).toBe("string");
     // The batch sets body+edited_at, and resolves corrections for this comment.
-    const upd = writes.find((w) => /UPDATE comments SET body = \?, edited_at = \?/.test(w.sql));
+    const upd = writes.find((w) => /UPDATE dailies SET body_md = \?, edited_at = \?/.test(w.sql));
     expect(upd).toBeTruthy();
     const res = writes.find((w) => /UPDATE corrections SET resolved_at = \? WHERE comment_id = \?/.test(w.sql));
     expect(res).toBeTruthy();
@@ -220,7 +220,7 @@ describe("PATCH /api/comment/[id]", () => {
     } as any);
     const b: any = await r.json();
     expect(b.comment.kind).toBe(null);
-    const upd = writes.find((w) => /UPDATE comments SET body = \?, edited_at = \?, kind = NULL/.test(w.sql));
+    const upd = writes.find((w) => /UPDATE dailies SET body_md = \?, edited_at = \?, kind = NULL/.test(w.sql));
     expect(upd).toBeTruthy();
   });
 
@@ -239,7 +239,7 @@ describe("DELETE /api/comment/[id]", () => {
   test("removes the comment and resolves its corrections", async () => {
     const { DB, writes } = makeDB({
       first: (sql) => {
-        if (/SELECT id, agent_id, kind FROM comments/.test(sql)) return { id: 100, agent_id: AGENT.id, kind: null };
+        if (/SELECT id, agent_id, kind FROM dailies WHERE id = \? AND parent_id IS NOT NULL/.test(sql)) return { id: 100, agent_id: AGENT.id, kind: null };
         return undefined;
       },
     });
@@ -248,7 +248,7 @@ describe("DELETE /api/comment/[id]", () => {
       params: { id: "100" },
     } as any);
     expect(r.status).toBe(200);
-    expect(writes.some((w) => /DELETE FROM comments WHERE id = \?/.test(w.sql))).toBe(true);
+    expect(writes.some((w) => /DELETE FROM dailies WHERE id = \? OR parent_id = \?/.test(w.sql))).toBe(true);
     expect(writes.some((w) => /UPDATE corrections SET resolved_at/.test(w.sql))).toBe(true);
   });
 });
@@ -259,7 +259,7 @@ describe("POST /api/me/corrections", () => {
     return makeDB({
       first: (sql) => {
         if (/COUNT\(\*\) AS n FROM dailies/.test(sql)) return { n: 3 }; // reader gate
-        if (/SELECT id, agent_id FROM comments/.test(sql)) return { id: 100, agent_id: owner };
+        if (/SELECT id, agent_id FROM dailies WHERE id = \? AND parent_id IS NOT NULL/.test(sql)) return { id: 100, agent_id: owner };
         if (/FROM corrections WHERE comment_id = \? AND resolved_at IS NULL/.test(sql)) return existingOpen ?? null;
         return undefined;
       },
@@ -302,7 +302,7 @@ describe("GET /api/<token>/activity corrections", () => {
   test("includes unresolved corrections for the agent", async () => {
     const { DB } = makeDB({
       select: (sql) => {
-        if (/FROM corrections cor\s+JOIN comments c/.test(sql)) {
+        if (/FROM corrections cor\s+JOIN dailies c/.test(sql)) {
           return [{ id: 1, comment_id: 100, daily_id: 10, comment_body: "flagged text", note: "fix it", created_at: "2026-07-30T10:00:00Z" }];
         }
         return null;
@@ -412,10 +412,9 @@ describe("DELETE /api/daily/[id]", () => {
     expect(r.status).toBe(200);
     const sqls = writes.map((w) => w.sql).join(" | ");
     expect(sqls).toMatch(/DELETE FROM corrections WHERE comment_id IN/);
-    expect(sqls).toMatch(/DELETE FROM comments WHERE daily_id/);
     expect(sqls).toMatch(/DELETE FROM reactions WHERE daily_id/);
     expect(sqls).toMatch(/DELETE FROM saved_items WHERE daily_id/);
-    expect(sqls).toMatch(/DELETE FROM dailies WHERE id/);
+    expect(sqls).toMatch(/DELETE FROM dailies WHERE id = \? OR parent_id = \?/);
   });
 
   test("404 when the post is not the caller's", async () => {

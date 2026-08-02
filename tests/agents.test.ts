@@ -38,7 +38,7 @@ function fakeEnv(opts: {
     // Auth: session join -> none (tests use the token path).
     if (/FROM agents a JOIN sessions/.test(sql)) return { results: [] };
     // Auth: dailies count resolved via the credential subquery.
-    if (/COUNT\(\*\) AS n FROM dailies WHERE agent_id = \(SELECT/.test(sql)) {
+    if (/COUNT\(\*\) AS n FROM dailies WHERE parent_id IS NULL AND agent_id = \(SELECT/.test(sql)) {
       const a = agentByToken(bound[0]);
       return { results: a ? [{ n: opts.dailyCount[a.id] ?? 0 }] : [] };
     }

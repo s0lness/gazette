@@ -69,10 +69,10 @@ function makeDB(store: ReturnType<typeof makeStore>) {
             const [aid, date] = bound as [number, string];
             return { n: store.rows.filter((r) => r.agent_id === aid && r.date === date).length } as T;
           }
-          // dailiesCount (read-gate canRead): unfiltered COUNT of the agent's rows.
-          if (/COUNT\(\*\) AS n FROM dailies WHERE agent_id = \?$/.test(sql)) {
+          // dailiesCount (read-gate canRead): COUNT of the agent's POSTS (parent_id IS NULL).
+          if (/COUNT\(\*\) AS n FROM dailies WHERE agent_id = \? AND parent_id IS NULL$/.test(sql)) {
             const aid = bound[0] as number;
-            return { n: store.rows.filter((r) => r.agent_id === aid).length } as T;
+            return { n: store.rows.filter((r) => r.agent_id === aid && r.parent_id == null).length } as T;
           }
           // permalink single row by id (with the publish filter).
           if (/FROM dailies d\s+JOIN agents a[\s\S]*WHERE d\.id = \? AND \(d\.publish_at/.test(sql)) {
@@ -89,12 +89,12 @@ function makeDB(store: ReturnType<typeof makeStore>) {
         },
         async all<T>(): Promise<{ results: T[] }> {
           // computeStreak / getDailyDates: distinct dates, filtered by publish_at.
-          if (/SELECT date FROM dailies WHERE agent_id = \? AND \(publish_at/.test(sql)) {
+          if (/SELECT date FROM dailies WHERE agent_id = \? AND parent_id IS NULL AND \(publish_at/.test(sql)) {
             const [aid, now] = bound as [number, string];
-            return { results: store.rows.filter((r) => r.agent_id === aid && published(r, now)).map((r) => ({ date: r.date })) } as any;
+            return { results: store.rows.filter((r) => r.agent_id === aid && r.parent_id == null && published(r, now)).map((r) => ({ date: r.date })) } as any;
           }
           // showcase public join read (newest-first, publish-filtered).
-          if (/FROM dailies d\s+JOIN agents a[\s\S]*WHERE \(d\.publish_at IS NULL OR d\.publish_at <= \?\)/.test(sql) && /LIMIT 60/.test(sql)) {
+          if (/FROM dailies d\s+JOIN agents a[\s\S]*WHERE d\.parent_id IS NULL AND \(d\.publish_at IS NULL OR d\.publish_at <= \?\)/.test(sql) && /LIMIT 60/.test(sql)) {
             const now = bound[0] as string;
             const rs = store.rows
               .filter((r) => published(r, now))
@@ -106,10 +106,10 @@ function makeDB(store: ReturnType<typeof makeStore>) {
             return { results: rs } as any;
           }
           // corpus SELECT (global oracle): date, headline, body_md, notes, publish-filtered.
-          if (/SELECT date, headline, body_md, notes FROM dailies WHERE agent_id = \? AND \(publish_at/.test(sql)) {
+          if (/SELECT date, headline, body_md, notes FROM dailies WHERE agent_id = \? AND parent_id IS NULL AND \(publish_at/.test(sql)) {
             const [aid, now] = bound as [number, string];
             const rs = store.rows
-              .filter((r) => r.agent_id === aid && published(r, now))
+              .filter((r) => r.agent_id === aid && r.parent_id == null && published(r, now))
               .sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
             return { results: rs.map((r) => ({ date: r.date, headline: r.headline, body_md: r.body_md, notes: r.notes })) } as any;
           }
@@ -117,9 +117,9 @@ function makeDB(store: ReturnType<typeof makeStore>) {
           if (/COUNT\(\*\) AS n FROM dm_log/.test(sql)) return { results: [{ n: 0 }] } as any;
           // requester recency (LOCK gate): count the agent's own dailies created since
           // the cutoff. The seeded rows keep the requester an active poster.
-          if (/COUNT\(\*\) AS n FROM dailies WHERE agent_id = \? AND created_at >=/.test(sql)) {
+          if (/COUNT\(\*\) AS n FROM dailies WHERE agent_id = \? AND parent_id IS NULL AND created_at >=/.test(sql)) {
             const [aid, cutoff] = bound as [number, string];
-            return { results: [{ n: store.rows.filter((r) => r.agent_id === aid && r.created_at >= cutoff).length }] } as any;
+            return { results: [{ n: store.rows.filter((r) => r.agent_id === aid && r.parent_id == null && r.created_at >= cutoff).length }] } as any;
           }
           // Context-starvation reads (authMember db.batch): healthy requester so the
           // reader gate never trips on starvation in these tests.

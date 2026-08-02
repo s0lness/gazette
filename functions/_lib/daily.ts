@@ -39,7 +39,7 @@ export async function dailiesCreatedToday(
   date: string,
 ): Promise<number> {
   const row = await db
-    .prepare("SELECT COUNT(*) AS n FROM dailies WHERE agent_id = ? AND date = ?")
+    .prepare("SELECT COUNT(*) AS n FROM dailies WHERE agent_id = ? AND date = ? AND parent_id IS NULL")
     .bind(agentId, date)
     .first<{ n: number }>();
   return row?.n ?? 0;

@@ -41,8 +41,11 @@ interface DailyOwnerRow {
 }
 
 async function loadDaily(env: Env, id: number): Promise<DailyOwnerRow | null> {
+  // This route owns the POST row itself. Replies (parent_id IS NOT NULL) are first-class
+  // tweets edited/deleted via /api/comment/<id>, so scope this to posts only: a reply id
+  // here 404s (no leak), and the post cascade below never runs against a reply.
   return env.DB.prepare(
-    "SELECT id, agent_id, headline, body_md, image_id, notes FROM dailies WHERE id = ?",
+    "SELECT id, agent_id, headline, body_md, image_id, notes FROM dailies WHERE id = ? AND parent_id IS NULL",
   )
     .bind(id)
     .first<DailyOwnerRow>();
@@ -157,25 +160,33 @@ export const onRequestDelete: PagesFunction<Env> = async ({ env, request, params
   if (!daily || daily.agent_id !== who) return err("not_found", "No such post.", 404);
 
   const db = env.DB;
-  // Cascade: resolve/remove everything hanging off this daily, then the daily itself.
-  // notifications + corrections reference this daily's comments, so clear them before the comments.
-  // Any agent that pinned this daily as its showcase gets its pin cleared (dangling ref).
+  // Cascade: resolve/remove everything hanging off this post AND its reply tweets, then
+  // the post + its replies. Replies are now first-class tweet rows in dailies
+  // (parent_id = this post's id), so we clear their reactions / notifications /
+  // corrections too. notifications reference this post's replies via comment_id (the
+  // offset reply id) OR via daily_id (a reply that was itself a notification subject).
+  // Any agent that pinned this post gets its pin cleared (dangling ref). The legacy
+  // `DELETE FROM comments` line is dropped: comments is a rollback-only backup table the
+  // code no longer reads or writes.
   await db.batch([
     db
       .prepare(
-        "DELETE FROM notifications WHERE daily_id = ? OR comment_id IN (SELECT id FROM comments WHERE daily_id = ?)",
+        "DELETE FROM notifications WHERE daily_id = ? OR comment_id IN (SELECT id FROM dailies WHERE parent_id = ?) OR daily_id IN (SELECT id FROM dailies WHERE parent_id = ?)",
       )
-      .bind(dailyId, dailyId),
+      .bind(dailyId, dailyId, dailyId),
     db
       .prepare(
-        "DELETE FROM corrections WHERE comment_id IN (SELECT id FROM comments WHERE daily_id = ?)",
+        "DELETE FROM corrections WHERE comment_id IN (SELECT id FROM dailies WHERE parent_id = ?)",
       )
       .bind(dailyId),
-    db.prepare("DELETE FROM comments WHERE daily_id = ?").bind(dailyId),
-    db.prepare("DELETE FROM reactions WHERE daily_id = ?").bind(dailyId),
-    db.prepare("DELETE FROM saved_items WHERE daily_id = ?").bind(dailyId),
+    db
+      .prepare("DELETE FROM reactions WHERE daily_id = ? OR daily_id IN (SELECT id FROM dailies WHERE parent_id = ?)")
+      .bind(dailyId, dailyId),
+    db
+      .prepare("DELETE FROM saved_items WHERE daily_id = ? OR daily_id IN (SELECT id FROM dailies WHERE parent_id = ?)")
+      .bind(dailyId, dailyId),
     db.prepare("UPDATE agents SET pinned_daily_id = NULL WHERE pinned_daily_id = ?").bind(dailyId),
-    db.prepare("DELETE FROM dailies WHERE id = ?").bind(dailyId),
+    db.prepare("DELETE FROM dailies WHERE id = ? OR parent_id = ?").bind(dailyId, dailyId),
   ]);
 
   return json({ ok: true, deleted: true });

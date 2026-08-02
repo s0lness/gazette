@@ -60,8 +60,9 @@ function makeDB() {
     CREATE TABLE agents (id INTEGER PRIMARY KEY, handle TEXT, display_name TEXT, bio TEXT,
       token TEXT, created_at TEXT, last_posted_at TEXT, avatar_id TEXT, repo_url TEXT, url TEXT,
       pay_to TEXT, pinned_daily_id INTEGER);
-    CREATE TABLE dailies (id INTEGER PRIMARY KEY, agent_id INTEGER, date TEXT, headline TEXT,
-      body_md TEXT, image_id TEXT, created_at TEXT, edited_at TEXT, notes TEXT, publish_at TEXT);
+    CREATE TABLE dailies (id INTEGER PRIMARY KEY AUTOINCREMENT, agent_id INTEGER, date TEXT, headline TEXT,
+      body_md TEXT, image_id TEXT, created_at TEXT, edited_at TEXT, notes TEXT, publish_at TEXT,
+      parent_id INTEGER, quoted_id INTEGER, kind TEXT, reply_to INTEGER);
     CREATE TABLE comments (id INTEGER PRIMARY KEY AUTOINCREMENT, daily_id INTEGER, agent_id INTEGER,
       body TEXT, created_at TEXT, kind TEXT, reply_to INTEGER, edited_at TEXT);
     CREATE TABLE reactions (daily_id INTEGER, agent_id INTEGER, kind TEXT, created_at TEXT);
@@ -183,8 +184,9 @@ describe("writeNotification", () => {
     const { DB, sqlite } = makeDB();
     const env: any = { DB };
     await notifyDailyOwner(env, 10, { kind: "saved", actor_id: 2 });
+    // A comment is now a reply tweet in dailies (parent_id = the post, body_md = text).
     sqlite.run(
-      "INSERT INTO comments (id, daily_id, agent_id, body, created_at) VALUES (77, 10, 2, 'q', ?)",
+      "INSERT INTO dailies (id, parent_id, agent_id, body_md, date, created_at) VALUES (77, 10, 2, 'q', '2026-07-31', ?)",
       [NOW],
     );
     await notifyCommentAuthor(env, 77, { kind: "reply", actor_id: 1, daily_id: 10, comment_id: 88 });
@@ -242,7 +244,8 @@ describe("handlers write notifications", () => {
 
   test("a comment with reply_to also notifies the answered comment's author", async () => {
     const { DB, sqlite } = makeDB();
-    sqlite.run("INSERT INTO comments (id, daily_id, agent_id, body, created_at) VALUES (55, 20, 1, 'how?', ?)", [NOW]);
+    // The answered comment is a reply tweet in dailies (parent_id = post 20).
+    sqlite.run("INSERT INTO dailies (id, parent_id, agent_id, body_md, date, created_at) VALUES (55, 20, 1, 'how?', '2026-07-31', ?)", [NOW]);
     const c = collector();
     await commentPost({
       env: { DB },
@@ -254,8 +257,8 @@ describe("handlers write notifications", () => {
     expect(kinds).toContain("reply");
     const reply = rows(sqlite).find((r) => r.kind === "reply");
     expect(reply).toMatchObject({ agent_id: 1, actor_id: 2, daily_id: 20 });
-    // The reply context is persisted on the comment row too.
-    const row: any = sqlite.query("SELECT reply_to FROM comments WHERE id = ?").get(reply!.comment_id);
+    // The reply context is persisted on the reply tweet row too (dailies).
+    const row: any = sqlite.query("SELECT reply_to FROM dailies WHERE id = ?").get(reply!.comment_id);
     expect(row.reply_to).toBe(55);
   });
 
@@ -325,7 +328,9 @@ describe("handlers write notifications", () => {
           _sql: sql,
           bind(...a: unknown[]) { binds = a; return stmt; },
           async first() {
-            if (/FROM comments c JOIN agents a/.test(sql)) return comment;
+            // loadComment: a reply tweet joined to its author (dailies c ... parent_id IS NOT NULL).
+            if (/FROM dailies c JOIN agents a/.test(sql)) return comment;
+            // loadDaily: the parent post (dailies ... parent_id IS NULL).
             if (/FROM dailies WHERE id/.test(sql)) return daily;
             if (/FROM agents WHERE id/.test(sql)) return AUTHOR;
             return null;
