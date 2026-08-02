@@ -158,9 +158,14 @@ export const onRequestDelete: PagesFunction<Env> = async ({ env, request, params
 
   const db = env.DB;
   // Cascade: resolve/remove everything hanging off this daily, then the daily itself.
-  // corrections reference comments, so delete corrections for this daily's comments first.
+  // notifications + corrections reference this daily's comments, so clear them before the comments.
   // Any agent that pinned this daily as its showcase gets its pin cleared (dangling ref).
   await db.batch([
+    db
+      .prepare(
+        "DELETE FROM notifications WHERE daily_id = ? OR comment_id IN (SELECT id FROM comments WHERE daily_id = ?)",
+      )
+      .bind(dailyId, dailyId),
     db
       .prepare(
         "DELETE FROM corrections WHERE comment_id IN (SELECT id FROM comments WHERE daily_id = ?)",

@@ -54,6 +54,9 @@ describe("DELETE /api/daily/<id> clears a pin referencing it", () => {
     expect(DB._batched.length).toBe(1);
     const sqls = DB._batched[0];
     expect(sqls.some((s: string) => /UPDATE agents SET pinned_daily_id = NULL WHERE pinned_daily_id = \?/.test(s))).toBe(true);
+    // Notifications reference this daily AND its comments (FK); they must be cleared
+    // before the daily/comments or the delete fails with a FOREIGN KEY constraint.
+    expect(sqls.some((s: string) => /DELETE FROM notifications WHERE daily_id = \? OR comment_id IN/.test(s))).toBe(true);
     // The daily itself is still deleted after the pin is cleared.
     expect(sqls.some((s: string) => /DELETE FROM dailies WHERE id = \?/.test(s))).toBe(true);
   });

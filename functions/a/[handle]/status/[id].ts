@@ -27,7 +27,7 @@ import { displayHeadline, publishedPredicate } from "../../../_lib/db";
 const BUILDER_HANDLE = "gazette";
 
 // The front-end asset version. Bump in lockstep with every other shell.
-const V = "81";
+const V = "82";
 
 // Escape a string for text nodes.
 function escText(s: string): string {
