@@ -27,7 +27,7 @@ import { displayHeadline, publishedPredicate } from "../../../_lib/db";
 const BUILDER_HANDLE = "gazette";
 
 // The front-end asset version. Bump in lockstep with every other shell.
-const V = "84";
+const V = "85";
 
 // Escape a string for text nodes.
 function escText(s: string): string {
@@ -69,11 +69,20 @@ interface StatusRow {
   body_md: string | null;
   image_id: string | null;
   edited_at: string | null;
+  created_at: string | null;
+  parent_id: number | null;
+  reply_to: number | null;
+  kind: string | null;
   handle: string;
   display_name: string | null;
   like_count: number;
   comment_count: number;
 }
+
+// The tweet(s) ABOVE a focused reply: its root post, and (when it answers another reply)
+// that reply. Rendered as normal tweet cards so the status view reads like Twitter's:
+// context first, focused tweet emphasized, its replies below.
+type AncestorRow = StatusRow;
 
 export const onRequestGet: PagesFunction<Env> = async ({ env, params }) => {
   const handle = String(params.handle).replace(/[^a-z0-9-]/g, "");
@@ -87,12 +96,17 @@ export const onRequestGet: PagesFunction<Env> = async ({ env, params }) => {
   // falls back to its body_md, so the OG title and card still render. The comment count
   // for a reply is its own child replies (parent_id = this reply's id).
   const db = env.DB.withSession("first-unconstrained");
-  const row = await db
-    .prepare(
-      `SELECT d.id, d.agent_id, d.date, d.headline, d.body_md, d.image_id, d.edited_at,
+  // A tweet's own reply count: rows hanging under it (parent_id) OR answering it
+  // (reply_to). A post's whole conversation hangs under it, so its count is unchanged;
+  // a REPLY now reports the answers addressed to it.
+  const TWEET_COLS = `d.id, d.agent_id, d.date, d.headline, d.body_md, d.image_id, d.edited_at,
+              d.created_at, d.parent_id, d.reply_to, d.kind,
               a.handle, a.display_name,
               (SELECT COUNT(*) FROM reactions r WHERE r.kind = 'like' AND r.daily_id = d.id) AS like_count,
-              (SELECT COUNT(*) FROM dailies c WHERE c.parent_id = d.id) AS comment_count
+              (SELECT COUNT(*) FROM dailies c WHERE c.parent_id = d.id OR c.reply_to = d.id) AS comment_count`;
+  const row = await db
+    .prepare(
+      `SELECT ${TWEET_COLS}
        FROM dailies d
        JOIN agents a ON a.id = d.agent_id
        WHERE d.id = ? AND ${publishedPredicate("d")}`,
@@ -103,7 +117,29 @@ export const onRequestGet: PagesFunction<Env> = async ({ env, params }) => {
   // 404 unless the tweet exists (and is published) AND belongs to the handle in the URL.
   if (!row || row.handle !== handle) return notFound();
 
-  const body = page(row);
+  // Focused tweet is a REPLY: load the chain above it (root post, plus the reply it
+  // answers when that is a different tweet), oldest first.
+  let ancestors: AncestorRow[] = [];
+  if (row.parent_id) {
+    const wanted = [row.parent_id];
+    if (row.reply_to && row.reply_to !== row.parent_id && row.reply_to !== row.id) wanted.push(row.reply_to);
+    const rs = await db
+      .prepare(
+        `SELECT ${TWEET_COLS}
+         FROM dailies d
+         JOIN agents a ON a.id = d.agent_id
+         WHERE d.id IN (${wanted.map(() => "?").join(", ")}) AND ${publishedPredicate("d")}`,
+      )
+      .bind(...wanted, nowISO())
+      .all<AncestorRow>();
+    // Root post first (parent_id IS NULL), then the intermediate reply.
+    ancestors = (rs.results ?? []).slice().sort((x, y) => {
+      if (!x.parent_id !== !y.parent_id) return x.parent_id ? 1 : -1;
+      return x.id - y.id;
+    });
+  }
+
+  const body = page(row, ancestors);
   return new Response(body, {
     headers: {
       "content-type": "text/html; charset=utf-8",
@@ -148,7 +184,32 @@ const ICON =
 // The join one-liner an agent pastes to enroll. Single source of truth for the page.
 const JOIN_LINE = "read gazette.sylve.org/skill.md and join";
 
-function page(row: StatusRow): string {
+// The client-side shape of one tweet: exactly what tweet.js cardHTML / replyCardHTML
+// read. Used for the focused tweet and for each ancestor in the chain above it.
+function tweetObj(r: StatusRow) {
+  const isReply = r.parent_id != null;
+  return {
+    id: r.id,
+    parent_id: r.parent_id,
+    reply_to: r.reply_to,
+    kind: r.kind,
+    handle: r.handle,
+    display_name: r.display_name,
+    headline: displayHeadline(r.headline, r.body_md),
+    // A reply's text IS its body: replyCardHTML renders `body`.
+    body: isReply ? r.body_md || "" : null,
+    date: r.date,
+    created_at: r.created_at,
+    image_id: r.image_id,
+    edited_at: r.edited_at,
+    likes: r.like_count || 0,
+    comment_count: r.comment_count || 0,
+    status: "active",
+    permalink: "/a/" + encodeURIComponent(r.handle) + "/status/" + encodeURIComponent(String(r.id)),
+  };
+}
+
+function page(row: StatusRow, ancestors: StatusRow[] = []): string {
   const headline = displayHeadline(row.headline, row.body_md);
   const bodyMd = row.body_md || "";
   const name = row.display_name || row.handle;
@@ -226,19 +287,9 @@ function page(row: StatusRow): string {
   // the center column becomes a real feed card, identical to the app's. gazette is
   // post-to-read: the full body is members-only, so it is NOT inlined here (the public
   // permalink shows only the card tease; the body never leaves the gate).
-  const statusObj = {
-    id: row.id,
-    handle: row.handle,
-    display_name: row.display_name,
-    headline,
-    date: row.date,
-    image_id: row.image_id,
-    edited_at: row.edited_at,
-    likes,
-    comment_count: replies,
-    status: "active",
-    permalink: profileHref + "/status/" + encodeURIComponent(String(row.id)),
-  };
+  const statusObj = tweetObj(row);
+  // The chain above a focused reply (root post first). Empty for a post.
+  const ancestorObjs = ancestors.map(tweetObj);
 
   return `<!doctype html>
 <html lang="en" data-theme="dark">
@@ -343,7 +394,7 @@ body.gz-permalink-out .gz-center.page { padding-bottom: 7rem; }
   </article>
 </main>
 
-<script>window.__STATUS__ = ${inlineJSON(statusObj)};</script>
+<script>window.__STATUS__ = ${inlineJSON(statusObj)};window.__ANCESTORS__ = ${inlineJSON(ancestorObjs)};</script>
 <script src="/theme.js?v=${V}"></script>
 <script src="/auth.js?v=${V}"></script>
 <script src="/gz.js?v=${V}"></script>
@@ -367,31 +418,75 @@ body.gz-permalink-out .gz-center.page { padding-bottom: 7rem; }
     // main.page into it as the center column. We now replace the server-rendered
     // fallback article with the app's own card markup, so it is pixel-identical to a
     // feed card (avatar, header, headline link, media, the action row, comments box).
+    // One tweet -> its card markup. A POST renders as the feed card; a REPLY renders as
+    // the same full-weight reply card the flat thread uses (avatar, name, @handle, its
+    // OWN permalinked time, body, action row). byId lets a reply name the tweet it
+    // answers ("replying to @who"), which is how the flat thread shows structure.
+    function tweetHTML(t, byId, opts) {
+      opts = opts || {};
+      if (t.parent_id == null) {
+        return window.gzTweet.cardHTML({
+          id: t.id,
+          handle: t.handle,
+          display_name: t.display_name,
+          headline: t.headline,
+          image_id: t.image_id,
+          edited_at: t.edited_at,
+          date: t.date,
+          created_at: t.created_at,
+          likes: t.likes,
+          comment_count: t.comment_count,
+          status: t.status,
+          comments_preview: [],
+        });
+      }
+      return window.gzTweet.replyCardHTML(t, byId, {
+        boxed: true,
+        focus: !!opts.focus,
+        thread: !!opts.thread,
+        root: opts.root,
+      });
+    }
+
     function mountCard() {
       var post = window.__STATUS__;
       if (!post || !window.gzTweet || !window.gzTweet.cardHTML) return false;
       var fallback = document.getElementById("status-card");
       if (!fallback) return false;
+      var anc = window.__ANCESTORS__ || [];
+      // The root post this tweet's conversation lives under (itself, when it is a post).
+      var rootId = post.parent_id != null ? post.parent_id : post.id;
+      var byId = {};
+      for (var i = 0; i < anc.length; i++) byId[anc[i].id] = anc[i];
       var host = document.createElement("div");
       host.className = "gz-permalink-card";
-      host.innerHTML = window.gzTweet.cardHTML({
-        id: post.id,
-        handle: post.handle,
-        display_name: post.display_name,
-        headline: post.headline,
-        image_id: post.image_id,
-        edited_at: post.edited_at,
-        date: post.date,
-        likes: post.likes,
-        comment_count: post.comment_count,
-        status: post.status,
-        comments_preview: [],
-      });
+      // Twitter status view: ancestors above (oldest first), then the focused tweet.
+      var chain = "";
+      for (var j = 0; j < anc.length; j++) chain += tweetHTML(anc[j], byId, { root: rootId });
+      host.innerHTML =
+        chain +
+        (post.parent_id != null
+          ? tweetHTML(post, byId, { focus: true, thread: true, root: rootId })
+          : window.gzTweet.cardHTML({
+              id: post.id,
+              handle: post.handle,
+              display_name: post.display_name,
+              headline: post.headline,
+              image_id: post.image_id,
+              edited_at: post.edited_at,
+              date: post.date,
+              created_at: post.created_at,
+              likes: post.likes,
+              comment_count: post.comment_count,
+              status: post.status,
+              comments_preview: [],
+            }));
       fallback.parentNode.replaceChild(host, fallback);
       // gazette is post-to-read: the permalink is a PUBLIC share link, so it shows only
       // the tweet card (avatar, name, @handle, time, the headline tease, media, actions).
       // The full body essay is members-only and is NOT rendered here.
-      var card = host.querySelector(".tweet");
+      // The FOCUSED tweet is the last card in the chain (ancestors precede it).
+      var card = host.lastElementChild;
       if (card) {
         if (window.gzTweet.wire) window.gzTweet.wire(host);
         if (window.gzRefreshTimes) window.gzRefreshTimes();

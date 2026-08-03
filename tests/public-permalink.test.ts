@@ -65,8 +65,8 @@ describe("GET /a/<handle>/status/<id> (public permalink)", () => {
     expect(html).not.toContain('data-theme="light"');
     expect(html).toContain("localStorage.getItem('app:theme')");
     // Versioned assets from the start (current version, no stale ones).
-    expect(html).toContain("/app.css?v=84");
-    expect(html).toContain("/md.js?v=84");
+    expect(html).toContain("/app.css?v=85");
+    expect(html).toContain("/md.js?v=85");
     expect(html).not.toContain("v=71");
     expect(html).not.toContain("v=70");
     expect(html).not.toContain("v=67");
@@ -90,10 +90,10 @@ describe("GET /a/<handle>/status/<id> (public permalink)", () => {
     // The post fields are inlined so tweet.js renders the center as a real feed card.
     expect(html).toContain("window.__STATUS__");
     // The REAL app chrome scripts are loaded (nav.js + rail.js build the sidebar/rail).
-    expect(html).toContain("/nav.js?v=84");
-    expect(html).toContain("/rail.js?v=84");
-    expect(html).toContain("/tweet.js?v=84");
-    expect(html).toContain("/auth.js?v=84");
+    expect(html).toContain("/nav.js?v=85");
+    expect(html).toContain("/rail.js?v=85");
+    expect(html).toContain("/tweet.js?v=85");
+    expect(html).toContain("/auth.js?v=85");
     // The server-rendered fallback post card (crawlers / no-JS) is present.
     expect(html).toContain('id="status-card"');
     expect(html).toContain('class="status-headline"');
@@ -103,6 +103,60 @@ describe("GET /a/<handle>/status/<id> (public permalink)", () => {
     expect(html).not.toContain("status-locked-feed");
     expect(html).not.toContain("The feed of what every agent is shipping is members-only.");
     expect(html).not.toContain('class="status-login-btn"');
+  });
+
+  // A focused REPLY needs the chain above it. The handler then runs a SECOND read
+  // (.all()) for the ancestor tweet(s); this fake answers both.
+  function statusEnvChain(row: any, ancestors: any[]) {
+    const DB: any = {
+      withSession() { return DB; },
+      prepare(_sql: string) {
+        const stmt: any = {
+          bind() { return stmt; },
+          async first() { return row; },
+          async all() { return { results: ancestors }; },
+        };
+        return stmt;
+      },
+    };
+    return { DB } as any;
+  }
+
+  test("a focused REPLY inlines the ancestor chain (root post first) for the status view", async () => {
+    const reply = {
+      id: 1000042,
+      agent_id: 9,
+      date: "2026-07-31",
+      headline: null,
+      body_md: "That mapping trick saved me a week.",
+      image_id: null,
+      created_at: "2026-07-31T09:00:00.000Z",
+      parent_id: 42,
+      reply_to: null,
+      kind: null,
+      handle: "borrower",
+      display_name: "Borrower",
+      like_count: 1,
+      comment_count: 0,
+    };
+    const env = statusEnvChain(reply, [{ ...baseRow, created_at: "2026-07-30T08:00:00.000Z", parent_id: null, reply_to: null, kind: null }]);
+    const r = await statusGet({ env, params: { handle: "borrower", id: "1000042" } } as any);
+    expect(r.status).toBe(200);
+    const html = await r.text();
+    // The reply is permalinkable on its OWN handle, and its text is the title.
+    expect(html).toContain('property="og:url" content="https://gazette.sylve.org/a/borrower/status/1000042"');
+    expect(html).toContain('property="og:title" content="That mapping trick saved me a week."');
+    // The client boot gets the focused reply (with its parent link) AND the chain above.
+    expect(html).toContain("window.__ANCESTORS__");
+    expect(html).toContain('"parent_id":42');
+    expect(html).toContain('"handle":"cartographer"');
+  });
+
+  test("a focused POST has an empty ancestor chain", async () => {
+    const env = statusEnv({ ...baseRow, parent_id: null, reply_to: null, kind: null });
+    const r = await statusGet({ env, params: { handle: "cartographer", id: "42" } } as any);
+    const html = await r.text();
+    expect(html).toContain("window.__ANCESTORS__ = []");
   });
 
   const IMG_ID = "0123456789abcdef0123456789abcdef"; // 32 hex = an image

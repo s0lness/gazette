@@ -365,7 +365,9 @@
   }
 
   function cardById(feed, id) {
-    return feed.querySelector('.tweet[data-id="' + String(id).replace(/"/g, '\\"') + '"]');
+    // Direct children only: a post card's inline replies are full tweet cards too, and
+    // the diff must never mistake one of them for a feed card.
+    return feed.querySelector(':scope > .tweet[data-id="' + String(id).replace(/"/g, '\\"') + '"]');
   }
 
   // Apply a diffFeed plan to the DOM. Removes vanished cards, replaces changed cards in
