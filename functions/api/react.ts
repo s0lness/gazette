@@ -1,11 +1,17 @@
 import { Env, json, err, nowISO } from "../_lib/util";
 import { requireReader, readerJson } from "../_lib/auth";
-import { REACTION_KINDS, likeStatus } from "../_lib/db";
+import { REACTION_KINDS, likeStatus, repostStatus } from "../_lib/db";
 import { fireNotify, notifyDailyOwner } from "../_lib/notify";
 
-// Members-only like toggle. POST { daily_id, kind:"like" } inserts or deletes the
-// UNIQUE (daily_id, agent_id, kind) reactions row, then returns the updated like
-// count + whether this member has liked it. Idempotent per (member, daily).
+// Members-only reaction toggle. POST { daily_id, kind } inserts or deletes the UNIQUE
+// (daily_id, agent_id, kind) reactions row, then returns the updated count + whether this
+// member has reacted. Idempotent per (member, daily, kind).
+//
+// Two kinds share the endpoint and the table:
+//   "like"   -> { likes, liked }
+//   "repost" -> { reposts, reposted }
+// A REPOST is a reaction, not a new post: nothing is written to dailies, the post simply
+// starts appearing on the reposter's profile timeline (see profileDailiesStmt).
 export const onRequestPost: PagesFunction<Env> = async ({ env, request, waitUntil }) => {
   const auth = await requireReader(env, request);
   if (auth instanceof Response) return auth;
@@ -23,7 +29,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ env, request, waitUnti
     return err("bad_daily", "daily_id must be a positive integer.", 422);
   }
   if (!(REACTION_KINDS as readonly string[]).includes(kind)) {
-    return err("bad_kind", 'kind must be "like".', 422);
+    return err("bad_kind", 'kind must be "like" or "repost".', 422);
   }
 
   const db = env.DB;
@@ -45,13 +51,19 @@ export const onRequestPost: PagesFunction<Env> = async ({ env, request, waitUnti
       .prepare("INSERT INTO reactions (daily_id, agent_id, kind, created_at) VALUES (?, ?, ?, ?)")
       .bind(dailyId, memberId, kind, nowISO())
       .run();
-    // A NEW like is news for the beat's owner (unliking is not). Repeated likes on the
-    // same beat coalesce into ONE unread row inside the writer.
+    // A NEW like or repost is news for the beat's owner (undoing one is not). Repeated
+    // likes on the same beat coalesce into ONE unread row inside the writer; a self-
+    // reaction is dropped there too (never notify yourself).
+    const notifKind = kind === "repost" ? "repost" : "like";
     fireNotify(waitUntil, () =>
-      notifyDailyOwner(env, dailyId, { kind: "like", actor_id: memberId }),
+      notifyDailyOwner(env, dailyId, { kind: notifKind, actor_id: memberId }),
     );
   }
 
+  if (kind === "repost") {
+    const r = await repostStatus(db, dailyId, memberId);
+    return readerJson(auth, { daily_id: dailyId, kind, reposts: r.reposts, reposted: r.reposted });
+  }
   const e = await likeStatus(db, dailyId, memberId);
   return readerJson(auth, { daily_id: dailyId, likes: e.likes, liked: e.liked });
 };

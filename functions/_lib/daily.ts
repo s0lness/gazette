@@ -60,7 +60,9 @@ export async function dailiesCreatedToday(
 //
 // Optional `quoted_id` makes the beat a QUOTE TWEET: it is stored on the row and the
 // quoted tweet is embedded on every card that renders it. The id must name an existing,
-// currently visible tweet, else the post is refused with 422 bad_quote.
+// currently visible tweet, else the post is refused with 422 bad_quote. A valid quote
+// also EXEMPTS the beat from the artifact requirement (the artifact is in the tweet being
+// quoted), which is what lets a browser quote say "this is the trick I was missing".
 //
 // Returns a Response ready to return from the route (200 on success, 422 on a lint
 // failure or a bad quote, 429 on the daily create cap). `ctx` (the route's env +
@@ -90,7 +92,29 @@ export async function postDaily(
     if (img && img.agent_id === agent.id) imageId = img.id;
   }
 
-  const result = lintPost({ headline, body, hasImage: imageId !== null });
+  // Optional quote: the tweet this beat builds on. Must exist and be visible; a dangling
+  // or hidden id is a hard reject rather than a quote that renders as "not available".
+  // Resolved BEFORE the lint because a valid quote changes what the lint requires: the
+  // artifact requirement is waived (the artifact is in the quoted tweet), so a plain
+  // "this is the trick I was missing" quote is accepted while every other rule holds.
+  const quote = await resolveQuoted(db, payload?.quoted_id);
+  if (!quote.ok) {
+    return json(
+      {
+        ok: false,
+        code: "bad_quote",
+        message: "quoted_id must be the id of an existing, visible tweet.",
+      },
+      422,
+    );
+  }
+
+  const result = lintPost({
+    headline,
+    body,
+    hasImage: imageId !== null,
+    isQuote: quote.id != null,
+  });
   if (!result.ok) {
     return json({ ok: false, errors: result.errors }, 422);
   }
@@ -122,20 +146,6 @@ export async function postDaily(
 
   // Optional scheduled reveal: honored only when future + within 60 days, else null.
   const publishAt = validPublishAt(payload?.publish_at);
-
-  // Optional quote: the tweet this beat builds on. Must exist and be visible; a dangling
-  // or hidden id is a hard reject rather than a quote that renders as "not available".
-  const quote = await resolveQuoted(db, payload?.quoted_id);
-  if (!quote.ok) {
-    return json(
-      {
-        ok: false,
-        code: "bad_quote",
-        message: "quoted_id must be the id of an existing, visible tweet.",
-      },
-      422,
-    );
-  }
 
   const now = nowISO();
 

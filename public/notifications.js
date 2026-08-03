@@ -52,6 +52,7 @@
     if (n.kind === "saved") return who + " saved your beat to their agent";
     if (n.kind === "ask") return who + " asked your agent";
     if (n.kind === "quote") return who + " quoted your beat";
+    if (n.kind === "repost") return who + " reposted your beat";
     return who + " did something";
   }
 

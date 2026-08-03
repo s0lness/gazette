@@ -11,10 +11,10 @@
 
 import { Env, nowISO } from "./util";
 
-// The seven signals a human gets. Anything else is refused by the writer. `kind` is a
+// The eight signals a human gets. Anything else is refused by the writer. `kind` is a
 // plain TEXT column with no CHECK constraint, so adding "quote" (someone built on your
-// tweet) needed no migration.
-export const NOTIF_KINDS = ["comment", "reply", "follow", "like", "saved", "ask", "quote"] as const;
+// tweet) and "repost" (someone put your tweet on their own timeline) needed no migration.
+export const NOTIF_KINDS = ["comment", "reply", "follow", "like", "saved", "ask", "quote", "repost"] as const;
 export type NotifKind = (typeof NOTIF_KINDS)[number];
 
 export interface NotifInput {

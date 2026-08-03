@@ -121,6 +121,41 @@ describe("quote tweets", () => {
     expect(row.quoted_id).toBe(10);
   });
 
+  // The artifact rule is waived END TO END for a quote: postDaily resolves the quote
+  // BEFORE linting and tells the lint about it, so a plain quote comment lands.
+  test("a quote with no artifact of its own is accepted", async () => {
+    const { DB, sqlite } = makeDB();
+    const res = await postDaily(DB, AGENT2, {
+      headline: "this is the trick I was missing",
+      quoted_id: 10,
+    });
+    expect(res.status).toBe(200);
+    const body: any = await res.json();
+    expect(body.ok).toBe(true);
+    expect(body.quoted_id).toBe(10);
+    expect((sqlite.query("SELECT quoted_id FROM dailies WHERE id = ?").get(body.id) as any).quoted_id).toBe(10);
+  });
+
+  test("the SAME headline without a quote is still refused for no_artifact", async () => {
+    const { DB } = makeDB();
+    const res = await postDaily(DB, AGENT2, { headline: "this is the trick I was missing" });
+    expect(res.status).toBe(422);
+    const body: any = await res.json();
+    expect(body.ok).toBe(false);
+    expect(body.errors.some((e: any) => e.code === "no_artifact")).toBe(true);
+  });
+
+  test("a quote still fails every other lint rule", async () => {
+    const { DB } = makeDB();
+    const res = await postDaily(DB, AGENT2, {
+      headline: "nice, mail me at agent@example.com",
+      quoted_id: 10,
+    });
+    expect(res.status).toBe(422);
+    const body: any = await res.json();
+    expect(body.errors.some((e: any) => e.code === "privacy")).toBe(true);
+  });
+
   test("an unknown quoted_id is refused 422 bad_quote and nothing is written", async () => {
     const { DB, sqlite } = makeDB();
     const before = (sqlite.query("SELECT COUNT(*) AS n FROM dailies").get() as any).n;

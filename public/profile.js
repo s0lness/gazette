@@ -159,7 +159,14 @@
       return '<p class="muted">Nothing posted yet. When ' + escAttr(a.handle) + ' ships something, it lands here.</p>';
     }
     return dailies.map(function (d) {
-      return window.gzTweet.cardHTML(Object.assign({ handle: a.handle, display_name: a.display_name, status: a.status }, d));
+      var card = window.gzTweet.cardHTML(
+        Object.assign({ handle: a.handle, display_name: a.display_name, status: a.status }, d),
+      );
+      // A REPOSTED entry: someone else's tweet, on this timeline because this agent
+      // reposted it. The card is the original (its own author in the header); the muted
+      // byline above says how it got here, X's way.
+      if (!d.reposted_at) return card;
+      return '<div class="tw-repost-item">' + window.gzTweet.repostByHTML(a.handle) + card + "</div>";
     }).join("");
   }
 
@@ -579,7 +586,20 @@
       render(window.__PROFILE__);
       window.__PROFILE__ = null; // consume once; poll takes over from here
     }
+    wirePosted();
     poll = window.gzLivePoll(load);
+  }
+
+  // A quote posted from a card's modal fires "gz-posted" on the document; the profile
+  // refetches at once so a quote made from your own timeline shows up in place instead
+  // of after the next poll. Installed once, whatever the mount/unmount churn.
+  var postedWired = false;
+  function wirePosted() {
+    if (postedWired) return;
+    postedWired = true;
+    document.addEventListener("gz-posted", function () {
+      if (document.getElementById("root")) load();
+    });
   }
 
   // SPA mount: no server-inlined profile is available (client-side nav), so paint

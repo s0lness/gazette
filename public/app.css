@@ -917,10 +917,10 @@ body.wall-open main.page { max-width: 70rem; }
 .tw-demo-label { color: var(--ink-2, var(--ink)); }
 .tw-demo-frame { display: block; width: 100%; height: 100%; border: 0; }
 
-/* Action row: four consistent icons (reply + count, like + count, bookmark,
+/* Action row: consistent icons (reply + count, repost + count, like + count, bookmark,
    share), left-grouped and evenly spaced like an X action row. Pill hover states. */
 .tw-actions { display: flex; align-items: center; gap: 0.35rem; margin: 0.2rem 0 0; color: var(--ink-3); }
-.tw-like-btn, .tw-comment-btn, .tw-share-btn, .tw-bookmark-btn, .tw-ask-btn {
+.tw-like-btn, .tw-comment-btn, .tw-share-btn, .tw-bookmark-btn, .tw-ask-btn, .tw-repost-btn {
   display: inline-flex; align-items: center; gap: 0.35rem;
   padding: 0.45rem 0.6rem; border: 0; border-radius: var(--radius-pill); background: transparent;
   color: inherit; cursor: pointer;
@@ -930,7 +930,7 @@ body.wall-open main.page { max-width: 70rem; }
 .tw-comment-btn:hover, .tw-share-btn:hover, .tw-ask-btn:hover { color: var(--accent); background: var(--accent-soft); }
 
 /* Every glyph: same 18px box, same muted stroke, consistent joins. */
-.tw-comment, .tw-share, .tw-check, .tw-bookmark, .tw-heart, .tw-ask {
+.tw-comment, .tw-share, .tw-check, .tw-bookmark, .tw-heart, .tw-ask, .tw-repost {
   display: block; width: 18px; height: 18px; fill: none; stroke: currentColor;
   stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round;
 }
@@ -940,7 +940,12 @@ body.wall-open main.page { max-width: 70rem; }
 .tw-bookmark-btn.saved { color: var(--accent); }
 .tw-bookmark-btn.saved .tw-bookmark { fill: var(--accent); stroke: var(--accent); }
 .tw-share-btn.copied { color: var(--positive, var(--accent)); }
-.tw-reply-label, .tw-like-count { font-variant-numeric: tabular-nums; }
+.tw-reply-label, .tw-like-count, .tw-repost-count { font-variant-numeric: tabular-nums; }
+
+/* Repost: outline by default, lit in the accent once you have reposted (the same
+   "this one is mine" signal the liked heart gives, in the app's one accent). */
+.tw-repost-btn:hover { color: var(--accent); background: var(--accent-soft); }
+.tw-repost-btn.reposted { color: var(--accent); }
 
 /* The like heart: outline by default, fills with the WARM like red when liked. */
 .tw-like-btn:hover { color: var(--like); background: color-mix(in srgb, var(--like) 12%, transparent); }
@@ -1290,9 +1295,18 @@ a.tw-quote:hover { border-color: color-mix(in srgb, var(--accent) 45%, var(--lin
    broken card. */
 .tw-quote-gone { color: var(--ink-3); font-size: 0.88rem; }
 
-/* Share popover: "Copy link" / "Quote", anchored under the share button so the action
-   row keeps its four icons instead of growing a fifth. */
-.tw-share-wrap { position: relative; display: inline-flex; }
+/* Share popover: "Copy link" / "Pin to profile", anchored under the share button so the
+   action row keeps its icons instead of growing more. The repost popover ("Repost" /
+   "Quote") is the same object anchored under the repost button; it opens to the RIGHT
+   because that button sits second in the row, where a left-anchored menu has room. */
+.tw-share-wrap, .tw-repost-wrap { position: relative; display: inline-flex; }
+.tw-repost-menu {
+  position: absolute; top: calc(100% + 0.2rem); left: 0; right: auto; z-index: 40;
+  min-width: 9.5rem; max-width: calc(100vw - 2rem);
+  display: flex; flex-direction: column; padding: 0.25rem;
+  border: 1px solid var(--line); border-radius: var(--radius-sm);
+  background: var(--surface); box-shadow: var(--shadow);
+}
 .tw-share-menu {
   /* Anchored to the button's RIGHT edge so it opens leftward: the share icon is the last
      of the four, so a left-anchored menu would run off a 390px screen. */
@@ -1302,16 +1316,47 @@ a.tw-quote:hover { border-color: color-mix(in srgb, var(--accent) 45%, var(--lin
   border: 1px solid var(--line); border-radius: var(--radius-sm);
   background: var(--surface); box-shadow: var(--shadow);
 }
-.tw-share-menu button {
+.tw-share-menu button, .tw-repost-menu button {
   font: inherit; font-size: 0.86rem; font-weight: 600; text-align: left;
   background: none; border: 0; color: var(--ink); cursor: pointer;
   padding: 0.5rem 0.6rem; border-radius: var(--radius-sm); min-height: 36px;
 }
-.tw-share-menu button:hover { background: var(--accent-soft); color: var(--accent); }
+.tw-share-menu button:hover, .tw-repost-menu button:hover { background: var(--accent-soft); color: var(--accent); }
 
-/* Quote composer: the inline reply composer, with the quoted tweet previewed inside. */
+/* Quote modal: a centered dialog (the .wall-modal shell), holding the comment box and,
+   under it, the SAME embedded quote card the feed renders. */
+.gz-quote-sheet {
+  width: min(32rem, 100%);
+  max-height: calc(100dvh - 2rem - var(--gz-bnav-h, 0px));
+  overflow-y: auto; overscroll-behavior: contain;
+}
+.gz-quote-modal { padding-bottom: calc(1rem + var(--gz-bnav-h, 0px)); }
 .tw-quote-in { width: 100%; min-height: 3rem; resize: vertical; border-radius: var(--radius-sm); box-sizing: border-box; }
-.tw-quote-composer .tw-quote { margin-top: 0.45rem; margin-bottom: 0; }
+.gz-quote-text { line-height: 1.5; font-size: 0.98rem; }
+.gz-quote-meta { display: flex; justify-content: flex-end; margin: 0.3rem 0 0.1rem; }
+.gz-quote-count { font-size: 0.78rem; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.gz-quote-sheet .tw-quote { margin-top: 0.2rem; margin-bottom: 0.9rem; }
+.gz-quote-err { margin: 0 0 0.8rem; color: var(--accent); font-size: 0.85rem; line-height: 1.45; }
+.gz-quote-actions .gz-quote-send { order: 1; }
+.gz-quote-actions .gz-quote-cancel { order: 2; }
+.gz-quote-cancel { background: none; border: 0; color: var(--ink-3); font: inherit; font-size: 0.88rem; cursor: pointer; }
+.gz-quote-cancel:hover { color: var(--ink); }
+
+/* The reposter's byline above a reposted card on their profile, X's pattern: quiet,
+   small, and clearly not part of the tweet itself. It hugs the card it introduces. */
+.tw-repost-item { margin-bottom: 0.6rem; }
+.tw-repost-item > .tweet { margin-bottom: 0; }
+.tw-repost-by {
+  display: flex; align-items: center; gap: 0.4rem;
+  margin: 0 0 0.3rem 0.3rem;
+  font-size: 0.8rem; font-weight: 600; color: var(--ink-3);
+}
+.tw-repost-by .tw-repost { width: 14px; height: 14px; flex: 0 0 auto; }
+@media (max-width: 700px) {
+  .gz-quote-modal { padding: 0.75rem; padding-bottom: calc(0.75rem + var(--gz-bnav-h, 0px)); }
+  .gz-quote-sheet { width: 100%; padding: 1.25rem 1.1rem 1.35rem; }
+  .gz-quote-send, .gz-quote-cancel { min-height: 44px; }
+}
 
 /* Inline reply composer, opened directly under any tweet (not a modal). */
 .tw-c-composer { margin: 0.45rem 0 0.2rem; }
@@ -1577,11 +1622,11 @@ a.msg-head-title:hover { text-decoration: underline; }
   /* Card action row: every button is a >=44px effective hit area. Icon-only
      buttons (like, bookmark) also get a min-width so the tap target is a square,
      not a thin sliver; the glyph inside stays small (defect D). */
-  .tw-like-btn, .tw-comment-btn, .tw-share-btn, .tw-bookmark-btn, .tw-ask-btn {
+  .tw-like-btn, .tw-comment-btn, .tw-share-btn, .tw-bookmark-btn, .tw-ask-btn, .tw-repost-btn {
     min-height: 44px; padding-top: 0; padding-bottom: 0;
   }
   .tw-bookmark-btn, .tw-share-btn, .tw-ask-btn { min-width: 44px; justify-content: center; }
-  .tw-like-btn, .tw-comment-btn { min-height: 44px; }
+  .tw-like-btn, .tw-comment-btn, .tw-repost-btn { min-height: 44px; }
 
   /* Chat fills the viewport below the top bar so the composer hugs the keyboard.
      The page's own bottom padding is dropped here so the composer reaches the edge. */
@@ -2312,6 +2357,7 @@ select:focus-visible,
 .tw-share-btn:focus-visible,
 .tw-bookmark-btn:focus-visible,
 .tw-ask-btn:focus-visible,
+.tw-repost-btn:focus-visible,
 .gz-side-link:focus-visible,
 .gz-bnav-link:focus-visible {
   outline: 2px solid var(--accent);

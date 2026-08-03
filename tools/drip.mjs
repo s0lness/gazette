@@ -45,19 +45,16 @@ import { lintBeat, lintNotes, repairArtifact, formatErrors } from "./beat-lint.m
 import {
   LOCK_HOURS,
   DANGER_HOURS,
-  MAX_POSTS_NORMAL,
-  MAX_POSTS_CATCHUP,
   hoursSince,
   hoursFromRoster,
-  orderCandidates,
-  postBudget,
-  slotAllowed,
   fleetHealth,
   fmtHours,
 } from "./drip-priority.mjs";
+// The loop (skip filters, attempt ceiling, one beat per handle) is shared with the
+// Cloudflare Worker in worker-drip/, so the two drips can never drift apart.
+import { createDripRun, MAX_ATTEMPTS } from "./drip-run.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
-const MAX_ATTEMPTS = 5; // how many beats a single run may try before giving up
 const API_TIMEOUT_MS = 20000; // roster/feed lookups degrade rather than hang the run
 const DRY = process.argv.includes("--dry");
 const BASE = "https://gazette.sylve.org";
@@ -193,22 +190,17 @@ if (hoursByHandle.size === 0) {
 }
 if (hoursByHandle.size === 0) clock = "none (file order)";
 
-// Handles that are unavailable for the REST of this run: already posted today, or refused
-// at the handle level (daily cap, unknown token). Beats for them stay where they are.
-const blocked = new Set(postedToday);
-
-// Urgency order: whoever is closest to losing read access goes first.
-const ordered = orderCandidates(candidates, hoursByHandle);
-
-// Eligible = a handle we can actually post for right now.
-const eligible = [
-  ...new Set(
-    ordered
-      .map((c) => c.entry.handle)
-      .filter((h) => h && tokens[h] && !blocked.has(h)),
-  ),
-];
-const { budget, catchup, atRisk } = postBudget(hoursByHandle, eligible);
+// The run: urgency order, the post budget, the burst rules and the skip filters, all from
+// tools/drip-run.mjs (shared with worker-drip/). Handles already posted today start blocked;
+// a handle-level refusal (daily cap, unknown token) blocks one mid-run.
+const run = createDripRun({
+  candidates,
+  hoursByHandle,
+  hasToken: (h) => Boolean(tokens[h]),
+  blocked: postedToday,
+  onSkip: (handle) => console.log(`drip: no token for handle '${handle}', skipping`),
+});
+const { eligible, budget, catchup, atRisk, attemptCeiling } = run;
 
 const atRiskTop = eligible.slice(0, 3).map((h) => `@${h} ${fmtHours(hoursByHandle.get(h) ?? Infinity)}`);
 console.log(`drip: silence clock from ${clock}`);
@@ -234,28 +226,10 @@ const park = (cand, why, errors) => {
   if (errors?.length) console.log(formatErrors(errors).replace(/^/gm, "  "));
 };
 
-let attempts = 0;
-let postsMade = 0;
-let gaveUp = false;
-// Attempt ceiling: the usual MAX_ATTEMPTS for the first post, plus one per extra burst slot,
-// so a catch-up run keeps the same tolerance for parked beats per post it is trying to make.
-const attemptCeiling = MAX_ATTEMPTS + budget - 1;
-
-for (const cand of ordered) {
-  if (postsMade >= budget) break;
-  if (attempts >= attemptCeiling) {
-    gaveUp = true;
-    break;
-  }
-
+// The picks generator applies the skip filters, the budget and the attempt ceiling (the
+// usual MAX_ATTEMPTS for the first post, plus one per extra burst slot).
+for (const cand of run.picks()) {
   const { entry, from, list } = cand;
-  if (!entry.handle || blocked.has(entry.handle)) continue;
-  if (!tokens[entry.handle]) {
-    console.log(`drip: no token for handle '${entry.handle}', skipping`);
-    continue;
-  }
-  // Extra slots belong to the burst: only a handle that is itself at risk may spend one.
-  if (!slotAllowed(hoursByHandle, entry.handle, postsMade)) continue;
 
   // A path in markdown backticks does not satisfy the server's artifact rule (see
   // tools/beat-lint.mjs). Unwrap it in place rather than park an otherwise-good beat.
@@ -269,7 +243,7 @@ for (const cand of ordered) {
   // Local lint first: a beat the server would 422 never costs an API call.
   const local = lintBeat(entry);
   if (!local.ok) {
-    attempts++;
+    run.countAttempt();
     if (DRY) {
       console.log(
         `drip: [dry] WOULD park @${entry.handle} (local lint) ${entry.headline?.slice(0, 60) ?? ""}`,
@@ -293,11 +267,10 @@ for (const cand of ordered) {
   // Projects are gone: never pass a legacy `project` field through.
 
   if (DRY) {
-    attempts++;
-    postsMade++;
-    blocked.add(entry.handle); // one beat per handle per run
+    run.countAttempt();
+    run.recordPost(entry.handle); // spends a slot and blocks the handle for the rest of the run
     console.log(
-      `drip: [dry] WOULD post #${postsMade} as @${entry.handle} (silent ${fmtHours(
+      `drip: [dry] WOULD post #${run.posts} as @${entry.handle} (silent ${fmtHours(
         hoursByHandle.get(entry.handle) ?? Infinity,
       )}) from ${from} -> ${entry.headline.slice(0, 80)}`,
     );
@@ -306,7 +279,7 @@ for (const cand of ordered) {
     continue;
   }
 
-  attempts++;
+  run.countAttempt();
   let res;
   try {
     res = await fetch(BASE + "/api/" + tokens[entry.handle] + "/daily", {
@@ -332,8 +305,7 @@ for (const cand of ordered) {
       handle: entry.handle,
       from,
     });
-    postsMade++;
-    blocked.add(entry.handle); // one beat per handle per run
+    run.recordPost(entry.handle); // one beat per handle per run
     const wasSilent = fmtHours(hoursByHandle.get(entry.handle) ?? Infinity);
     hoursByHandle.set(entry.handle, 0); // the clock resets, so the end-of-run health is honest
     console.log(
@@ -347,7 +319,7 @@ for (const cand of ordered) {
     rejected.push({ ...entry, rejected_at: new Date().toISOString(), errors });
   } else if (res.status === 429 || res.status === 404 || res.status === 403) {
     // Handle-level, not beat-level: the beat stays, that handle sits this run out.
-    blocked.add(entry.handle);
+    run.block(entry.handle);
     console.log(
       `drip: @${entry.handle} unavailable (${res.status} ${data.code || ""}), beat kept, trying another handle`,
     );
@@ -357,11 +329,11 @@ for (const cand of ordered) {
   }
 }
 
-if (postsMade === 0) {
-  if (gaveUp) console.log(`drip: gave up after ${attemptCeiling} attempts, nothing posted this run`);
-  else if (attempts === 0)
+if (run.posts === 0) {
+  if (run.gaveUp) console.log(`drip: gave up after ${attemptCeiling} attempts, nothing posted this run`);
+  else if (run.attempts === 0)
     console.log("drip: no eligible beat (every handle already posted today, or none queued)");
-  else console.log(`drip: nothing posted this run (${attempts} attempt(s) tried)`);
+  else console.log(`drip: nothing posted this run (${run.attempts} attempt(s) tried)`);
 }
 
 // Fleet health: does the drip keep up with the 36h lock? Counted over every handle we hold
@@ -394,5 +366,5 @@ writeJson(paths.posted, posted);
 writeJson(paths.parked, parked);
 writeJson(paths.rejected, rejected);
 console.log(
-  `drip: done, posted ${postsMade}, ${attempts} attempt(s), ${pantry.length} in pantry, ${queue.length} in queue, ${parked.length} parked`,
+  `drip: done, posted ${run.posts}, ${run.attempts} attempt(s), ${pantry.length} in pantry, ${queue.length} in queue, ${parked.length} parked`,
 );

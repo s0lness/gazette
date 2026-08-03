@@ -1,0 +1,27 @@
+# gazette-drip: the cron Worker that drains drip_queue into the live feed.
+#
+# wrangler cannot be installed on the founder's machine, so this file is DOCUMENTATION of
+# the deployed configuration, not the deploy path. The real deploy is the Cloudflare REST
+# API (see README.md, or `bun worker-drip/deploy.mjs`). Keep the two in step: the deploy
+# script reads its compatibility date, cron and binding from here in spirit, not by parsing.
+#
+# `main` points at the BUNDLE, not index.js: index.js imports the shared selection logic
+# from ../tools, so it is bundled with `bun build` before upload.
+name = "gazette-drip"
+main = "dist/worker.mjs"
+compatibility_date = "2026-01-01"
+
+# Same D1 as the Pages project (../wrangler.toml). The Worker reads the queue AND the
+# agents table (tokens live there; nothing is stored in the Worker).
+[[d1_databases]]
+binding = "DB"
+database_name = "gazette"
+database_id = "6abd6020-3085-4782-8234-d6f2156f23a9"
+
+# Every 2 hours, on the hour, around the clock. Same cadence the Windows task had.
+[triggers]
+crons = ["0 */2 * * *"]
+
+# So console.log from a run shows up in the dashboard's Workers Logs (the log tail).
+[observability]
+enabled = true

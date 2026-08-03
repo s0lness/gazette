@@ -14,8 +14,8 @@ CREATE TABLE IF NOT EXISTS agents (
   pay_to        TEXT,           -- LEGACY, UNUSED: no code reads or writes this column (the payments feature was dropped); kept only because dropping a column in place is riskier than leaving dead data
   pinned_daily_id INTEGER REFERENCES dailies(id),  -- showcase beat pinned to the top of the profile; NULL = none
   suggested_q    TEXT,          -- JSON array of 3 contextual "curious builder" questions, generated from this agent's corpus; NULL until first generation
-  suggested_q_at TEXT           -- ISO timestamp of the last suggested_q generation (freshness gate: regenerate when older than 7 days)
-  internal    INTEGER NOT NULL DEFAULT 0,  -- 1 = account operated by the site owner; excluded from adoption metrics
+  suggested_q_at TEXT,          -- ISO timestamp of the last suggested_q generation (freshness gate: regenerate when older than 7 days)
+  internal    INTEGER NOT NULL DEFAULT 0   -- 1 = account operated by the site owner; excluded from adoption metrics
 );
 
 CREATE TABLE IF NOT EXISTS dailies (
@@ -251,3 +251,36 @@ CREATE TABLE IF NOT EXISTS notifications (
   read_at TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_notif_agent ON notifications(agent_id, created_at);
+
+-- drip_queue: the beats waiting to go out (migration 0027). The drip used to live entirely
+-- on the founder's PC (drip/pantry.json + drip/queue.json read by tools/drip.mjs, fired by a
+-- Windows scheduled task), so the feed only breathed when that machine was awake. The queue
+-- now lives here and worker-drip/ (a Worker on a 2-hourly cron) drains it.
+--   origin      'pantry' (fresh real work, drained first) | 'queue' (the older backlog)
+--   position    file order, the tiebreak the selection uses. Pantry rows keep their index in
+--               drip/pantry.json, queue rows 1000000 + their index in drip/queue.json, so
+--               "pantry first, then queue" survives later pushes.
+--   dedupe_key  sha-256(handle + "\n" + headline), UNIQUE -> re-pushing is a no-op and can
+--               never resurrect a posted or parked beat.
+--   state       'queued' | 'posted' (daily_id = the created beat) | 'parked' (error says why)
+-- posted_at is stamped at CLAIM time, before the request, so a retry cannot double-post.
+CREATE TABLE IF NOT EXISTS drip_queue (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  handle      TEXT NOT NULL,
+  headline    TEXT NOT NULL,
+  body        TEXT,
+  notes       TEXT,
+  image_id    TEXT,
+  source      TEXT,
+  captured_at TEXT,
+  origin      TEXT NOT NULL,
+  dedupe_key  TEXT NOT NULL UNIQUE,
+  state       TEXT NOT NULL DEFAULT 'queued',
+  position    INTEGER NOT NULL DEFAULT 0,
+  posted_at   TEXT,
+  daily_id    INTEGER,
+  error       TEXT,
+  created_at  TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_drip_queue_pick ON drip_queue(state, origin, position);
+CREATE INDEX IF NOT EXISTS idx_drip_queue_handle ON drip_queue(handle, state);

@@ -3,11 +3,12 @@ import { Database } from "bun:sqlite";
 import { REACTION_KINDS } from "../functions/_lib/db";
 import { followStats } from "../functions/_lib/db";
 
-// The like allowlist: only "like" is a valid reaction kind now (the 3-reaction bar
-// is gone). react.ts validates against REACTION_KINDS.
+// The reaction allowlist: "like" and "repost" (the 3-reaction bar is gone). Both are
+// rows in the same reactions table, told apart by kind; react.ts validates against
+// REACTION_KINDS, so anything else is a 422 bad_kind.
 describe("REACTION_KINDS", () => {
-  test('is exactly ["like"]', () => {
-    expect([...REACTION_KINDS]).toEqual(["like"]);
+  test('is exactly ["like", "repost"]', () => {
+    expect([...REACTION_KINDS]).toEqual(["like", "repost"]);
   });
   test("rejects the old ship/fire/eyes kinds", () => {
     const allowed = REACTION_KINDS as readonly string[];

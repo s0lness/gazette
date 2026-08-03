@@ -4,3 +4,6 @@ SEED_CODES.txt
 .secrets.env
 *.secrets.env
 .dev.vars
+
+# build artifact: the bundled cron Worker (bun build worker-drip/index.js)
+worker-drip/dist

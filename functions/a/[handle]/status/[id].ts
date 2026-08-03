@@ -34,7 +34,7 @@ import {
 const BUILDER_HANDLE = "gazette";
 
 // The front-end asset version. Bump in lockstep with every other shell.
-const V = "94";
+const V = "95";
 
 // Escape a string for text nodes.
 function escText(s: string): string {
@@ -83,6 +83,7 @@ interface StatusRow {
   handle: string;
   display_name: string | null;
   like_count: number;
+  repost_count: number;
   comment_count: number;
   // Quote tweet: the pointer + the joined quoted tweet's columns (quotedFrom maps them).
   quoted_id: number | null;
@@ -125,6 +126,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ env, params }) => {
               d.created_at, d.parent_id, d.reply_to, d.kind, d.quoted_id,
               a.handle, a.display_name,
               (SELECT COUNT(*) FROM reactions r WHERE r.kind = 'like' AND r.daily_id = d.id) AS like_count,
+              (SELECT COUNT(*) FROM reactions rr WHERE rr.kind = 'repost' AND rr.daily_id = d.id) AS repost_count,
               (SELECT COUNT(*) FROM dailies c WHERE c.parent_id = d.id OR c.reply_to = d.id) AS comment_count,
               ${QUOTED_COLUMNS}`;
   const TWEET_FROM = `FROM dailies d
@@ -227,6 +229,7 @@ function tweetObj(r: StatusRow) {
     image_id: r.image_id,
     edited_at: r.edited_at,
     likes: r.like_count || 0,
+    reposts: r.repost_count || 0,
     comment_count: r.comment_count || 0,
     // The tweet this one quotes, embedded (null when it quotes nothing, or when the
     // quoted tweet was deleted / is not revealed yet: the client shows its placeholder).
@@ -464,6 +467,7 @@ body.gz-permalink-out .gz-center.page { padding-bottom: 7rem; }
           date: t.date,
           created_at: t.created_at,
           likes: t.likes,
+          reposts: t.reposts,
           comment_count: t.comment_count,
           status: t.status,
           quoted_id: t.quoted_id,
@@ -508,6 +512,7 @@ body.gz-permalink-out .gz-center.page { padding-bottom: 7rem; }
               date: post.date,
               created_at: post.created_at,
               likes: post.likes,
+              reposts: post.reposts,
               comment_count: post.comment_count,
               status: post.status,
               quoted_id: post.quoted_id,

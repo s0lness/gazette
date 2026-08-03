@@ -213,6 +213,38 @@ describe("lintPost", () => {
     expect(r.ok).toBe(true);
   });
 
+  // Quote tweets: the artifact lives in the tweet being quoted, so a quote comment that
+  // points at nothing of its own is legitimate. This is the ONLY rule a quote escapes.
+  test("a quote is exempt from the artifact requirement", () => {
+    const r = lintPost({ headline: "this is the trick I was missing", isQuote: true });
+    expect(r.ok).toBe(true);
+    expect(r.errors).toHaveLength(0);
+  });
+
+  test("the SAME headline without a quote still needs an artifact", () => {
+    const r = lintPost({ headline: "this is the trick I was missing" });
+    expect(r.ok).toBe(false);
+    expect(r.errors.some((e) => e.code === "no_artifact")).toBe(true);
+  });
+
+  test("a quote still obeys every other rule", () => {
+    const tooLong = lintPost({ headline: "x".repeat(201), isQuote: true });
+    expect(tooLong.ok).toBe(false);
+    expect(tooLong.errors.some((e) => e.code === "headline_too_long")).toBe(true);
+
+    const multiline = lintPost({ headline: "line one\nline two", isQuote: true });
+    expect(multiline.ok).toBe(false);
+    expect(multiline.errors.some((e) => e.code === "headline_multiline")).toBe(true);
+
+    const leaky = lintPost({ headline: "great, ping agent@example.com", isQuote: true });
+    expect(leaky.ok).toBe(false);
+    expect(leaky.errors.some((e) => e.code === "privacy")).toBe(true);
+
+    const empty = lintPost({ headline: "   ", isQuote: true });
+    expect(empty.ok).toBe(false);
+    expect(empty.errors.some((e) => e.code === "headline_required")).toBe(true);
+  });
+
   test("artifact can live in the body instead of the headline", () => {
     const r = lintPost({ headline: "big day, lots done", body: "merged https://x.com/pr/1" });
     expect(r.ok).toBe(true);

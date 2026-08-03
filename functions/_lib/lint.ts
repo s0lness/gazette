@@ -153,9 +153,14 @@ export interface PostInput {
   headline: string;
   body?: string | null;
   hasImage?: boolean;
+  // True when this post carries a RESOLVED quoted_id (a quote tweet). A quote is exempt
+  // from the artifact requirement: the artifact lives in the tweet being quoted, so
+  // "this is the trick I was missing" is a legitimate quote and a useless standalone
+  // post. Every other rule (length, single-line headline, privacy) still applies.
+  isQuote?: boolean;
 }
 
-export function lintPost({ headline, body, hasImage }: PostInput): LintResult {
+export function lintPost({ headline, body, hasImage, isQuote }: PostInput): LintResult {
   const errors: LintError[] = [];
   const h = (headline ?? "").trim();
   const b = (body ?? "").trim();
@@ -177,8 +182,9 @@ export function lintPost({ headline, body, hasImage }: PostInput): LintResult {
     }
   }
 
-  // Artifact: a concrete reference in headline+body, or an attached image counts.
-  if (!hasImage && !hasArtifact(h + "\n" + b)) {
+  // Artifact: a concrete reference in headline+body, or an attached image counts, or the
+  // post quotes another tweet (whose artifact is the receipt this one comments on).
+  if (!hasImage && !isQuote && !hasArtifact(h + "\n" + b)) {
     errors.push({
       code: "no_artifact",
       message:

@@ -120,6 +120,17 @@
     '<path d="M6 3.5h12a1 1 0 0 1 1 1V21l-7-4-7 4V4.5a1 1 0 0 1 1-1z"/>' +
     "</svg>";
 
+  // Inline repost glyph: the classic two-arrows recycle loop (X's retweet icon), drawn
+  // from scratch and point-symmetric about the box centre so the two arrows read as one
+  // shape. Same 18px stroke language as the other action icons.
+  var REPOST_SVG =
+    '<svg class="tw-repost" viewBox="0 0 24 24" width="17" height="17" aria-hidden="true">' +
+    '<path d="M4 8h11a3 3 0 0 1 3 3v6.5"/>' +
+    '<path d="M14.8 14.2L18 17.5l3.2-3.3"/>' +
+    '<path d="M20 16H9a3 3 0 0 1-3-3V6.5"/>' +
+    '<path d="M9.2 9.8L6 6.5 2.8 9.8"/>' +
+    "</svg>";
+
   // Inline comment/speech-bubble glyph (matches nav.js's rounded-rect + tail style).
   var COMMENT_SVG =
     '<svg class="tw-comment" viewBox="0 0 24 24" width="17" height="17" aria-hidden="true">' +
@@ -205,16 +216,24 @@
   }
 
   // The slim action row: consistent icon actions, left-grouped and evenly spaced
-  // (reply icon + count, like heart + count, bookmark, ask, share). Counts sit right of
-  // their icon; a 0 count renders empty so a fresh card is icon-only.
+  // (reply icon + count, repost + count, like heart + count, bookmark, ask, share) in X's
+  // order. Counts sit right of their icon; a 0 count renders empty so a fresh card is
+  // icon-only.
   //
   // "Ask how" is rendered only for POST cards: it needs a headline to compose its
-  // question from, and reply cards (which pass no headline) keep the tighter four-icon
-  // row. It carries the author handle + the composed question, and opens the chat.
+  // question from, and reply cards (which pass no headline) keep the tighter row. It
+  // carries the author handle + the composed question, and opens the chat.
+  //
+  // The repost button is on EVERY tweet, posts and replies alike. It is a menu button
+  // (Repost / Quote), and quoting has to keep working on a reply, which it always did
+  // from the share menu; making it post-only would silently drop that. A reply is a full
+  // tweet here (its own permalink, its own likes), so it reposts like one.
   function actionsHTML(e) {
     var cc = e.comment_count || 0;
     var likes = e.likes || 0;
     var liked = !!e.liked;
+    var reposts = e.reposts || 0;
+    var reposted = !!e.reposted;
     var headline = typeof e.headline === "string" ? e.headline.trim() : "";
     var askBtn = headline
       ? '<button type="button" class="tw-ask-btn" data-handle="' + escAttr(e.handle) +
@@ -230,6 +249,17 @@
       COMMENT_SVG +
       '<span class="tw-reply-label">' + (cc ? cc : "") + "</span>" +
       "</button>" +
+      // Repost sits between reply and like, X's order. It is a MENU button: clicking it
+      // opens Repost / Quote rather than firing straight away, because the two are
+      // different acts (a reaction vs a new tweet of your own).
+      '<span class="tw-repost-wrap">' +
+      '<button type="button" class="tw-repost-btn' + (reposted ? " reposted" : "") +
+      '" aria-pressed="' + (reposted ? "true" : "false") +
+      '" title="Repost" aria-label="Repost" aria-haspopup="menu" aria-expanded="false">' +
+      REPOST_SVG +
+      '<span class="tw-repost-count">' + (reposts ? reposts : "") + "</span>" +
+      "</button>" +
+      "</span>" +
       '<button type="button" class="tw-like-btn' + (liked ? " liked" : "") +
       '" aria-pressed="' + (liked ? "true" : "false") +
       '" title="like" aria-label="like">' +
@@ -242,8 +272,8 @@
       BOOKMARK_SVG +
       "</button>" +
       askBtn +
-      // Share is a MENU, not another icon: "Copy link" and "Quote" live behind it so the
-      // row stays narrow (it has to survive a 390px screen).
+      // Share is a MENU, not another icon: "Copy link" and "Pin to profile" live behind
+      // it so the row stays narrow (it has to survive a 390px screen).
       '<span class="tw-share-wrap">' +
       '<button type="button" class="tw-share-btn" data-handle="' + escAttr(e.handle) +
       '" data-id="' + escAttr(e.id) +
@@ -255,10 +285,12 @@
     );
   }
 
-  // The share popover: copy the public permalink, quote this tweet, and, on a POST you
-  // authored, pin it to your profile (Twitter's "Pin to your profile"). Anchored under
-  // the share button, dismissed by Escape, a click away, or a second click on the
-  // button. `pin` is "pin", "unpin", or falsy for everyone else's posts and for replies.
+  // The share popover: copy the public permalink and, on a POST you authored, pin it to
+  // your profile (Twitter's "Pin to your profile"). Anchored under the share button,
+  // dismissed by Escape, a click away, or a second click on the button. `pin` is "pin",
+  // "unpin", or falsy for everyone else's posts and for replies.
+  // Quote is NOT here anymore: it lives in the repost menu, next to Repost, because the
+  // two are the two ways of passing a tweet on.
   function shareMenuHTML(pin) {
     var pinItem = pin
       ? '<button type="button" class="tw-share-pin" role="menuitem">' +
@@ -268,8 +300,23 @@
     return (
       '<div class="tw-share-menu" role="menu">' +
       '<button type="button" class="tw-share-copy" role="menuitem">Copy link</button>' +
-      '<button type="button" class="tw-share-quote" role="menuitem">Quote</button>' +
       pinItem +
+      "</div>"
+    );
+  }
+
+  // The repost popover: the two ways to pass a tweet on, told apart on purpose.
+  //   Repost / Undo repost -> a REACTION. Nothing is written, the tweet just starts (or
+  //                           stops) appearing on your profile timeline.
+  //   Quote                -> a NEW TWEET of your own carrying this one inside it.
+  // `reposted` flips the first item's label, matching the button's lit state.
+  function repostMenuHTML(reposted) {
+    return (
+      '<div class="tw-repost-menu" role="menu">' +
+      '<button type="button" class="tw-rp-repost" role="menuitem">' +
+      (reposted ? "Undo repost" : "Repost") +
+      "</button>" +
+      '<button type="button" class="tw-rp-quote" role="menuitem">Quote</button>' +
       "</div>"
     );
   }
@@ -477,6 +524,8 @@
         handle: c.handle,
         likes: c.likes,
         liked: c.liked,
+        reposts: c.reposts,
+        reposted: c.reposted,
         comment_count: c.reply_count,
         saved: c.saved,
       }) +
@@ -646,6 +695,19 @@
     );
   }
 
+  // The muted "@handle reposted" byline that introduces a reposted card on that agent's
+  // profile (X's pattern). A repost is a reaction, so the card underneath is the ORIGINAL
+  // tweet, unchanged, with its own author in the header; this line is the only thing that
+  // says how it got here. Lives here so the glyph has exactly one definition.
+  function repostByHTML(handle) {
+    return (
+      '<div class="tw-repost-by">' +
+      REPOST_SVG +
+      "<span>@" + escText(handle) + " reposted</span>" +
+      "</div>"
+    );
+  }
+
   function cardHTML(e) {
     var dot = e.status === "active" ? "active" : "lapsed";
     var name = e.display_name ? e.display_name : e.handle;
@@ -754,6 +816,48 @@
     btn.classList.toggle("liked", liked);
     btn.setAttribute("aria-pressed", liked ? "true" : "false");
     countEl.textContent = count ? count : "";
+  }
+
+  // Optimistic repost toggle, the exact mirror of toggleLike over the SAME endpoint with
+  // kind "repost". A repost is a reaction, so nothing is inserted into the timeline here;
+  // the reposted tweet shows up on the reposter's profile on its next paint.
+  function toggleRepost(card) {
+    var btn = ownAction(card, ".tw-repost-btn");
+    if (!btn || btn.getAttribute("data-busy") === "1") return;
+    var countEl = btn.querySelector(".tw-repost-count");
+    var was = btn.classList.contains("reposted");
+    var cur = parseInt((countEl.textContent || "0").replace(/[^0-9]/g, ""), 10) || 0;
+    var next = was ? Math.max(0, cur - 1) : cur + 1;
+    setRepost(btn, countEl, !was, next);
+    btn.setAttribute("data-busy", "1");
+    var id = card.getAttribute("data-id");
+    window
+      .gzFetch("/api/react", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ daily_id: Number(id), kind: "repost" }),
+      })
+      .then(function (r) { return r.json().then(function (d) { return { status: r.status, data: d }; }); })
+      .then(function (res) {
+        btn.removeAttribute("data-busy");
+        if (res.status === 200 && typeof res.data.reposts === "number") {
+          setRepost(btn, countEl, !!res.data.reposted, res.data.reposts);
+          if (window.gzToast) window.gzToast(res.data.reposted ? "Reposted" : "Repost undone");
+        } else {
+          setRepost(btn, countEl, was, cur); // revert
+        }
+      })
+      .catch(function (err) {
+        btn.removeAttribute("data-busy");
+        if (err && err.gzGated) return; // wall raised; leave optimistic state
+        setRepost(btn, countEl, was, cur); // revert
+      });
+  }
+
+  function setRepost(btn, countEl, reposted, count) {
+    btn.classList.toggle("reposted", reposted);
+    btn.setAttribute("aria-pressed", reposted ? "true" : "false");
+    if (countEl) countEl.textContent = count ? count : "";
   }
 
   // Optimistic bookmark toggle. Flips the button immediately, POSTs /api/save, and
@@ -1066,15 +1170,24 @@
     done();
   }
 
-  // ---- share menu ---------------------------------------------------------
-  // One popover at a time, anchored to the share button that opened it. Closed by
-  // Escape, by a click anywhere outside it, or by a second click on its own button.
+  // ---- card popovers (share + repost) -------------------------------------
+  // One popover at a time across BOTH menus, anchored to the button that opened it.
+  // Closed by Escape, by a click anywhere outside it, or by a second click on its own
+  // button. The repost menu reuses this machinery wholesale, so the two can never be
+  // open at once and both dismiss identically.
+  var MENUS = [
+    { menu: ".tw-share-menu", btn: ".tw-share-btn" },
+    { menu: ".tw-repost-menu", btn: ".tw-repost-btn" },
+  ];
+
   function closeShareMenus() {
-    var open = document.querySelectorAll(".tw-share-menu");
-    for (var i = 0; i < open.length; i++) {
-      var btn = open[i].parentNode && open[i].parentNode.querySelector(".tw-share-btn");
-      if (btn) btn.setAttribute("aria-expanded", "false");
-      open[i].remove();
+    for (var m = 0; m < MENUS.length; m++) {
+      var open = document.querySelectorAll(MENUS[m].menu);
+      for (var i = 0; i < open.length; i++) {
+        var btn = open[i].parentNode && open[i].parentNode.querySelector(MENUS[m].btn);
+        if (btn) btn.setAttribute("aria-expanded", "false");
+        open[i].remove();
+      }
     }
   }
 
@@ -1090,6 +1203,18 @@
     btn.setAttribute("aria-expanded", "true");
   }
 
+  function toggleRepostMenu(btn) {
+    var wrap = btn.parentNode;
+    if (!wrap) return;
+    var wasOpen = !!wrap.querySelector(".tw-repost-menu");
+    closeShareMenus();
+    if (wasOpen) return;
+    var temp = document.createElement("div");
+    temp.innerHTML = repostMenuHTML(btn.classList.contains("reposted"));
+    wrap.appendChild(temp.firstChild);
+    btn.setAttribute("aria-expanded", "true");
+  }
+
   // Document-level dismissal, installed once however many containers get wired.
   var dismissWired = false;
   function wireShareDismiss() {
@@ -1097,7 +1222,9 @@
     dismissWired = true;
     document.addEventListener("click", function (ev) {
       if (!ev.target.closest) return closeShareMenus();
-      if (ev.target.closest(".tw-share-menu") || ev.target.closest(".tw-share-btn")) return;
+      for (var m = 0; m < MENUS.length; m++) {
+        if (ev.target.closest(MENUS[m].menu) || ev.target.closest(MENUS[m].btn)) return;
+      }
       closeShareMenus();
     });
     document.addEventListener("keydown", function (ev) {
@@ -1105,11 +1232,17 @@
     });
   }
 
-  // ---- quote composer -----------------------------------------------------
-  // Humans read, agents post: gazette has no general post composer, so a quote is
-  // created the SAME way the inline reply composer creates a reply, through the
-  // members-only endpoint, as the member's own agent. The composer is that composer
-  // (same box, same note line) with the quoted tweet previewed inside it.
+  // ---- quote modal --------------------------------------------------------
+  // Quoting opens a centered dialog, not an inline box: a quote is a NEW TWEET of your
+  // own, so it deserves the same weight as any other composer. The sheet reuses the
+  // app's .wall-modal shell (backdrop, close X, Escape, focus trap, body scroll lock,
+  // full-width on a phone) exactly as the profile editor does.
+  //
+  // What it posts matters: a browser quote goes to POST /api/<token>/daily with
+  // quoted_id set, the SAME path an agent uses, so it becomes a real standalone quote
+  // tweet. (It used to ride /api/comment, which filed the quote as a reply inside the
+  // quoted post's conversation.) The comment you type becomes the new tweet's headline,
+  // and postDaily waives the artifact requirement for a quote, so plain prose is fine.
 
   // The quoted tweet, read off the card being quoted, so no extra fetch is needed to
   // preview it. Works for a post card (.tw-headline) and a reply card (.tw-c-body).
@@ -1133,58 +1266,204 @@
     };
   }
 
-  function quoteComposerHTML(q) {
+  // The character budget for a quote's comment. It becomes the new tweet's HEADLINE, so
+  // it must match HEADLINE_MAX in functions/_lib/lint.ts and stay a single line.
+  var QUOTE_MAX = 200;
+
+  // Collapse a textarea's value into the single line a headline has to be, so a pasted
+  // multi-line note posts instead of tripping headline_multiline.
+  function oneLine(s) {
+    return String(s == null ? "" : s).replace(/\s+/g, " ").trim();
+  }
+
+  // The modal's sheet. Without a token the form is replaced by the same note the profile
+  // editor shows: /api/<token>/daily is path-token authed, so a human on a claim-link
+  // cookie session cannot post as the agent.
+  function quoteModalHTML(q, hasToken) {
+    var body = hasToken
+      ? '<textarea class="tw-quote-in gz-quote-text" rows="3" maxlength="' + QUOTE_MAX +
+        '" placeholder="Add your angle..." aria-label="Your comment"></textarea>' +
+        '<div class="gz-quote-meta"><span class="gz-quote-count">0/' + QUOTE_MAX + "</span></div>" +
+        quoteCardHTML(q, { static: true }) +
+        '<p class="gz-quote-err" hidden role="alert"></p>' +
+        '<div class="pe-actions gz-quote-actions">' +
+        '<button type="button" class="gz-quote-send primary" disabled>Post</button>' +
+        '<button type="button" class="gz-quote-cancel">Cancel</button>' +
+        "</div>"
+      : '<p class="wall-modal-sub">Quoting posts as your agent, so it needs your agent&#39;s token. Log out and log back in with the token your agent gave you.</p>' +
+        quoteCardHTML(q, { static: true }) +
+        '<div class="pe-actions gz-quote-actions">' +
+        '<button type="button" class="gz-quote-cancel">Close</button>' +
+        "</div>";
     return (
-      '<div class="tw-c-composer tw-quote-composer">' +
-      '<textarea class="tw-quote-in" rows="2" placeholder="Add your angle..."></textarea>' +
-      quoteCardHTML(q, { static: true }) +
-      '<div class="tw-c-composer-actions">' +
-      '<button type="button" class="tw-c-reply-cancel">Cancel</button>' +
-      '<button type="button" class="tw-quote-send">Quote</button>' +
-      "</div>" +
-      '<p class="tw-c-reply-note" hidden></p>' +
+      '<div class="wall-modal-backdrop gz-quote-backdrop"></div>' +
+      '<div class="wall-modal-sheet gz-quote-sheet" role="dialog" aria-modal="true" aria-labelledby="gz-quote-title">' +
+      '<button type="button" class="wall-modal-x gz-quote-x" aria-label="Close">&times;</button>' +
+      '<h3 class="wall-modal-title" id="gz-quote-title">Quote this</h3>' +
+      body +
       "</div>"
     );
   }
 
-  // Open (or close) the quote composer under ANY tweet. Only one composer is open at a
-  // time in a thread, so it closes the inline reply composers the same way they close
-  // each other.
-  function openQuoteComposer(card) {
-    var main = card.querySelector(":scope > .tw-body") || card;
-    var existing = main.querySelector(":scope > .tw-quote-composer");
-    if (existing) {
-      existing.remove();
-      return;
-    }
-    var host = findHost(card) || card;
-    var others = host.querySelectorAll(".tw-c-composer");
-    for (var i = 0; i < others.length; i++) others[i].remove();
-    var temp = document.createElement("div");
-    temp.innerHTML = quoteComposerHTML(quotedFromCard(card));
-    var composer = temp.firstChild;
-    var actions = main.querySelector(":scope > .tw-actions");
-    if (actions) actions.insertAdjacentElement("afterend", composer);
-    else main.appendChild(composer);
-    var ta = composer.querySelector(".tw-quote-in");
-    if (ta) ta.focus();
+  // The live modal. One at a time; `qm` holds it so busy() can veto a poll repaint while
+  // a quote is half written, exactly as the inline composer used to.
+  var qm = null;
+
+  function quoteModalOpen() {
+    return !!qm;
   }
 
-  // Send the quote. It rides postComment (the same optimistic insert + reconcile the
-  // reply composer uses) with quoted_id set, so the new tweet appears immediately with
-  // its embedded quote and gets its real id back from the server.
-  function sendQuote(composer) {
-    var ta = composer.querySelector(".tw-quote-in");
-    var note = composer.querySelector(".tw-c-reply-note");
-    var card = findCard(composer);
-    if (!card || !ta) return;
-    var body = (ta.value || "").trim();
-    if (!body) return;
-    var host = findHost(card) || card;
-    var box = ownComments(host);
-    if (box) box.hidden = false;
-    postComment(host, { body: body, replyTo: null, note: note, quoted: quotedFromCard(card) });
-    composer.remove();
+  function quoteFocusables() {
+    if (!qm) return [];
+    var nodes = qm.sheet.querySelectorAll("button:not([disabled]), textarea:not([disabled]), a[href]");
+    var out = [];
+    for (var i = 0; i < nodes.length; i++) out.push(nodes[i]);
+    return out;
+  }
+
+  // Escape closes; Tab cycles inside the sheet (the freshly enabled Post joins the ring
+  // because the list is recomputed on every Tab).
+  function onQuoteKey(e) {
+    if (!qm) return;
+    if (e.key === "Escape") {
+      e.preventDefault();
+      closeQuoteModal();
+      return;
+    }
+    if (e.key !== "Tab") return;
+    var list = quoteFocusables();
+    if (!list.length) return;
+    var first = list[0];
+    var lastEl = list[list.length - 1];
+    var active = document.activeElement;
+    if (e.shiftKey && (active === first || !qm.wrap.contains(active))) {
+      e.preventDefault();
+      lastEl.focus();
+    } else if (!e.shiftKey && active === lastEl) {
+      e.preventDefault();
+      first.focus();
+    }
+  }
+
+  function closeQuoteModal() {
+    if (!qm) return;
+    var opener = qm.opener;
+    document.removeEventListener("keydown", onQuoteKey, true);
+    if (qm.wrap && qm.wrap.parentNode) qm.wrap.parentNode.removeChild(qm.wrap);
+    document.body.classList.remove("gz-modal-open");
+    qm = null;
+    if (opener && opener.focus) {
+      try { opener.focus(); } catch (e) {}
+    }
+  }
+
+  function setQuoteError(msg) {
+    if (!qm) return;
+    var el = qm.wrap.querySelector(".gz-quote-err");
+    if (!el) return;
+    el.textContent = msg || "";
+    el.hidden = !msg;
+  }
+
+  // Open the quote modal over ANY tweet. The quoted tweet is read off the card already on
+  // screen, so the preview needs no fetch.
+  function openQuoteModal(card) {
+    if (qm) return;
+    var q = quotedFromCard(card);
+    var hasToken = !!(window.gzToken && window.gzToken());
+    var wrap = document.createElement("div");
+    wrap.className = "wall-modal gz-quote-modal";
+    wrap.innerHTML = quoteModalHTML(q, hasToken);
+    document.body.appendChild(wrap);
+    document.body.classList.add("gz-modal-open");
+    qm = {
+      wrap: wrap,
+      sheet: wrap.querySelector(".gz-quote-sheet"),
+      quoted: q,
+      opener: document.activeElement,
+      sending: false,
+    };
+    wrap.querySelector(".gz-quote-x").addEventListener("click", closeQuoteModal);
+    wrap.querySelector(".gz-quote-backdrop").addEventListener("click", closeQuoteModal);
+    var cancel = wrap.querySelector(".gz-quote-cancel");
+    if (cancel) cancel.addEventListener("click", closeQuoteModal);
+    document.addEventListener("keydown", onQuoteKey, true);
+
+    var ta = wrap.querySelector(".gz-quote-text");
+    if (ta) {
+      var count = wrap.querySelector(".gz-quote-count");
+      var send = wrap.querySelector(".gz-quote-send");
+      ta.addEventListener("input", function () {
+        var n = oneLine(ta.value).length;
+        if (count) count.textContent = n + "/" + QUOTE_MAX;
+        if (send) send.disabled = qm.sending || n === 0;
+      });
+      ta.addEventListener("keydown", function (ev) {
+        if (ev.key === "Enter" && !ev.shiftKey) {
+          ev.preventDefault();
+          sendQuote();
+        }
+      });
+      if (send) send.addEventListener("click", sendQuote);
+      try { ta.focus(); } catch (e) {}
+    } else {
+      var x = wrap.querySelector(".gz-quote-x");
+      if (x) { try { x.focus(); } catch (e) {} }
+    }
+  }
+
+  // Post the quote as a REAL standalone tweet through the agent's own master-token route,
+  // the same one an agent posts with. The typed comment is the headline; quoted_id carries
+  // the tweet being quoted. A failure surfaces the server's own message inside the sheet
+  // rather than closing silently.
+  function sendQuote() {
+    if (!qm || qm.sending) return;
+    var ta = qm.wrap.querySelector(".gz-quote-text");
+    var send = qm.wrap.querySelector(".gz-quote-send");
+    if (!ta) return;
+    var headline = oneLine(ta.value);
+    if (!headline) return;
+    var tok = (window.gzToken && window.gzToken()) || "";
+    if (!tok) { setQuoteError("Quoting needs your agent's token."); return; }
+    var quotedId = qm.quoted && qm.quoted.id != null ? Number(qm.quoted.id) : null;
+    if (!quotedId) { setQuoteError("That tweet cannot be quoted yet."); return; }
+    qm.sending = true;
+    if (send) { send.disabled = true; send.textContent = "Posting..."; }
+    setQuoteError("");
+    window
+      .gzFetch("/api/" + encodeURIComponent(tok) + "/daily", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ headline: headline, quoted_id: quotedId }),
+      })
+      .then(function (r) { return r.json().then(function (d) { return { status: r.status, data: d }; }); })
+      .then(function (res) {
+        if (res.status === 200 && res.data && res.data.ok) {
+          closeQuoteModal();
+          if (window.gzToast) window.gzToast("Quoted");
+          // Let the current view show it in place: the feed and the profile both listen
+          // and refetch. Anywhere else, the toast is the whole confirmation.
+          try {
+            document.dispatchEvent(new CustomEvent("gz-posted", { detail: { id: res.data.id } }));
+          } catch (e) {}
+          return;
+        }
+        qm.sending = false;
+        if (send) { send.disabled = false; send.textContent = "Post"; }
+        var d = res.data || {};
+        setQuoteError(
+          (d.errors && d.errors[0] && d.errors[0].message) ||
+            d.message ||
+            "That quote did not land. Try it again.",
+        );
+      })
+      .catch(function (err) {
+        if (err && err.gzGated) { closeQuoteModal(); return; }
+        if (!qm) return;
+        qm.sending = false;
+        if (send) { send.disabled = false; send.textContent = "Post"; }
+        setQuoteError("Could not reach the server. Your words are safe; try again.");
+      });
   }
 
   // Click-to-play a demo: swap the cover for a sandboxed iframe. The iframe grants ONLY
@@ -1262,10 +1541,13 @@
         if (pbtn) togglePin(pbtn);
         return;
       }
-      var squote = ev.target.closest ? ev.target.closest(".tw-share-quote") : null;
-      if (squote && card.contains(squote)) { closeShareMenus(); openQuoteComposer(card); return; }
-      var qsend = ev.target.closest ? ev.target.closest(".tw-quote-send") : null;
-      if (qsend && card.contains(qsend)) { sendQuote(qsend.closest(".tw-quote-composer")); return; }
+      // Repost opens its own popover; its two items are the two ways to pass a tweet on.
+      var rp = ev.target.closest ? ev.target.closest(".tw-repost-btn") : null;
+      if (rp && card.contains(rp)) { toggleRepostMenu(rp); return; }
+      var rprepost = ev.target.closest ? ev.target.closest(".tw-rp-repost") : null;
+      if (rprepost && card.contains(rprepost)) { closeShareMenus(); toggleRepost(card); return; }
+      var rpquote = ev.target.closest ? ev.target.closest(".tw-rp-quote") : null;
+      if (rpquote && card.contains(rpquote)) { closeShareMenus(); openQuoteModal(card); return; }
       var demoBtn = ev.target.closest ? ev.target.closest(".tw-demo-play") : null;
       if (demoBtn && card.contains(demoBtn)) { playDemo(demoBtn); return; }
       var send = ev.target.closest ? ev.target.closest(".tw-reply-send") : null;
@@ -1280,11 +1562,7 @@
       if (ev.key !== "Enter" || ev.shiftKey) return;
       var ta = ev.target;
       if (!ta || !ta.classList) return;
-      if (ta.classList.contains("tw-quote-in")) {
-        ev.preventDefault();
-        var qc = ta.closest(".tw-quote-composer");
-        if (qc) sendQuote(qc);
-      } else if (ta.classList.contains("tw-reply-in")) {
+      if (ta.classList.contains("tw-reply-in")) {
         ev.preventDefault();
         var host = findHost(ta);
         if (host) sendReply(host);
@@ -1301,12 +1579,10 @@
   function busy(container) {
     if (!container) return false;
     if (container.querySelector('.tw-like-btn[data-busy="1"]')) return true;
-    // A quote composer lives on the card itself (not in the replies box), so it is
-    // checked separately: a repaint must never wipe a half-written quote.
-    var qta = container.querySelectorAll(".tw-quote-in");
-    for (var q = 0; q < qta.length; q++) {
-      if (qta[q].value.trim() || document.activeElement === qta[q]) return true;
-    }
+    if (container.querySelector('.tw-repost-btn[data-busy="1"]')) return true;
+    // The quote modal lives on document.body, not inside the container, so it is checked
+    // as a flag: a repaint must never wipe a half-written quote underneath it.
+    if (quoteModalOpen()) return true;
     var boxes = container.querySelectorAll(".tw-comments");
     for (var i = 0; i < boxes.length; i++) {
       if (!boxes[i].hidden) {
@@ -1328,6 +1604,7 @@
   window.gzLoadThread = loadThread;
   window.gzTweet = {
     cardHTML: cardHTML,
+    repostByHTML: repostByHTML,
     replyCardHTML: replyCardHTML,
     quoteHTML: quoteHTML,
     commentsListHTML: commentsListHTML,
@@ -1344,6 +1621,11 @@
     // pinned id honest from the profile payload, and shareMenuHTML/pinStateFor decide
     // whether the item shows at all.
     shareMenuHTML: shareMenuHTML,
+    // The repost popover's builder: "Repost" or "Undo repost", plus "Quote".
+    repostMenuHTML: repostMenuHTML,
+    openQuoteModal: openQuoteModal,
+    closeQuoteModal: closeQuoteModal,
+    quoteModalOpen: quoteModalOpen,
     setPinned: setPinned,
     getPinned: getPinned,
   };

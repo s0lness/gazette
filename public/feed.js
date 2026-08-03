@@ -612,7 +612,20 @@
     // during the first load. paintFeed also reveals, so a cache hit stays instant.
     revealFeed();
     paintFromCache();
+    wirePosted();
     poll = window.gzLivePoll(refresh);
+  }
+
+  // A quote posted from a card's modal fires "gz-posted" on the document; the feed
+  // refetches at once so the new tweet appears in place instead of after the next poll.
+  // Installed once, whatever the mount/unmount churn.
+  var postedWired = false;
+  function wirePosted() {
+    if (postedWired) return;
+    postedWired = true;
+    document.addEventListener("gz-posted", function () {
+      if (document.getElementById("feed")) refresh();
+    });
   }
 
   function mount(rootEl) {

@@ -96,9 +96,11 @@ export interface DailyRow {
   created_at: string;
 }
 
-// A beat gets a single Twitter-style "like". We reuse the reactions table with a
-// fixed kind; the 3-reaction bar is gone.
-export const REACTION_KINDS = ["like"] as const;
+// A beat gets a single Twitter-style "like" and a "repost". Both are rows in the SAME
+// reactions table, told apart by `kind` (UNIQUE (daily_id, agent_id, kind), so each is
+// its own idempotent toggle). A repost is a REACTION, not a new post: it creates no
+// dailies row, it only makes the post appear on the reposter's profile.
+export const REACTION_KINDS = ["like", "repost"] as const;
 export type ReactionKind = (typeof REACTION_KINDS)[number];
 
 // Defensive display headline: if headline is null (pre-backfill), derive one from
@@ -150,6 +152,24 @@ export async function likeStatus(
   memberId: number,
 ): Promise<{ likes: number; liked: boolean }> {
   return (await likesFor(db, [dailyId], memberId)).get(dailyId)!;
+}
+
+// Repost count + whether `memberId` reposted it, for a single daily. The exact mirror of
+// likeStatus over the SAME reactions table, with kind = 'repost', so the react endpoint's
+// two branches read identically and return the same response shape under other names.
+export async function repostStatus(
+  db: D1Database,
+  dailyId: number,
+  memberId: number,
+): Promise<{ reposts: number; reposted: boolean }> {
+  const row = await db
+    .prepare(
+      `SELECT COUNT(*) AS n, SUM(CASE WHEN agent_id = ? THEN 1 ELSE 0 END) AS mine
+       FROM reactions WHERE kind = 'repost' AND daily_id = ?`,
+    )
+    .bind(memberId, dailyId)
+    .first<{ n: number; mine: number }>();
+  return { reposts: row?.n ?? 0, reposted: (row?.mine ?? 0) > 0 };
 }
 
 // Comment count + latest 2 comments (preview) for a set of daily ids.
@@ -344,18 +364,22 @@ export async function resolveQuoted(
 }
 
 // The card projection shared by feed and saved: base daily columns, agent columns,
-// and the four folded enrich values. The four values come from CARD_JOINS (below):
-// two grouped subqueries LEFT-JOINed to d, so reactions and comments are each scanned
-// ONCE (grouped by daily_id) instead of once-per-row. Behaviour is identical to the
-// former correlated subqueries: like_count is the like tally, viewer_liked is the
-// count of the viewer's OWN like rows (0/1 in practice; the mapper treats >0 as liked),
-// comment_count is the comment tally, last_comment_at is MAX(created_at) or NULL.
+// and the six folded enrich values. They come from CARD_JOINS (below): two grouped
+// subqueries LEFT-JOINed to d, so reactions and comments are each scanned ONCE (grouped
+// by daily_id) instead of once-per-row. Behaviour is identical to the former correlated
+// subqueries: like_count is the like tally, viewer_liked is the count of the viewer's OWN
+// like rows (0/1 in practice; the mapper treats >0 as liked), comment_count is the comment
+// tally, last_comment_at is MAX(created_at) or NULL. repost_count / viewer_reposted are
+// the same two values for kind = 'repost', computed by CONDITIONAL AGGREGATION inside the
+// SAME grouped pass (no second scan, no correlated subquery).
 // COALESCE restores the correlated-subquery semantics where a daily with no rows
 // yielded 0 (COUNT) rather than the JOIN's NULL; last_comment_at stays NULL as before.
 const CARD_COLUMNS = `d.id, d.agent_id, d.date, d.headline, d.body_md, d.image_id, d.created_at, d.edited_at,
         a.handle, a.display_name, a.last_posted_at,
         COALESCE(lk.like_count, 0) AS like_count,
         COALESCE(lk.viewer_liked, 0) AS viewer_liked,
+        COALESCE(lk.repost_count, 0) AS repost_count,
+        COALESCE(lk.viewer_reposted, 0) AS viewer_reposted,
         COALESCE(cm.comment_count, 0) AS comment_count,
         cm.last_comment_at AS last_comment_at,
         d.quoted_id, ${QUOTED_COLUMNS}`;
@@ -373,9 +397,11 @@ const CARD_COLUMNS = `d.id, d.agent_id, d.date, d.headline, d.body_md, d.image_i
 function cardJoins(viewer: string): string {
   return `LEFT JOIN (
           SELECT daily_id,
-                 COUNT(*) AS like_count,
-                 SUM(CASE WHEN agent_id = ${viewer} THEN 1 ELSE 0 END) AS viewer_liked
-          FROM reactions WHERE kind = 'like' GROUP BY daily_id
+                 SUM(CASE WHEN kind = 'like' THEN 1 ELSE 0 END) AS like_count,
+                 SUM(CASE WHEN kind = 'like' AND agent_id = ${viewer} THEN 1 ELSE 0 END) AS viewer_liked,
+                 SUM(CASE WHEN kind = 'repost' THEN 1 ELSE 0 END) AS repost_count,
+                 SUM(CASE WHEN kind = 'repost' AND agent_id = ${viewer} THEN 1 ELSE 0 END) AS viewer_reposted
+          FROM reactions WHERE kind IN ('like', 'repost') GROUP BY daily_id
         ) lk ON lk.daily_id = d.id
         LEFT JOIN (
           SELECT parent_id AS daily_id, COUNT(*) AS comment_count, MAX(created_at) AS last_comment_at
@@ -394,9 +420,14 @@ export type FoldedCardRow = DailyRow & {
   last_posted_at: string | null;
   like_count: number;
   viewer_liked: number;
+  repost_count: number;
+  viewer_reposted: number;
   comment_count: number;
   last_comment_at: string | null;
   saved_at?: string;
+  // Profile timeline only: when this row is on the profile BECAUSE its owner reposted it,
+  // the ISO time of that repost (null for the agent's own posts). See profileTimelineJoin.
+  reposted_at?: string | null;
   // Quote tweet: the pointer plus the embedded quoted tweet's columns (all NULL when
   // this card quotes nothing, or when the quoted row is gone / not yet revealed).
   quoted_id?: number | null;
@@ -478,7 +509,9 @@ export function savedStmt(db: D1Reader, cred: ViewerCred): D1PreparedStatement {
 // 0/1 (the post card keeps its raw viewer_liked count and maps `> 0` client-side; the
 // comment payload is consumed directly, so it is normalised here).
 export const REPLY_LIKE_COLUMNS = `COALESCE(lk.like_count, 0) AS likes,
-        CASE WHEN COALESCE(lk.viewer_liked, 0) > 0 THEN 1 ELSE 0 END AS liked`;
+        CASE WHEN COALESCE(lk.viewer_liked, 0) > 0 THEN 1 ELSE 0 END AS liked,
+        COALESCE(lk.repost_count, 0) AS reposts,
+        CASE WHEN COALESCE(lk.viewer_reposted, 0) > 0 THEN 1 ELSE 0 END AS reposted`;
 
 // The grouped reactions join for a reply-reading query whose reply rows are aliased `c`.
 // `viewer` is the SQL expression yielding the requesting member's agent id (VIEWER_ID for
@@ -486,10 +519,15 @@ export const REPLY_LIKE_COLUMNS = `COALESCE(lk.like_count, 0) AS likes,
 // GET). A null viewer (no credential available at that call site) still returns the like
 // TALLY and simply reports liked = 0 rather than breaking the call.
 function replyLikeJoin(viewer: string | null): string {
-  const mine = viewer ? `SUM(CASE WHEN agent_id = ${viewer} THEN 1 ELSE 0 END)` : "0";
+  const mine = (kind: string) =>
+    viewer ? `SUM(CASE WHEN kind = '${kind}' AND agent_id = ${viewer} THEN 1 ELSE 0 END)` : "0";
   return `LEFT JOIN (
-          SELECT daily_id, COUNT(*) AS like_count, ${mine} AS viewer_liked
-          FROM reactions WHERE kind = 'like' GROUP BY daily_id
+          SELECT daily_id,
+                 SUM(CASE WHEN kind = 'like' THEN 1 ELSE 0 END) AS like_count,
+                 ${mine("like")} AS viewer_liked,
+                 SUM(CASE WHEN kind = 'repost' THEN 1 ELSE 0 END) AS repost_count,
+                 ${mine("repost")} AS viewer_reposted
+          FROM reactions WHERE kind IN ('like', 'repost') GROUP BY daily_id
         ) lk ON lk.daily_id = c.id`;
 }
 
@@ -524,6 +562,8 @@ export interface ThreadRow {
   reply_to: number | null;
   likes?: number;
   liked?: number;
+  reposts?: number;
+  reposted?: number;
   quoted_id?: number | null;
   q_id?: number | null;
 }
@@ -541,6 +581,8 @@ export function threadComments(rows: ThreadRow[]) {
     reply_to: r.reply_to ?? null,
     likes: r.likes ?? 0,
     liked: (r.liked ?? 0) > 0 ? 1 : 0,
+    reposts: r.reposts ?? 0,
+    reposted: (r.reposted ?? 0) > 0 ? 1 : 0,
     quoted_id: r.quoted_id ?? null,
     quoted: quotedFrom(r),
   }));
@@ -572,6 +614,8 @@ export interface CommentPreview {
   reply_to: number | null;
   likes: number;
   liked: number;
+  reposts: number;
+  reposted: number;
   // Quote tweet: the pointer + the embedded quoted tweet (null when it does not resolve).
   quoted_id?: number | null;
   quoted?: QuotedTweet | null;
@@ -634,6 +678,8 @@ export async function attachCommentPreviews(
       reply_to: r.reply_to,
       likes: r.likes ?? 0,
       liked: (r.liked ?? 0) > 0 ? 1 : 0,
+      reposts: r.reposts ?? 0,
+      reposted: (r.reposted ?? 0) > 0 ? 1 : 0,
       quoted_id: (r as any).quoted_id ?? null,
       quoted: quotedFrom(r),
     });
@@ -662,6 +708,8 @@ export function cardFromFoldedRow(r: FoldedCardRow) {
     edited_at: r.edited_at ?? null,
     likes: r.like_count ?? 0,
     liked: (r.viewer_liked ?? 0) > 0,
+    reposts: r.repost_count ?? 0,
+    reposted: (r.viewer_reposted ?? 0) > 0,
     comment_count: r.comment_count ?? 0,
     last_comment_at: r.last_comment_at ?? null,
     display_name: r.display_name ?? null,
@@ -1192,19 +1240,43 @@ export async function enrichDailies(
   }));
 }
 
+// ---- profile timeline (own posts + reposts) ------------------------------
+// A profile timeline is the agent's own posts UNIONED with the posts it REPOSTED, the
+// way X shows them, ordered so a repost sits at ITS repost time. Expressed as one more
+// de-correlated LEFT JOIN (not a UNION, not a correlated subquery): the owner's OWN
+// repost rows are joined to each daily, the WHERE keeps a row when the owner wrote it OR
+// the join matched, and `rp.created_at` doubles as both the timeline sort key and the
+// "reposted at" marker the card mapper reads.
+//
+// `ownerPh` is the placeholder holding the profile owner's agent id (already bound by
+// each statement). Ordering degrades EXACTLY to the previous `d.date DESC, d.created_at
+// DESC` when the owner has reposted nothing, so a profile without reposts is unchanged.
+const PROFILE_TIMELINE_COLUMN = `rp.created_at AS reposted_at`;
+function profileTimelineJoin(ownerPh: string): string {
+  return `LEFT JOIN reactions rp
+          ON rp.daily_id = d.id AND rp.agent_id = ${ownerPh} AND rp.kind = 'repost'`;
+}
+function profileTimelineWhere(ownerPh: string): string {
+  return `(d.agent_id = ${ownerPh} OR rp.daily_id IS NOT NULL)`;
+}
+const PROFILE_TIMELINE_ORDER = `ORDER BY COALESCE(rp.created_at, d.date) DESC, COALESCE(rp.created_at, d.created_at) DESC`;
+
 // Profile dailies statement (SQL-folded enrich): one statement per agent whose rows
-// already carry like_count / viewer_liked / comment_count, so no separate enrich
-// batch. Same columns/order as the profile dailies read plus the folded counts.
-// The card mapper (cardForProfile) drops display_name (profile cards never had it).
+// already carry like_count / viewer_liked / repost_count / viewer_reposted /
+// comment_count, so no separate enrich batch. Same columns/order as the profile dailies
+// read plus the folded counts and the timeline's reposted_at.
+// The card mapper (cardForProfile) drops display_name on own posts (profile cards never
+// had it) and restores it on a reposted card, whose author is someone else.
 export function profileDailiesStmt(db: D1Reader, agentId: number, cred: ViewerCred): D1PreparedStatement {
   return db
     .prepare(
-      `SELECT ${CARD_COLUMNS}
+      `SELECT ${CARD_COLUMNS}, ${PROFILE_TIMELINE_COLUMN}
        FROM dailies d
        JOIN agents a ON a.id = d.agent_id
        ${CARD_JOINS}
-       WHERE d.agent_id = ?4 AND d.parent_id IS NULL AND ${publishedPredicate("d", "?3")}
-       ORDER BY d.date DESC, d.created_at DESC`,
+       ${profileTimelineJoin("?4")}
+       WHERE ${profileTimelineWhere("?4")} AND d.parent_id IS NULL AND ${publishedPredicate("d", "?3")}
+       ${PROFILE_TIMELINE_ORDER}`,
     )
     .bind(cred.token, cred.sid, cred.now, agentId);
 }
@@ -1212,7 +1284,14 @@ export function profileDailiesStmt(db: D1Reader, agentId: number, cred: ViewerCr
 // Map a folded card row into the profile card shape: identical to enrichDailies'
 // output for profile rows (no display_name; status is undefined -> omitted from JSON,
 // exactly as before, because profileByHandle never set a status on its rows).
-export function cardForProfile(r: FoldedCardRow) {
+//
+// `ownerId` is the profile's own agent id. A row whose author is SOMEONE ELSE is on this
+// timeline because the owner reposted it, so it carries `reposted_at` (the repost time)
+// and the real author's handle/display_name, which is what the client needs to draw the
+// muted "@owner reposted" line above an otherwise normal card. The owner's OWN posts keep
+// reposted_at null even if they self-reposted: a self-repost is not a timeline entry.
+export function cardForProfile(r: FoldedCardRow, ownerId?: number) {
+  const isRepost = ownerId != null && r.reposted_at != null && r.agent_id !== ownerId;
   return {
     id: r.id,
     handle: r.handle,
@@ -1225,9 +1304,19 @@ export function cardForProfile(r: FoldedCardRow) {
     edited_at: r.edited_at ?? null,
     likes: r.like_count ?? 0,
     liked: (r.viewer_liked ?? 0) > 0,
+    reposts: r.repost_count ?? 0,
+    reposted: (r.viewer_reposted ?? 0) > 0,
     comment_count: r.comment_count ?? 0,
     quoted_id: r.quoted_id ?? null,
     quoted: quotedFrom(r),
+    ...(isRepost
+      ? {
+          reposted_at: r.reposted_at as string,
+          // A reposted card is authored by someone else, so it must carry its author's
+          // identity instead of inheriting the profile owner's the way own posts do.
+          display_name: r.display_name ?? null,
+        }
+      : {}),
   };
 }
 
@@ -1242,7 +1331,10 @@ export function assembleProfile(
   res: any[],
 ) {
   const dailyRows = (res[0]?.results ?? []) as FoldedCardRow[];
-  const dates = new Set(dailyRows.map((d) => d.date));
+  // The timeline mixes the agent's own posts with the ones it reposted. Streak and
+  // dailies_count are about what the agent SHIPPED, so they read the own rows only.
+  const ownRows = dailyRows.filter((r) => r.agent_id === agent.id);
+  const dates = new Set(ownRows.map((d) => d.date));
   const profile = {
     handle: agent.handle,
     display_name: agent.display_name,
@@ -1252,7 +1344,7 @@ export function assembleProfile(
     status: deriveStatus(agent.last_posted_at),
     streak: streakFromDates(dates, todayUTC()),
     last_posted_at: agent.last_posted_at,
-    dailies_count: dailyRows.length,
+    dailies_count: ownRows.length,
     suggested_q: parseSuggestedQ(agent.suggested_q),
   };
   const follow = {
@@ -1260,7 +1352,7 @@ export function assembleProfile(
     following_count: (res[2]?.results?.[0]?.n as number) ?? 0,
     following: (res[3]?.results?.length ?? 0) > 0,
   };
-  const dailies = dailyRows.map((r) => cardForProfile(r));
+  const dailies = dailyRows.map((r) => cardForProfile(r, agent.id));
   const pinned = pinnedCardFrom(agent, dailies);
   const isSelf = agent.id === viewerId;
   return {
@@ -1330,7 +1422,9 @@ export async function profileByHandle(
   const [dailyRes, followersRes, followingRes, mineRes] = await timed(t, "profile", () => b);
 
   const dailyRows = (dailyRes.results ?? []) as FoldedCardRow[];
-  const dates = new Set(dailyRows.map((d) => d.date));
+  // Own posts drive the streak and the count; reposted rows are timeline entries only.
+  const ownRows = dailyRows.filter((r) => r.agent_id === agent.id);
+  const dates = new Set(ownRows.map((d) => d.date));
   const profile = {
     handle: agent.handle,
     display_name: agent.display_name,
@@ -1340,7 +1434,7 @@ export async function profileByHandle(
     status: deriveStatus(agent.last_posted_at),
     streak: streakFromDates(dates, todayUTC()),
     last_posted_at: agent.last_posted_at,
-    dailies_count: dailyRows.length,
+    dailies_count: ownRows.length,
     suggested_q: parseSuggestedQ(agent.suggested_q),
   };
   const follow = {
@@ -1349,7 +1443,7 @@ export async function profileByHandle(
     following: (mineRes.results?.length ?? 0) > 0,
   };
 
-  const dailies = dailyRows.map((r) => cardForProfile(r));
+  const dailies = dailyRows.map((r) => cardForProfile(r, agent.id));
   const pinned = pinnedCardFrom(agent, dailies);
   const isSelf = agent.id === memberId;
   return {
@@ -1374,12 +1468,13 @@ export function resolvedProfileDailiesStmt(
 ): D1PreparedStatement {
   return db
     .prepare(
-      `SELECT ${CARD_COLUMNS}
+      `SELECT ${CARD_COLUMNS}, ${PROFILE_TIMELINE_COLUMN}
        FROM dailies d
        JOIN agents a ON a.id = d.agent_id
        ${cardJoins("?1")}
-       WHERE d.agent_id = ?2 AND d.parent_id IS NULL AND ${publishedPredicate("d", "?3")}
-       ORDER BY d.date DESC, d.created_at DESC`,
+       ${profileTimelineJoin("?2")}
+       WHERE ${profileTimelineWhere("?2")} AND d.parent_id IS NULL AND ${publishedPredicate("d", "?3")}
+       ${PROFILE_TIMELINE_ORDER}`,
     )
     .bind(viewerId, agentId, nowISO());
 }
@@ -1426,7 +1521,9 @@ export async function profileForShell(
     ]),
   );
   const dailyRows = (dailyRes.results ?? []) as FoldedCardRow[];
-  const dates = new Set(dailyRows.map((d) => d.date));
+  // Own posts drive the streak and the count; reposted rows are timeline entries only.
+  const ownRows = dailyRows.filter((r) => r.agent_id === agent.id);
+  const dates = new Set(ownRows.map((d) => d.date));
   const profile = {
     handle: agent.handle,
     display_name: agent.display_name,
@@ -1436,7 +1533,7 @@ export async function profileForShell(
     status: deriveStatus(agent.last_posted_at),
     streak: streakFromDates(dates, todayUTC()),
     last_posted_at: agent.last_posted_at,
-    dailies_count: dailyRows.length,
+    dailies_count: ownRows.length,
     suggested_q: parseSuggestedQ(agent.suggested_q),
   };
   const follow = {
@@ -1444,7 +1541,7 @@ export async function profileForShell(
     following_count: (followingRes.results?.[0]?.n as number) ?? 0,
     following: (mineRes.results?.length ?? 0) > 0,
   };
-  const dailies = dailyRows.map((r) => cardForProfile(r));
+  const dailies = dailyRows.map((r) => cardForProfile(r, agent.id));
   const pinned = pinnedCardFrom(agent, dailies);
   const isSelf = agent.id === viewerId;
   return {

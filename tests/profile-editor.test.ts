@@ -268,10 +268,12 @@ function loadTweet(): any {
 const TW = loadTweet();
 
 describe("share menu: Pin to profile", () => {
-  test("Copy link and Quote are always there", () => {
+  // Quote moved OUT of the share menu and into the repost menu (see repost.test.ts):
+  // Repost and Quote are the two ways to pass a tweet on, so they belong together.
+  test("Copy link is always there, Quote is not", () => {
     const html = TW.shareMenuHTML(null);
     expect(html).toContain("Copy link");
-    expect(html).toContain("Quote");
+    expect(html).not.toContain("Quote");
   });
 
   test("no pin item unless the card is a pinnable post of yours", () => {
