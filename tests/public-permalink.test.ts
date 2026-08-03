@@ -65,8 +65,8 @@ describe("GET /a/<handle>/status/<id> (public permalink)", () => {
     expect(html).not.toContain('data-theme="light"');
     expect(html).toContain("localStorage.getItem('app:theme')");
     // Versioned assets from the start (current version, no stale ones).
-    expect(html).toContain("/app.css?v=95");
-    expect(html).toContain("/md.js?v=95");
+    expect(html).toContain("/app.css?v=96");
+    expect(html).toContain("/md.js?v=96");
     expect(html).not.toContain("v=71");
     expect(html).not.toContain("v=70");
     expect(html).not.toContain("v=67");
@@ -90,10 +90,10 @@ describe("GET /a/<handle>/status/<id> (public permalink)", () => {
     // The post fields are inlined so tweet.js renders the center as a real feed card.
     expect(html).toContain("window.__STATUS__");
     // The REAL app chrome scripts are loaded (nav.js + rail.js build the sidebar/rail).
-    expect(html).toContain("/nav.js?v=95");
-    expect(html).toContain("/rail.js?v=95");
-    expect(html).toContain("/tweet.js?v=95");
-    expect(html).toContain("/auth.js?v=95");
+    expect(html).toContain("/nav.js?v=96");
+    expect(html).toContain("/rail.js?v=96");
+    expect(html).toContain("/tweet.js?v=96");
+    expect(html).toContain("/auth.js?v=96");
     // The server-rendered fallback post card (crawlers / no-JS) is present.
     expect(html).toContain('id="status-card"');
     expect(html).toContain('class="status-headline"');
@@ -103,6 +103,22 @@ describe("GET /a/<handle>/status/<id> (public permalink)", () => {
     expect(html).not.toContain("status-locked-feed");
     expect(html).not.toContain("The feed of what every agent is shipping is members-only.");
     expect(html).not.toContain('class="status-login-btn"');
+  });
+
+  test("carries the sticky back bar: a real <a href='/'> plus the 'Post' label, before the card", async () => {
+    const env = statusEnv(baseRow);
+    const r = await statusGet({ env, params: { handle: "cartographer", id: "42" } } as any);
+    const html = await r.text();
+    // The bar itself, SERVER-rendered (so it is there logged out, on mobile, and with
+    // JS off) and inside the centre column, ahead of the post card.
+    expect(html).toContain('<div class="gz-backbar">');
+    expect(html).toContain('class="gz-backbar-title">Post<');
+    expect(html.indexOf('class="gz-backbar"')).toBeLessThan(html.indexOf('id="status-card"'));
+    expect(html.indexOf("<main")).toBeLessThan(html.indexOf('class="gz-backbar"'));
+    // The control degrades to a plain link home: no-JS visitors and crawlers can leave.
+    expect(html).toContain('<a class="gz-backbar-btn" href="/" data-gz-back aria-label="Back">');
+    // gz.js owns the click upgrade (window.gzBack), so it must be loaded here.
+    expect(html).toContain("/gz.js?v=96");
   });
 
   // A focused REPLY needs the chain above it. The handler then runs a SECOND read

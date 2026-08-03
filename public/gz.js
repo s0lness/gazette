@@ -398,7 +398,7 @@
       // the first controllerchange is just the sw claiming a freshly-loaded tab.
       var hadController = !!sw.controller;
 
-      sw.register("/sw.js?v=95").then(function (reg) {
+      sw.register("/sw.js?v=96").then(function (reg) {
         gzSwReg = reg;
 
         // (b) updatefound: a new SW is being installed. Wait for it to activate.
@@ -519,6 +519,48 @@
     try { location.assign(target); } catch (e) { location.hash = "#@" + encodeURIComponent(handle); }
   }
 
+  // ---- back navigation (detail pages) --------------------------------------
+  // A focused detail view (the public post permalink) carries a back control. It must
+  // NEVER dead-end: the visitor who landed cold from a shared link has nothing useful
+  // behind them, so "back" has to resolve to the site's main page instead of a blank
+  // history step or the external site that referred them.
+  //
+  // Resolution, in order:
+  //   1. the previous document was OURS (same-origin referrer) AND this tab actually
+  //      has a step to go back to (history.length > 1) -> history.back(), which
+  //      returns the visitor exactly where they came from (feed, profile, search...);
+  //   2. anything else (no referrer, an external referrer, or a fresh tab opened by
+  //      target=_blank where back() would be a no-op) -> a real navigation to `fallback`
+  //      (always "/" here).
+  // The permalink is NOT a router route (router.js does not intercept it), so there is
+  // no in-app SPA history to consult: the referrer IS the record of the previous
+  // in-app route. `fallback` is a hard navigation on purpose, so a cold landing gets
+  // the real main-page document rather than a page module mounted into this shell.
+  function gzBack(fallback) {
+    var home = fallback || "/";
+    var fromApp = false;
+    try {
+      fromApp = !!document.referrer && new URL(document.referrer).origin === location.origin;
+    } catch (e) {}
+    if (fromApp && window.history && window.history.length > 1) {
+      try { window.history.back(); return; } catch (e) {}
+    }
+    location.href = home;
+  }
+
+  // Any element carrying [data-gz-back] becomes a back control. Rendered as a real
+  // <a href="/"> so a no-JS visitor (or a crawler) still has a working way to the main
+  // page; this listener upgrades the click into the resolution above. It runs BEFORE
+  // router.js's own click interception (gz.js loads first) and calls preventDefault, so
+  // the router leaves the click alone instead of mounting the feed into this shell.
+  document.addEventListener("click", function (e) {
+    if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    var el = e.target && e.target.closest ? e.target.closest("[data-gz-back]") : null;
+    if (!el) return;
+    e.preventDefault();
+    gzBack(el.getAttribute("data-gz-back") || el.getAttribute("href") || "/");
+  });
+
   gzRegisterSW();
   gzAfterMount(gzBootSeed);
 
@@ -533,4 +575,5 @@
   window.gzToast = gzToast;
   window.gzLaunchAsk = gzLaunchAsk;
   window.gzErrorState = gzErrorState;
+  window.gzBack = gzBack;
 })();

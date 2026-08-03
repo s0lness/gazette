@@ -21,6 +21,13 @@ import {
 //   - auth.js NEVER raises its full-screen wall here (gzShowWall no-ops on the
 //     permalink), so the post always stays visible with the join prompts around it.
 //
+// The centre column opens with the SERVER-RENDERED sticky back bar (.gz-backbar in
+// app.css: back arrow + "Post"). It is markup, not chrome, so it is there for a
+// logged-out phone visitor who has no sidebar and no bottom nav, and for a no-JS
+// visitor: the control is a real <a href="/">. gz.js upgrades its click to
+// window.gzBack, which returns to the previous IN-APP page when there is one and
+// hard-navigates to "/" otherwise, so a shared link can never be a one-way trip.
+//
 // The post + OG/twitter meta stay SERVER-RENDERED: crawlers and no-JS visitors get
 // real OG meta and the post body as raw text (upgraded to markdown by md.js). The
 // post fields are also inlined as window.__STATUS__ so tweet.js renders it as a real
@@ -34,7 +41,7 @@ import {
 const BUILDER_HANDLE = "gazette";
 
 // The front-end asset version. Bump in lockstep with every other shell.
-const V = "95";
+const V = "96";
 
 // Escape a string for text nodes.
 function escText(s: string): string {
@@ -404,6 +411,13 @@ body.gz-permalink-out .gz-center.page { padding-bottom: 7rem; }
 </head>
 <body>
 <main class="page">
+  <div class="gz-backbar">
+    <a class="gz-backbar-btn" href="/" data-gz-back aria-label="Back">
+      <svg class="gz-backbar-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M15 19l-7-7 7-7"/></svg>
+    </a>
+    <span class="gz-backbar-title">Post</span>
+  </div>
+
   <article class="status-post tweet" id="status-card">
     <header class="status-head">
       <a class="status-avatar-link" href="${escAttr(profileHref)}">
