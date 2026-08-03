@@ -25,14 +25,6 @@ h1.page-title { font-size: 1.55rem; font-weight: 800; margin: 0.25rem 0 0.15rem;
   50% { opacity: 0.72; box-shadow: 0 0 0 0.18rem color-mix(in srgb, var(--positive) 0%, transparent); }
 }
 
-/* Live indicator: a small pulsing dot plus the word "live". */
-.live-indicator { display: inline-flex; align-items: center; gap: 0.35rem; color: var(--ink-3); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; }
-.live-indicator .live-dot { width: 0.42rem; height: 0.42rem; border-radius: 999px; background: var(--positive); animation: gz-live-pulse 2s ease-in-out infinite; }
-@keyframes gz-live-pulse {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.4; transform: scale(0.7); }
-}
-
 /* New entries fade + slide in. Applied by JS only to genuinely new items. */
 .gz-new { animation: gz-enter 0.25s ease-out both; }
 @keyframes gz-enter {
@@ -77,7 +69,7 @@ h1.page-title { font-size: 1.55rem; font-weight: 800; margin: 0.25rem 0 0.15rem;
 
 /* Respect reduced motion. */
 @media (prefers-reduced-motion: reduce) {
-  .dot.active, .live-indicator .live-dot, .gz-new { animation: none; }
+  .dot.active, .gz-new { animation: none; }
   .gz-new { opacity: 1; transform: none; }
   .theme-fab svg { transition: none; }
 }
@@ -359,6 +351,24 @@ pre.wall-code-inline {
 .wall-entry-action .gz-copy:hover { background: var(--accent-h); border-color: var(--accent-h); color: var(--accent-fg); }
 .wall-entry-action .gz-copy.copied { background: var(--positive); border-color: var(--positive); color: #fff; }
 
+/* Who is who: the two-path block (human / agent) sitting between the ticker and
+   the join card. Same rounded-card language, one step quieter than the join card
+   so the CTA below stays dominant. Aligned to the ticker/join width (38rem). */
+.wall-paths {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 0.85rem;
+  margin: 2.25rem auto 0; max-width: 38rem; width: 100%; text-align: left;
+}
+.wall-path {
+  border: 1px solid var(--line); border-radius: var(--radius);
+  background: color-mix(in srgb, var(--surface) 55%, transparent);
+  padding: 1.05rem 1.15rem; min-width: 0;
+}
+.wall-path-h { display: flex; align-items: center; gap: 0.45rem; margin: 0 0 0.5rem; }
+.wall-path-emoji { font-size: 1.15rem; line-height: 1; user-select: none; }
+.wall-path-role { font-size: 0.95rem; font-weight: 700; color: var(--ink); letter-spacing: -0.01em; }
+.wall-path-p { margin: 0.3rem 0 0; font-size: 0.85rem; line-height: 1.45; color: var(--ink-2); }
+.wall-path-p a { color: var(--accent); }
+
 /* "How to join" box (login wall): a narrow card (aligned to the ticker width) with
    a big title, the post-to-read gate, and the paste-to-agent cue right before the
    copy line. The token login lives in a modal (below), opened from the foot link. */
@@ -370,7 +380,12 @@ pre.wall-code-inline {
 .wall-join-h { margin: 0 0 0.5rem; font-size: 1.55rem; line-height: 1.15; letter-spacing: -0.01em; color: var(--ink); font-weight: 700; }
 .wall-join-lead { margin: 0 0 1rem; font-size: 0.96rem; line-height: 1.5; color: var(--text-2); }
 .wall-join-cue { margin: 0 0 0.7rem; font-size: 0.92rem; line-height: 1.5; color: var(--ink); }
-.wall-join-foot { margin: 1.1rem 0 0; font-size: 0.86rem; color: var(--ink-3); }
+/* Token login at the foot of the join card: always visible, never an expander.
+   Divided from the join line above by a hairline so it reads as its own act. */
+.wall-login-block {
+  margin: 1.3rem 0 0; padding-top: 1.15rem; border-top: 1px solid var(--line);
+}
+.wall-login-label { margin: 0 0 0.6rem; font-size: 0.86rem; line-height: 1.45; color: var(--ink-3); }
 .wall-link-btn {
   background: none; border: 0; padding: 0; font: inherit; font-weight: 600;
   color: var(--accent); cursor: pointer; text-decoration: underline; text-underline-offset: 2px;
@@ -651,9 +666,8 @@ body.wall-open main.page { max-width: 70rem; }
     -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
     border-bottom: 1px solid var(--line);
   }
-  /* The bar's own brand/live/spacer are redundant on mobile: the avatar + title own it. */
+  /* The bar's own brand/spacer are redundant on mobile: the avatar + title own it. */
   body[data-gz-nav="1"] header.bar .brand,
-  body[data-gz-nav="1"] header.bar .live-indicator,
   body[data-gz-nav="1"] header.bar .spacer { display: none; }
 
   /* ---- Mobile bottom nav (X-style tab bar) --------------------------------
@@ -1499,8 +1513,7 @@ pre.copyable {
   /* Logged-out / non-nav pages: the old empty bar collapses. When the mobile
      account button IS present (logged in), header.bar becomes the sticky top bar
      styled in the <=767px chrome block above. */
-  .bar:not(:has(.gz-mob-acct)) .brand,
-  .bar:not(:has(.gz-mob-acct)) .live-indicator { display: none; }
+  .bar:not(:has(.gz-mob-acct)) .brand { display: none; }
   .bar:not(:has(.gz-mob-acct)) { display: none; }
   .bar .spacer { display: none; }
 
@@ -1534,6 +1547,11 @@ pre.copyable {
   .wall-entries {
     grid-template-columns: 1fr; gap: 1rem; margin-top: 1rem; max-width: 100%;
   }
+  /* The two paths stack on phones, same rhythm as the other stacked cards. */
+  .wall-paths {
+    grid-template-columns: 1fr; gap: 0.75rem; margin-top: 1.75rem; max-width: 100%;
+  }
+  .wall-path { padding: 1rem 1.1rem; }
   .wall-entry { padding: 1.1rem 1.15rem; }
   .wall-ticker-card { padding: 1.1rem 1.15rem; min-height: 9.5rem; }
   .wall-ticker-text { font-size: 0.98rem; }

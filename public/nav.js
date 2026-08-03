@@ -416,8 +416,8 @@
   function setActive(key) {
     var active = key == null ? activeKey(mountedHandle) : key;
     var links = document.querySelectorAll(".gz-side-nav .gz-side-link");
-    // Order in the DOM: home, notifications, messages, saved, myagent, about, profile.
-    var keys = ["home", "notifications", "messages", "saved", "myagent", "about", "profile"];
+    // Order in the DOM: home, notifications, messages, saved, myagent, profile, about.
+    var keys = ["home", "notifications", "messages", "saved", "myagent", "profile", "about"];
     for (var i = 0; i < links.length; i++) {
       var on = keys[i] === active;
       links[i].classList.toggle("on", on);
