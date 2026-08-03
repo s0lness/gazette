@@ -1,11 +1,18 @@
-// gazette drip: publish ONE pre-written beat per run, drawn from the pantry first and the
+// gazette drip: publish a pre-written beat per run, drawn from the pantry first and the
 // legacy queue second. Per-agent model: one agent = one body of work, so each entry carries
 // a `handle`. A legacy `project` field is dropped defensively before POSTing.
 //
-// Sources, in order:
+// Sources:
 //   drip/pantry.json   beats captured from REAL work as it happens (see tools/pantry-add.mjs)
 //   drip/queue.json    the older backlog mined from past project history
 // Freshest real work goes out first; the queue is the fallback that keeps the feed alive.
+//
+// Selection is STALENESS-FIRST, not file order (tools/drip-priority.mjs, tuning knobs there:
+// LOCK_HOURS / DANGER_HOURS / MAX_POSTS_NORMAL / MAX_POSTS_CATCHUP). The server cuts read
+// access to an agent silent for 36h, and 12 runs a day across ~18 handles only covers each
+// handle every ~36h at best, so the run posts for whoever is closest to the lock and may
+// burst up to MAX_POSTS_CATCHUP beats (distinct at-risk handles only) to catch up. Pantry
+// still beats queue WITHIN a handle; it no longer outranks a starving handle's queue beat.
 //
 // Run by the Windows task "gazette-drip" every 2 hours, around the clock; safe by hand.
 //
@@ -35,10 +42,23 @@ import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { lintBeat, lintNotes, repairArtifact, formatErrors } from "./beat-lint.mjs";
+import {
+  LOCK_HOURS,
+  DANGER_HOURS,
+  MAX_POSTS_NORMAL,
+  MAX_POSTS_CATCHUP,
+  hoursSince,
+  hoursFromRoster,
+  orderCandidates,
+  postBudget,
+  slotAllowed,
+  fleetHealth,
+  fmtHours,
+} from "./drip-priority.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
-const MAX_POSTS = 1;
 const MAX_ATTEMPTS = 5; // how many beats a single run may try before giving up
+const API_TIMEOUT_MS = 20000; // roster/feed lookups degrade rather than hang the run
 const DRY = process.argv.includes("--dry");
 const BASE = "https://gazette.sylve.org";
 const UA =
@@ -83,36 +103,121 @@ if (candidates.length === 0) {
 }
 
 const today = new Date().toISOString().slice(0, 10);
+const now = Date.now();
 
-// Which handles already posted today? Server truth first: fetch the feed ONCE with sylve's
-// token and collect handles that have an entry dated today (UTC). If the feed fetch fails,
-// fall back to posted.json entries stamped today.
+// TWO reads of server truth, fetched ONCE and in parallel (never per candidate):
+//   /api/feed    which handles already posted today (capped, recent entries only)
+//   /api/agents  the roster, whose `last_posted_at` gives every handle's silence clock
+// The reader token can itself be locked out (that is the whole point of this file), so if
+// sylve reads nothing we retry once with @gazette, the handle this drip posts for most
+// often. Only the failure path spends the extra calls.
+const getJson = async (path, token) => {
+  const res = await fetch(BASE + path, {
+    headers: { "x-gz-token": token, "user-agent": UA },
+    signal: AbortSignal.timeout(API_TIMEOUT_MS),
+  });
+  if (!res.ok) throw new Error(path + " status " + res.status);
+  return res.json();
+};
+const readers = [...new Set([tokens.sylve, self.agent ? tokens[self.agent] : null].filter(Boolean))];
+let feedRes = { status: "rejected", reason: new Error("no reader token") };
+let rosterRes = feedRes;
+for (const token of readers) {
+  [feedRes, rosterRes] = await Promise.allSettled([
+    getJson("/api/feed", token),
+    getJson("/api/agents", token),
+  ]);
+  if (feedRes.status === "fulfilled" || rosterRes.status === "fulfilled") break;
+  console.log(`drip: reader token read nothing (${feedRes.reason?.message}), trying the next reader`);
+}
+
+const feedEntries =
+  feedRes.status === "fulfilled"
+    ? Array.isArray(feedRes.value)
+      ? feedRes.value
+      : feedRes.value.entries || feedRes.value.feed || []
+    : [];
+
+// Which handles already posted today?
 let postedToday = new Set();
 let truth = "feed";
-try {
-  const res = await fetch(BASE + "/api/feed", {
-    headers: { "x-gz-token": tokens.sylve, "user-agent": UA },
-  });
-  if (!res.ok) throw new Error("feed status " + res.status);
-  const data = await res.json();
-  const entries = Array.isArray(data) ? data : data.entries || data.feed || [];
+if (feedRes.status === "fulfilled") {
   postedToday = new Set(
-    entries
+    feedEntries
       .filter((e) => (e.date || "").slice(0, 10) === today)
       .map((e) => e.handle)
       .filter(Boolean),
   );
-} catch (err) {
-  truth = "posted.json (feed fetch failed: " + err.message + ")";
+} else {
+  truth = "posted.json (feed fetch failed: " + feedRes.reason?.message + ")";
   postedToday = new Set(
     posted.filter((e) => (e.date || "").slice(0, 10) === today).map((e) => e.handle).filter(Boolean),
   );
 }
 console.log(`drip: handles posted today (${truth}): [${[...postedToday].join(", ") || "none"}]`);
 
+// Silence clock per handle. Roster first (exact timestamps, every agent), then the feed
+// (day granularity, capped), then posted.json. An empty map means "no idea", and the
+// ordering degrades to plain file order rather than blocking the run.
+let hoursByHandle = new Map();
+let clock = "roster";
+if (rosterRes.status === "fulfilled") {
+  const agents = Array.isArray(rosterRes.value) ? rosterRes.value : rosterRes.value.agents || [];
+  hoursByHandle = hoursFromRoster(agents, now);
+}
+if (hoursByHandle.size === 0) {
+  // Fallback A: the feed. Dates are YYYY-MM-DD, so this reads staler than the truth by up
+  // to a day, which errs toward posting sooner.
+  clock =
+    "feed (roster unavailable" +
+    (rosterRes.status === "rejected" ? ": " + rosterRes.reason?.message : "") +
+    ")";
+  const latest = new Map();
+  for (const e of feedEntries) {
+    if (!e.handle || !e.date) continue;
+    const iso = String(e.date).length === 10 ? e.date + "T00:00:00Z" : e.date;
+    if (!latest.has(e.handle) || Date.parse(iso) > Date.parse(latest.get(e.handle))) {
+      latest.set(e.handle, iso);
+    }
+  }
+  for (const [handle, iso] of latest) hoursByHandle.set(handle, hoursSince(iso, now));
+}
+if (hoursByHandle.size === 0) {
+  // Fallback B: our own log of what we posted.
+  clock = "posted.json";
+  for (const e of posted) {
+    if (!e.handle) continue;
+    const h = hoursSince(e.posted_at || (e.date ? e.date + "T00:00:00Z" : null), now);
+    if (!hoursByHandle.has(e.handle) || h < hoursByHandle.get(e.handle)) hoursByHandle.set(e.handle, h);
+  }
+}
+if (hoursByHandle.size === 0) clock = "none (file order)";
+
 // Handles that are unavailable for the REST of this run: already posted today, or refused
 // at the handle level (daily cap, unknown token). Beats for them stay where they are.
 const blocked = new Set(postedToday);
+
+// Urgency order: whoever is closest to losing read access goes first.
+const ordered = orderCandidates(candidates, hoursByHandle);
+
+// Eligible = a handle we can actually post for right now.
+const eligible = [
+  ...new Set(
+    ordered
+      .map((c) => c.entry.handle)
+      .filter((h) => h && tokens[h] && !blocked.has(h)),
+  ),
+];
+const { budget, catchup, atRisk } = postBudget(hoursByHandle, eligible);
+
+const atRiskTop = eligible.slice(0, 3).map((h) => `@${h} ${fmtHours(hoursByHandle.get(h) ?? Infinity)}`);
+console.log(`drip: silence clock from ${clock}`);
+console.log(`drip: most at risk: ${atRiskTop.join(", ") || "none eligible"}`);
+console.log(
+  catchup
+    ? `drip: catch-up run, ${atRisk.length} handle(s) at risk (>=${DANGER_HOURS}h), posting up to ${budget}`
+    : `drip: normal run, posting up to ${budget}`,
+);
 
 const park = (cand, why, errors) => {
   const { entry, from, list } = cand;
@@ -132,10 +237,13 @@ const park = (cand, why, errors) => {
 let attempts = 0;
 let postsMade = 0;
 let gaveUp = false;
+// Attempt ceiling: the usual MAX_ATTEMPTS for the first post, plus one per extra burst slot,
+// so a catch-up run keeps the same tolerance for parked beats per post it is trying to make.
+const attemptCeiling = MAX_ATTEMPTS + budget - 1;
 
-for (const cand of candidates) {
-  if (postsMade >= MAX_POSTS) break;
-  if (attempts >= MAX_ATTEMPTS) {
+for (const cand of ordered) {
+  if (postsMade >= budget) break;
+  if (attempts >= attemptCeiling) {
     gaveUp = true;
     break;
   }
@@ -146,6 +254,8 @@ for (const cand of candidates) {
     console.log(`drip: no token for handle '${entry.handle}', skipping`);
     continue;
   }
+  // Extra slots belong to the burst: only a handle that is itself at risk may spend one.
+  if (!slotAllowed(hoursByHandle, entry.handle, postsMade)) continue;
 
   // A path in markdown backticks does not satisfy the server's artifact rule (see
   // tools/beat-lint.mjs). Unwrap it in place rather than park an otherwise-good beat.
@@ -185,10 +295,14 @@ for (const cand of candidates) {
   if (DRY) {
     attempts++;
     postsMade++;
+    blocked.add(entry.handle); // one beat per handle per run
     console.log(
-      `drip: [dry] WOULD post as @${entry.handle} from ${from} -> ${entry.headline.slice(0, 80)}`,
+      `drip: [dry] WOULD post #${postsMade} as @${entry.handle} (silent ${fmtHours(
+        hoursByHandle.get(entry.handle) ?? Infinity,
+      )}) from ${from} -> ${entry.headline.slice(0, 80)}`,
     );
-    console.log(`drip: [dry] payload ${JSON.stringify(payload)}`);
+    hoursByHandle.set(entry.handle, 0); // so the health summary below reads post-run, as in a real run
+    console.log(`drip: [dry] payload ${JSON.stringify(payload).slice(0, 200)}`);
     continue;
   }
 
@@ -219,7 +333,12 @@ for (const cand of candidates) {
       from,
     });
     postsMade++;
-    console.log(`drip: posted @${entry.handle} from ${from} ${entry.headline.slice(0, 80)}`);
+    blocked.add(entry.handle); // one beat per handle per run
+    const wasSilent = fmtHours(hoursByHandle.get(entry.handle) ?? Infinity);
+    hoursByHandle.set(entry.handle, 0); // the clock resets, so the end-of-run health is honest
+    console.log(
+      `drip: posted @${entry.handle} from ${from} (was silent ${wasSilent}) ${entry.headline.slice(0, 80)}`,
+    );
   } else if (res.status === 422) {
     // The beat itself is bad and the local lint missed it. Park it and try the next one:
     // a rejection must never burn the run.
@@ -239,10 +358,29 @@ for (const cand of candidates) {
 }
 
 if (postsMade === 0) {
-  if (gaveUp) console.log(`drip: gave up after ${MAX_ATTEMPTS} attempts, nothing posted this run`);
+  if (gaveUp) console.log(`drip: gave up after ${attemptCeiling} attempts, nothing posted this run`);
   else if (attempts === 0)
     console.log("drip: no eligible beat (every handle already posted today, or none queued)");
   else console.log(`drip: nothing posted this run (${attempts} attempt(s) tried)`);
+}
+
+// Fleet health: does the drip keep up with the 36h lock? Counted over every handle we hold
+// a token for, so a handle whose beats ran out still shows up.
+const fleet = Object.keys(tokens);
+const health = fleetHealth(hoursByHandle, fleet);
+const beatsLeft = new Set([...pantry, ...queue].map((e) => e.handle).filter(Boolean));
+console.log(
+  `drip: fleet health: ${health.locked.length} locked (>=${LOCK_HOURS}h), ${health.warn.length} at risk (${DANGER_HOURS}-${LOCK_HOURS}h), ${health.healthy.length} healthy of ${fleet.length}`,
+);
+if (health.locked.length) {
+  console.log(
+    `drip: WARNING locked out: ${health.locked
+      .map((r) => `@${r.handle} ${fmtHours(r.hours)}${beatsLeft.has(r.handle) ? "" : " (no beats left)"}`)
+      .join(", ")}`,
+  );
+}
+if (health.warn.length) {
+  console.log(`drip: at risk: ${health.warn.map((r) => `@${r.handle} ${fmtHours(r.hours)}`).join(", ")}`);
 }
 
 if (DRY) {

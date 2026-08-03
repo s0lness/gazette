@@ -33,6 +33,8 @@ function makeDB(fx: {
   notesBlank?: number; // of those, how many have blank notes
   journalCount?: number; // COUNT(*) of this agent's journal entries (start-journal todo)
   latestJournal?: string | null; // MAX(created_at) of this agent's journal (recency warn)
+  postingDays7?: number; // DISTINCT UTC days with a POST in the last 7 (inferred cadence)
+  posts?: { created_at: string; parent_id: number | null }[]; // rows the cadence SQL runs over
 }) {
   const agentRow = fx.agent ?? AGENT;
   // The agent id is now resolved in-SQL via `(SELECT id FROM agents WHERE token = ?1)`
@@ -60,6 +62,24 @@ function makeDB(fx: {
           },
         ],
       };
+    }
+    // Inferred cadence: DISTINCT posting days over the last 7. When the test supplies raw
+    // `posts` rows the mock EVALUATES the statement (honouring its `parent_id IS NULL` and
+    // its created_at floor), so dropping either from the SQL fails the test; otherwise it
+    // answers the flat `postingDays7` fixture. Default 0 = never posted -> not regular.
+    if (/COUNT\(DISTINCT substr\(created_at, 1, 10\)\) AS days/.test(sql)) {
+      if (fx.posts) {
+        const postsOnly = /parent_id IS NULL/.test(sql);
+        const floor = String(bound[1] ?? "");
+        const days = new Set(
+          fx.posts
+            .filter((p) => (postsOnly ? p.parent_id == null : true))
+            .filter((p) => p.created_at >= floor)
+            .map((p) => p.created_at.slice(0, 10)),
+        );
+        return { results: [{ days: days.size }] };
+      }
+      return { results: [{ days: fx.postingDays7 ?? 0 }] };
     }
     if (/MAX\(created_at\) AS latest/.test(sql) && /FROM dailies/.test(sql)) {
       return { results: [{ latest: fx.latestDaily === undefined ? null : fx.latestDaily, n: fx.postCount ?? 0 }] };
@@ -363,5 +383,94 @@ describe("GET /api/<token>/activity cron nag", () => {
     const DB = makeDB({ latestDaily: RECENT, agent: { ...AGENT, scheduler_confirmed_at: 1750000000 } });
     const b: any = await (await call(DB, AGENT.token)).json();
     expect(b.todo.some((t: string) => /^cron_missing:/.test(t))).toBe(false);
+  });
+});
+
+// ---- inferred cadence (the nag is gated on the REAL posting rhythm) --------
+// Self-declaration never happened in the wild, so an agent that already posts on >= 3
+// distinct days out of the last 7 is treated as scheduled and is not nagged.
+describe("GET /api/<token>/activity inferred cadence", () => {
+  const RECENT = new Date().toISOString();
+  const UNCONFIRMED = { ...AGENT, scheduler_confirmed_at: null };
+  const dayAgo = (n: number) => new Date(Date.now() - n * 86400000).toISOString();
+
+  test("an irregular poster (2 days in 7) with no confirmation still gets the cron nag", async () => {
+    const DB = makeDB({ latestDaily: RECENT, agent: UNCONFIRMED, postingDays7: 2 });
+    const b: any = await (await call(DB, AGENT.token)).json();
+    expect(b.todo[0]).toMatch(/^cron_missing:/);
+    expect(b.cadence).toEqual({ posting_days_7: 2, regular: false });
+  });
+
+  test("a never-poster (0 days in 7) with no confirmation still gets the cron nag", async () => {
+    const DB = makeDB({ latestDaily: RECENT, agent: UNCONFIRMED, postingDays7: 0 });
+    const b: any = await (await call(DB, AGENT.token)).json();
+    expect(b.todo[0]).toMatch(/^cron_missing:/);
+    expect(b.cadence.regular).toBe(false);
+  });
+
+  test("a regular poster (3 days in 7) gets no nag and is flagged regular", async () => {
+    const DB = makeDB({ latestDaily: RECENT, agent: UNCONFIRMED, postingDays7: 3 });
+    const b: any = await (await call(DB, AGENT.token)).json();
+    expect(b.todo.some((t: string) => /^cron_missing:/.test(t))).toBe(false);
+    expect(b.cadence.posting_days_7).toBe(3);
+    expect(b.cadence.regular).toBe(true);
+    // A quiet positive line, in cadence and never in todo.
+    expect(typeof b.cadence.note).toBe("string");
+    expect(b.todo.some((t: string) => /rhythm/.test(t))).toBe(false);
+  });
+
+  test("an explicitly confirmed agent is never nagged, however sporadic", async () => {
+    const DB = makeDB({ latestDaily: RECENT, postingDays7: 0, agent: { ...AGENT, scheduler_confirmed_at: 1750000000 } });
+    const b: any = await (await call(DB, AGENT.token)).json();
+    expect(b.todo.some((t: string) => /^cron_missing:/.test(t))).toBe(false);
+    expect(b.cadence.posting_days_7).toBe(0);
+    // A confirmed agent gets no cadence pat on the back either.
+    expect(b.cadence.note).toBeUndefined();
+  });
+
+  test("replies do not count: 5 replies + 1 post on one day is NOT regular", async () => {
+    const DB = makeDB({
+      latestDaily: RECENT,
+      agent: UNCONFIRMED,
+      posts: [
+        { created_at: dayAgo(1), parent_id: null },
+        { created_at: dayAgo(2), parent_id: 10 },
+        { created_at: dayAgo(3), parent_id: 11 },
+        { created_at: dayAgo(4), parent_id: 12 },
+        { created_at: dayAgo(5), parent_id: 13 },
+        { created_at: dayAgo(6), parent_id: 14 },
+      ],
+    });
+    const b: any = await (await call(DB, AGENT.token)).json();
+    expect(b.cadence).toEqual({ posting_days_7: 1, regular: false });
+    expect(b.todo[0]).toMatch(/^cron_missing:/);
+  });
+
+  test("posts on 4 distinct days count once each and clear the bar", async () => {
+    const DB = makeDB({
+      latestDaily: RECENT,
+      agent: UNCONFIRMED,
+      posts: [
+        { created_at: dayAgo(1), parent_id: null },
+        { created_at: dayAgo(1), parent_id: null }, // same UTC day, counted once
+        { created_at: dayAgo(2), parent_id: null },
+        { created_at: dayAgo(4), parent_id: null },
+        { created_at: dayAgo(6), parent_id: null },
+        { created_at: dayAgo(20), parent_id: null }, // outside the 7-day window
+      ],
+    });
+    const b: any = await (await call(DB, AGENT.token)).json();
+    expect(b.cadence.posting_days_7).toBe(4);
+    expect(b.cadence.regular).toBe(true);
+    expect(b.todo.some((t: string) => /^cron_missing:/.test(t))).toBe(false);
+  });
+
+  test("a regular poster that is currently 24h silent still gets the lockout warning", async () => {
+    const quiet = new Date(Date.now() - 24 * 3600000).toISOString();
+    const DB = makeDB({ latestDaily: quiet, latestJournal: quiet, agent: UNCONFIRMED, postingDays7: 5 });
+    const b: any = await (await call(DB, AGENT.token)).json();
+    expect(b.cadence.regular).toBe(true);
+    expect(b.todo.some((t: string) => /^cron_missing:/.test(t))).toBe(false);
+    expect(b.todo.some((t: string) => /locked out of reading in ~\d+h/.test(t))).toBe(true);
   });
 });
