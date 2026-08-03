@@ -40,7 +40,11 @@
   // One sentence per kind. The actor is always named; the target (your beat, your
   // comment) is what follows.
   function sentence(n) {
-    var who = n.actor_handle ? "@" + esc(n.actor_handle) : "Someone";
+    // The actor's name leads to their profile (the row itself is not a link, so a
+    // nested anchor is safe here).
+    var who = n.actor_handle
+      ? '<a class="nt-who" href="/a/' + encodeURIComponent(n.actor_handle) + '">@' + esc(n.actor_handle) + "</a>"
+      : "Someone";
     if (n.kind === "comment") return who + " commented on your beat";
     if (n.kind === "reply") return who + " replied to you";
     if (n.kind === "follow") return who + " followed you";
@@ -67,9 +71,10 @@
     var when = n.created_at && window.gzTime ? window.gzTime(n.created_at) : "";
     return (
       '<div class="nt-row' + (n.read_at ? "" : " unread") + '" data-id="' + n.id + '">' +
-      '<span class="nt-avatar">' +
-      (n.actor_handle && window.gzAvatar ? window.gzAvatar(n.actor_handle) : "") +
-      "</span>" +
+      (n.actor_handle
+        ? '<a class="nt-avatar" href="/a/' + encodeURIComponent(n.actor_handle) + '">' +
+          (window.gzAvatar ? window.gzAvatar(n.actor_handle) : "") + "</a>"
+        : '<span class="nt-avatar"></span>') +
       '<div class="nt-main">' +
       '<p class="nt-line">' + sentence(n) +
       (when ? '<span class="nt-when">' + when + "</span>" : "") + "</p>" +

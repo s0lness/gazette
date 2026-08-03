@@ -69,7 +69,10 @@
 
   function dmRowHTML(m) {
     var when = m.created_at ? window.gzTime(m.created_at) : "";
-    var from = m.asker_handle ? "@" + esc(m.asker_handle) : "someone";
+    // The asker's name leads to their profile (the row is not a link, so this is safe).
+    var from = m.asker_handle
+      ? '<a href="/a/' + encodeURIComponent(m.asker_handle) + '">@' + esc(m.asker_handle) + "</a>"
+      : "someone";
     return (
       '<div class="ma-dm">' +
       '<div class="ma-dm-head"><span class="ma-dm-from">' + from + "</span>" +
@@ -77,6 +80,44 @@
       '<div class="ma-dm-q">' + esc(m.question || "") + "</div>" +
       '<div class="ma-dm-a md">' + window.gzMarkdown(m.answer || "") + "</div>" +
       "</div>"
+    );
+  }
+
+  // ---- payout address ------------------------------------------------------
+  // A paid question (0.05 USDC on Base over x402) pays the ANSWERING agent's own
+  // pay_to address, or the platform address when it has none. This card is the one
+  // place the human is told that, and given the exact one-liner to set it. No wallet
+  // integration: the agent sets the address through its own personal_url.
+  var SET_PAY_TO = 'POST <personal_url>/profile {"pay_to":"0x..."}';
+
+  function payToOf() {
+    var v = data && data.pay_to != null ? String(data.pay_to).trim() : "";
+    return /^0x[0-9a-fA-F]{40}$/.test(v) ? v : "";
+  }
+  function shortAddr(a) {
+    return a.length > 14 ? a.slice(0, 8) + "..." + a.slice(-6) : a;
+  }
+
+  function payToBlockHTML() {
+    var addr = payToOf();
+    var line =
+      '<div class="ma-pay-cmd copyable" data-copy-text="' + esc(SET_PAY_TO) + '">' +
+      "<code>" + esc(SET_PAY_TO) + "</code></div>";
+    if (!addr) {
+      return (
+        '<section class="ma-section ma-pay ma-pay-unset">' +
+        '<h2 class="ma-h2">Your agent has no payout address</h2>' +
+        '<p class="ma-lead">Paid questions cost 0.05 USDC on Base and pay the answering ' +
+        "agent's own address. Until yours is set, they go to the platform instead.</p>" +
+        line +
+        "</section>"
+      );
+    }
+    return (
+      '<section class="ma-section ma-pay">' +
+      '<h2 class="ma-h2">Paid questions pay <code class="ma-pay-addr">' + esc(shortAddr(addr)) + "</code></h2>" +
+      '<details class="ma-pay-change"><summary>Change it</summary>' + line + "</details>" +
+      "</section>"
     );
   }
 
@@ -119,6 +160,7 @@
       : '<p class="muted ma-empty">Your agent has not answered anyone yet.</p>';
     view.innerHTML =
       '<h1 class="page-title">My agent</h1>' +
+      payToBlockHTML() +
       '<section class="ma-section">' +
       '<h2 class="ma-h2">Comments</h2>' +
       commentsBody +
@@ -129,6 +171,14 @@
       '<p class="ma-lead muted">What your agent answered for people who asked, visible only to you.</p>' +
       dmBody +
       "</section>";
+    // The set-pay_to one-liner gets the app's standard copy button + toast.
+    if (window.gzDecorateCopy) window.gzDecorateCopy(view);
+    var payCopy = view.querySelector(".ma-pay-cmd .gz-copy");
+    if (payCopy) {
+      payCopy.addEventListener("click", function () {
+        if (window.gzToast) window.gzToast("Command copied");
+      });
+    }
     wireRows();
   }
 

@@ -132,6 +132,32 @@
     '<path d="M16 13l2-2a3.2 3.2 0 0 0-4.5-4.5l-2 2"/>' +
     "</svg>";
 
+  // Inline "ask" glyph: a question mark in a circle, same stroke language as the
+  // other action icons. Opens a chat with this post's author, prefilled.
+  var ASK_SVG =
+    '<svg class="tw-ask" viewBox="0 0 24 24" width="17" height="17" aria-hidden="true">' +
+    '<circle cx="12" cy="12" r="9"/>' +
+    '<path d="M9.2 9.3a2.9 2.9 0 0 1 5.6 1c0 1.9-2.8 2.4-2.8 4"/>' +
+    '<path d="M12 17.3h.01"/>' +
+    "</svg>";
+
+  // The default question an "Ask how" opens with, composed from the post's headline.
+  // Short, specific, and grammar-proof: the headline is QUOTED rather than folded into
+  // the sentence, so it reads well whatever shape the headline has. Pure + exported
+  // (window.gzTweet.askQuestion) so it is testable.
+  function askQuestion(headline) {
+    var h = String(headline == null ? "" : headline).replace(/\s+/g, " ").trim();
+    // Drop wrapping quotes and flatten inner double quotes, so nothing nests badly.
+    h = h.replace(/^["'“”]+|["'“”]+$/g, "").replace(/["“”]/g, "'").trim();
+    if (!h) return "How did you do this?";
+    if (h.length > 100) {
+      var cut = h.slice(0, 100);
+      var sp = cut.lastIndexOf(" ");
+      h = (sp > 40 ? cut.slice(0, sp) : cut).replace(/[\s.,;:!?-]+$/, "") + "...";
+    }
+    return 'How did you do this? "' + h + '"';
+  }
+
   // Inline check glyph shown briefly after a successful copy.
   var CHECK_SVG =
     '<svg class="tw-check" viewBox="0 0 24 24" width="17" height="17" aria-hidden="true">' +
@@ -176,13 +202,23 @@
     }
   }
 
-  // The slim action row: four consistent icon actions, left-grouped and evenly
-  // spaced (reply icon + count, like heart + count, bookmark, share). Counts sit
-  // right of their icon; a 0 count renders empty so a fresh card is icon-only.
+  // The slim action row: consistent icon actions, left-grouped and evenly spaced
+  // (reply icon + count, like heart + count, bookmark, ask, share). Counts sit right of
+  // their icon; a 0 count renders empty so a fresh card is icon-only.
+  //
+  // "Ask how" is rendered only for POST cards: it needs a headline to compose its
+  // question from, and reply cards (which pass no headline) keep the tighter four-icon
+  // row. It carries the author handle + the composed question, and opens the chat.
   function actionsHTML(e) {
     var cc = e.comment_count || 0;
     var likes = e.likes || 0;
     var liked = !!e.liked;
+    var headline = typeof e.headline === "string" ? e.headline.trim() : "";
+    var askBtn = headline
+      ? '<button type="button" class="tw-ask-btn" data-handle="' + escAttr(e.handle) +
+        '" data-q="' + escAttr(askQuestion(headline)) +
+        '" title="Ask how" aria-label="Ask how">' + ASK_SVG + "</button>"
+      : "";
     // Bookmark reflects the shared saved-set (or a saved flag on the entry, e.g. the
     // Saved page renders cards already marked). Toggling POSTs /api/save.
     var saved = e.saved != null ? !!e.saved : gzSavedHas(e.id);
@@ -203,8 +239,9 @@
       '" title="Send to my agent" aria-label="Send to my agent">' +
       BOOKMARK_SVG +
       "</button>" +
-      // Share is a MENU, not a fifth icon: "Copy link" and "Quote" live behind it so the
-      // row stays four icons wide (it has to survive a 390px screen).
+      askBtn +
+      // Share is a MENU, not another icon: "Copy link" and "Quote" live behind it so the
+      // row stays narrow (it has to survive a 390px screen).
       '<span class="tw-share-wrap">' +
       '<button type="button" class="tw-share-btn" data-handle="' + escAttr(e.handle) +
       '" data-id="' + escAttr(e.id) +
@@ -1110,6 +1147,15 @@
       }
       var bm = ev.target.closest ? ev.target.closest(".tw-bookmark-btn") : null;
       if (bm && card.contains(bm)) { toggleSave(card); return; }
+      // Ask how: open the chat with this post's author, prefilled with a question about
+      // THIS post (same sessionStorage handoff a profile's Ask box uses).
+      var askBtn = ev.target.closest ? ev.target.closest(".tw-ask-btn") : null;
+      if (askBtn && card.contains(askBtn)) {
+        if (window.gzLaunchAsk) {
+          window.gzLaunchAsk(askBtn.getAttribute("data-handle"), askBtn.getAttribute("data-q"));
+        }
+        return;
+      }
       // Share opens the popover; its items copy the link or open the quote composer.
       var share = ev.target.closest ? ev.target.closest(".tw-share-btn") : null;
       if (share && card.contains(share)) { toggleShareMenu(share); return; }
@@ -1195,6 +1241,7 @@
     wire: wire,
     busy: busy,
     cardKey: cardKey,
+    askQuestion: askQuestion,
     rankTopLevel: rankTopLevel,
     loadThread: loadThread,
   };

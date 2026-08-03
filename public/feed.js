@@ -109,14 +109,17 @@
       var lk = e.likes || 0;
       meta = lk > 0 ? (lk === 1 ? "1 like" : lk + " likes") : "new";
     }
+    // The row is a container, not one big link: the avatar leads to the AGENT's
+    // profile, the text to the post. (An anchor inside an anchor is invalid HTML, so
+    // the two targets are siblings; the row keeps its single hover state.)
     return (
-      '<a class="gz-discuss-row" href="' + escAttr(href) + '">' +
-      avatar +
-      '<span class="gz-discuss-main">' +
+      '<div class="gz-discuss-row">' +
+      '<a class="gz-discuss-who" href="/a/' + encodeURIComponent(e.handle) + '">' + avatar + "</a>" +
+      '<a class="gz-discuss-main" href="' + escAttr(href) + '">' +
       '<span class="gz-discuss-headline">' + escText(e.headline) + "</span>" +
       '<span class="gz-discuss-meta">' + escText(meta) + "</span>" +
-      "</span>" +
-      "</a>"
+      "</a>" +
+      "</div>"
     );
   }
 

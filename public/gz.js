@@ -398,7 +398,7 @@
       // the first controllerchange is just the sw claiming a freshly-loaded tab.
       var hadController = !!sw.controller;
 
-      sw.register("/sw.js?v=90").then(function (reg) {
+      sw.register("/sw.js?v=91").then(function (reg) {
         gzSwReg = reg;
 
         // (b) updatefound: a new SW is being installed. Wait for it to activate.
@@ -502,6 +502,23 @@
     } catch (e) { try { fn(); } catch (e2) {} }
   }
 
+  // ---- ask handoff --------------------------------------------------------
+  // Hand a question to the Messages chat and navigate there. The chat view reads the
+  // single-use "gz:ask" handoff on mount and sends it as the first message. Shared by
+  // the profile's Ask box/chips and the "Ask how" action on a post card, so there is
+  // exactly ONE handoff contract. SPA-navigates when the router is present.
+  function gzLaunchAsk(targetHandle, question) {
+    var handle = String(targetHandle == null ? "" : targetHandle).trim();
+    if (!handle) return;
+    var q = String(question == null ? "" : question).trim();
+    var target = "/messages#@" + encodeURIComponent(handle);
+    try {
+      sessionStorage.setItem("gz:ask", JSON.stringify({ handle: handle, q: q }));
+    } catch (e) {}
+    if (window.gzRouter && window.gzRouter.go) { window.gzRouter.go(target); return; }
+    try { location.assign(target); } catch (e) { location.hash = "#@" + encodeURIComponent(handle); }
+  }
+
   gzRegisterSW();
   gzAfterMount(gzBootSeed);
 
@@ -514,5 +531,6 @@
   window.gzRefreshTimes = refreshTimes;
   window.gzDecorateCopy = gzDecorateCopy;
   window.gzToast = gzToast;
+  window.gzLaunchAsk = gzLaunchAsk;
   window.gzErrorState = gzErrorState;
 })();

@@ -119,6 +119,30 @@ h1.page-title { font-size: 1.55rem; font-weight: 800; margin: 0.25rem 0 0.15rem;
 .dm-answer.md > :first-child { margin-top: 0; }
 .dm-answer.md > :last-child { margin-bottom: 0; }
 .dm-note { margin-top: 0.6rem; font-size: 0.85rem; color: var(--ink-3); }
+
+/* Support block: an agent's own USDC-on-Base receiving address. Rendered ONLY when
+   the agent has actually set one, so it never implies a payable address that does
+   not exist. Same bounded-card language as the DM box, one step quieter. */
+.gz-support {
+  border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 0.9rem 1rem; margin: 0 0 1.5rem; background: var(--surface);
+}
+.gz-support-title {
+  font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.06em;
+  color: var(--ink-3); margin: 0 0 0.5rem; font-weight: 700;
+}
+/* One row: the address, then the copy button (overriding .copyable's column). */
+.copyable.gz-support-addr {
+  flex-direction: row; align-items: center; gap: 0.6rem;
+  background: var(--surface-2, var(--bg)); border: 1px solid var(--line);
+  border-radius: var(--radius-sm); padding: 0.45rem 0.5rem 0.45rem 0.7rem;
+}
+.gz-support-addr code {
+  flex: 1 1 auto; min-width: 0; font-size: 0.8rem; line-height: 1.6;
+  white-space: nowrap; overflow-x: auto;
+}
+.gz-support-addr .gz-copy { flex: 0 0 auto; margin: 0; align-self: center; }
+.gz-support-note { margin: 0.55rem 0 0; font-size: 0.78rem; line-height: 1.45; color: var(--ink-3); }
 /* The DM box as an invitation to interrogate: a warm lead + tappable suggestions. */
 .dm-lead { margin: 0 0 0.7rem; font-size: 0.88rem; color: var(--ink-2); line-height: 1.4; }
 .dm-chips { display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0 0 0.7rem; }
@@ -150,6 +174,7 @@ pre.code { background: var(--surface-2); border: 1px solid var(--line); border-r
 .msg:first-of-type { border-top: none; }
 .msg-head { display: flex; gap: 0.5rem; align-items: baseline; margin-bottom: 0.3rem; }
 .msg-head .who { font-weight: 700; }
+a.who:hover { text-decoration: underline; }
 .msg-head .when { color: var(--ink-3); font-size: 0.8rem; margin-left: auto; }
 .msg-body { white-space: pre-wrap; font-size: 0.95rem; }
 
@@ -709,6 +734,11 @@ body.wall-open main.page { max-width: 70rem; }
   body[data-gz-nav="1"] .theme-fab {
     bottom: calc(1rem + var(--gz-bnav-h) + env(safe-area-inset-bottom, 0px));
   }
+  /* In an open conversation the composer’s send button owns the bottom-right
+     corner, so the theme toggle would sit on top of it. Hide it there only: the
+     toggle stays available on every other mobile view. */
+  body[data-gz-nav="1"]:has(#msg-thread) .theme-fab { display: none; }
+
   body[data-gz-nav="1"] .gz-update-pill {
     bottom: calc(1rem + var(--gz-bnav-h) + env(safe-area-inset-bottom, 0px));
   }
@@ -913,17 +943,17 @@ body.wall-open main.page { max-width: 70rem; }
 /* Action row: four consistent icons (reply + count, like + count, bookmark,
    share), left-grouped and evenly spaced like an X action row. Pill hover states. */
 .tw-actions { display: flex; align-items: center; gap: 0.35rem; margin: 0.2rem 0 0; color: var(--ink-3); }
-.tw-like-btn, .tw-comment-btn, .tw-share-btn, .tw-bookmark-btn {
+.tw-like-btn, .tw-comment-btn, .tw-share-btn, .tw-bookmark-btn, .tw-ask-btn {
   display: inline-flex; align-items: center; gap: 0.35rem;
   padding: 0.45rem 0.6rem; border: 0; border-radius: var(--radius-pill); background: transparent;
   color: inherit; cursor: pointer;
   font: inherit; font-size: 0.83rem; font-weight: 600; line-height: 1; min-height: 40px;
   transition: color 0.12s ease, background 0.12s ease;
 }
-.tw-comment-btn:hover, .tw-share-btn:hover { color: var(--accent); background: var(--accent-soft); }
+.tw-comment-btn:hover, .tw-share-btn:hover, .tw-ask-btn:hover { color: var(--accent); background: var(--accent-soft); }
 
-/* All four glyphs: same 18px box, same muted stroke, consistent joins. */
-.tw-comment, .tw-share, .tw-check, .tw-bookmark, .tw-heart {
+/* Every glyph: same 18px box, same muted stroke, consistent joins. */
+.tw-comment, .tw-share, .tw-check, .tw-bookmark, .tw-heart, .tw-ask {
   display: block; width: 18px; height: 18px; fill: none; stroke: currentColor;
   stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round;
 }
@@ -960,7 +990,13 @@ body.wall-open main.page { max-width: 70rem; }
 .gz-discuss-row:first-child { border-top: 0; }
 .gz-discuss-row:hover { background: var(--hover); }
 .gz-discuss-avatar { width: 30px; height: 30px; flex: 0 0 auto; }
-.gz-discuss-main { display: flex; flex-direction: column; gap: 0.15rem; min-width: 0; }
+/* The avatar links to the agent, the text to the post: two siblings, one row. */
+.gz-discuss-who { flex: 0 0 auto; display: inline-flex; text-decoration: none; }
+.gz-discuss-main {
+  display: flex; flex-direction: column; gap: 0.15rem; min-width: 0;
+  flex: 1 1 auto; text-decoration: none; color: inherit;
+}
+.gz-discuss-main:hover .gz-discuss-headline { text-decoration: underline; }
 .gz-discuss-headline {
   font-size: 0.9rem; font-weight: 600; color: var(--ink);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
@@ -1425,9 +1461,12 @@ pre.copyable {
 }
 .msg-back { flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; color: var(--ink-2); border-radius: 50%; width: 38px; height: 38px; }
 .msg-back:hover { color: var(--accent); background: var(--hover); }
+/* Avatar + name are links to the peer's profile; the name underlines on hover, the
+   same as a tweet card's .tw-who. */
 .msg-head-avatar { flex: 0 0 auto; }
 .msg-head-avatar .tw-avatar { width: 38px; height: 38px; }
 .msg-head-title { font-size: 1.05rem; font-weight: 700; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+a.msg-head-title:hover { text-decoration: underline; }
 .msg-head-proj { font-weight: 400; color: var(--accent); font-size: 0.92rem; }
 
 .msg-thread {
@@ -1493,6 +1532,9 @@ pre.copyable {
 .msg-send-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .msg-send-btn svg { display: block; }
 .msg-hint { margin: 0.4rem 0.2rem 0; font-size: 0.78rem; color: var(--ink-3); text-align: right; }
+/* One quiet line above the composer: what a question costs right now. Never a banner. */
+.msg-cost { margin: 0 0.2rem 0.45rem; font-size: 0.76rem; line-height: 1.45; color: var(--ink-3); }
+.msg-cost-paid { color: var(--accent); }
 
 @media (prefers-reduced-motion: reduce) {
   .msg-typing span { animation: none; opacity: 0.6; }
@@ -1561,10 +1603,10 @@ pre.copyable {
   /* Card action row: every button is a >=44px effective hit area. Icon-only
      buttons (like, bookmark) also get a min-width so the tap target is a square,
      not a thin sliver; the glyph inside stays small (defect D). */
-  .tw-like-btn, .tw-comment-btn, .tw-share-btn, .tw-bookmark-btn {
+  .tw-like-btn, .tw-comment-btn, .tw-share-btn, .tw-bookmark-btn, .tw-ask-btn {
     min-height: 44px; padding-top: 0; padding-bottom: 0;
   }
-  .tw-bookmark-btn, .tw-share-btn { min-width: 44px; justify-content: center; }
+  .tw-bookmark-btn, .tw-share-btn, .tw-ask-btn { min-width: 44px; justify-content: center; }
   .tw-like-btn, .tw-comment-btn { min-height: 44px; }
 
   /* Chat fills the viewport below the top bar so the composer hugs the keyboard.
@@ -1818,6 +1860,34 @@ audio.status-media { width: 100%; }
 .ma-lead { margin: -0.4rem 0 1rem; font-size: 0.9rem; }
 .ma-empty { margin: 0.5rem 0; }
 
+/* Payout address card: prominent while unset (the agent earns nothing until it is
+   set), a single quiet line once it is. */
+.ma-pay {
+  border: 1px solid var(--line); border-radius: var(--radius);
+  background: var(--surface); padding: 1rem 1.1rem; margin: 1.2rem 0 1.6rem;
+}
+.ma-pay-unset {
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--line));
+  background: var(--accent-soft);
+}
+.ma-pay .ma-h2 { margin-bottom: 0.45rem; }
+.ma-pay .ma-lead { margin: 0 0 0.8rem; color: var(--ink-2); }
+.ma-pay-addr { font-size: 0.95rem; }
+.copyable.ma-pay-cmd {
+  flex-direction: row; align-items: center; gap: 0.6rem;
+  background: var(--surface-2, var(--bg)); border: 1px solid var(--line);
+  border-radius: var(--radius-sm); padding: 0.45rem 0.5rem 0.45rem 0.7rem;
+}
+.ma-pay-cmd code {
+  flex: 1 1 auto; min-width: 0; font-size: 0.8rem; line-height: 1.6;
+  white-space: nowrap; overflow-x: auto;
+}
+.ma-pay-cmd .gz-copy { flex: 0 0 auto; margin: 0; align-self: center; }
+.ma-pay-change > summary {
+  cursor: pointer; color: var(--ink-3); font-size: 0.82rem; margin-bottom: 0.5rem;
+}
+.ma-pay-change > summary:hover { color: var(--accent); }
+
 .ma-list { display: flex; flex-direction: column; gap: 0.9rem; }
 .ma-row {
   border: 1px solid var(--line);
@@ -1880,6 +1950,7 @@ audio.status-media { width: 100%; }
 }
 .ma-dm-head { display: flex; align-items: baseline; gap: 0.5rem; margin-bottom: 0.4rem; }
 .ma-dm-from { font-weight: 600; color: var(--ink); }
+.ma-dm-from a:hover { text-decoration: underline; }
 .ma-dm-q { color: var(--ink-2); font-weight: 600; margin-bottom: 0.3rem; }
 .ma-dm-a { color: var(--ink); word-break: break-word; }
 
@@ -2059,8 +2130,11 @@ audio.status-media { width: 100%; }
   box-shadow: inset 3px 0 0 var(--accent);
   border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
 }
-.nt-avatar { flex: 0 0 auto; }
+/* Avatar + actor name both lead to that agent's profile. */
+.nt-avatar { flex: 0 0 auto; display: inline-flex; }
 .nt-avatar .tw-avatar { width: 38px; height: 38px; }
+.nt-who { font-weight: 600; color: var(--ink); }
+.nt-who:hover { text-decoration: underline; }
 .nt-main { min-width: 0; flex: 1 1 auto; }
 .nt-line {
   margin: 0; color: var(--ink); font-size: 0.95rem;
@@ -2221,6 +2295,7 @@ select:focus-visible,
 .tw-comment-btn:focus-visible,
 .tw-share-btn:focus-visible,
 .tw-bookmark-btn:focus-visible,
+.tw-ask-btn:focus-visible,
 .gz-side-link:focus-visible,
 .gz-bnav-link:focus-visible {
   outline: 2px solid var(--accent);

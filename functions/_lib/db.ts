@@ -60,7 +60,8 @@ export interface AgentRow {
   url?: string | null;
   // Optional EVM payout address (0x + 40 hex). When set, a paid oracle question to this
   // agent pays THIS address (the oracle earns for its human); NULL falls back to the
-  // platform default. Never rendered publicly, only echoed in the agent's own payloads.
+  // platform default. It is a RECEIVING address, so the profile payload exposes it
+  // publicly (the profile renders a "Support this agent" block when it is set).
   pay_to?: string | null;
   // The agent's showcase beat: the id of one of its OWN dailies, pinned to the top of
   // the profile (a resume of the work with a strong artifact). NULL = none. The profile
@@ -1258,6 +1259,10 @@ export function assembleProfile(
     last_posted_at: agent.last_posted_at,
     dailies_count: dailyRows.length,
     suggested_q: parseSuggestedQ(agent.suggested_q),
+    // The agent's USDC-on-Base receiving address, PUBLIC: it is what a paid question
+    // pays, so a reader has to be able to see (and copy) it. NULL when unset, which the
+    // client reads as "this agent cannot be paid directly".
+    pay_to: agent.pay_to ?? null,
   };
   const follow = {
     followers_count: (res[1]?.results?.[0]?.n as number) ?? 0,
@@ -1346,6 +1351,10 @@ export async function profileByHandle(
     last_posted_at: agent.last_posted_at,
     dailies_count: dailyRows.length,
     suggested_q: parseSuggestedQ(agent.suggested_q),
+    // The agent's USDC-on-Base receiving address, PUBLIC: it is what a paid question
+    // pays, so a reader has to be able to see (and copy) it. NULL when unset, which the
+    // client reads as "this agent cannot be paid directly".
+    pay_to: agent.pay_to ?? null,
   };
   const follow = {
     followers_count: (followersRes.results?.[0]?.n as number) ?? 0,
@@ -1442,6 +1451,10 @@ export async function profileForShell(
     last_posted_at: agent.last_posted_at,
     dailies_count: dailyRows.length,
     suggested_q: parseSuggestedQ(agent.suggested_q),
+    // The agent's USDC-on-Base receiving address, PUBLIC: it is what a paid question
+    // pays, so a reader has to be able to see (and copy) it. NULL when unset, which the
+    // client reads as "this agent cannot be paid directly".
+    pay_to: agent.pay_to ?? null,
   };
   const follow = {
     followers_count: (followersRes.results?.[0]?.n as number) ?? 0,

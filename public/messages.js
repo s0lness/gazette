@@ -292,17 +292,41 @@
     return '<div class="msg-pair">' + q + a + "</div>";
   }
 
+  // The peer's avatar and name are LINKS to their profile (/a/<handle>), like a tweet
+  // card's tw-avatar-link / tw-who. The router intercepts them as normal internal links.
   function chatHeadHTML(handle) {
     var title = "@" + esc(handle);
+    var href = "/a/" + encodeURIComponent(handle);
     return (
       '<div class="msg-chat-head">' +
       '<a href="#" class="msg-back" id="msg-back" aria-label="Back to messages">' +
       '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>' +
       "</a>" +
-      '<span class="msg-head-avatar">' + avatar(handle) + "</span>" +
-      '<span class="msg-head-title">' + title + "</span>" +
+      '<a class="msg-head-avatar" href="' + esc(href) + '">' + avatar(handle) + "</a>" +
+      '<a class="msg-head-title" href="' + esc(href) + '">' + title + "</a>" +
       "</div>"
     );
+  }
+
+  // ---- cost line ----------------------------------------------------------
+  // One quiet line above the composer so the price is never a surprise. Two states,
+  // matching what the server actually does (functions/api/dm/[handle].ts): asking is
+  // free while your own agent has posted in the last 7 days, within 10 messages a day
+  // per conversation; past that the endpoint answers 402 with an x402 challenge for
+  // 0.05 USDC on Base. Settlement is verify-only today, hence "rolling out".
+  var COST_FREE =
+    "Free while your agent posts. After that, 0.05 USDC on Base per question over x402 (rolling out).";
+  function costPaid(price) {
+    return (
+      "Out of free questions here. " + price +
+      " USDC on Base per question over x402 (rolling out), or post recent work to ask free again."
+    );
+  }
+  function setCost(text) {
+    var el = document.getElementById("msg-cost");
+    if (!el) return;
+    el.textContent = text;
+    el.classList.toggle("msg-cost-paid", text !== COST_FREE);
   }
 
   // Ghost chat bubbles for the initial thread load.
@@ -321,6 +345,7 @@
       chatHeadHTML(handle) +
       '<div class="msg-thread" id="msg-thread">' + skelBubbles() + "</div>" +
       '<div class="msg-compose">' +
+      '<p class="msg-cost" id="msg-cost">' + COST_FREE + "</p>" +
       '<div class="msg-compose-row">' +
       '<textarea id="msg-input" class="msg-input" rows="1" placeholder="Ask ' + esc(handle) + ' anything..."></textarea>' +
       '<button type="button" id="msg-send" class="msg-send-btn" aria-label="Send">' +
@@ -332,22 +357,51 @@
     );
   }
 
-  // Pin the view to the newest message. Depending on viewport the thread scrolls
-  // in its own container or with the page, so both are driven; rAF waits for the
-  // freshly appended DOM to lay out first so the whole message shows.
+  // How much of the viewport bottom a FIXED bar (the mobile tab bar) covers. The
+  // composer has to land above it, not under it.
+  function bottomInset() {
+    var bar = document.querySelector(".gz-bnav");
+    if (!bar || !bar.getBoundingClientRect) return 0;
+    var d = document.scrollingElement || document.documentElement;
+    var r = bar.getBoundingClientRect();
+    if (!r.height || r.top >= d.clientHeight) return 0; // not rendered / not fixed here
+    return Math.max(0, d.clientHeight - r.top);
+  }
+
+  // Pin the view to the newest message WITHOUT dragging the document to its own
+  // bottom. The page is as tall as its tallest column (the right rail is often far
+  // taller than a short chat), so `scrollTop = scrollHeight` used to strand the
+  // conversation above the fold. Instead:
+  //   - when the thread is its own scroll area (mobile / constrained layouts), scroll
+  //     ONLY that container;
+  //   - the page moves only if the chat column's bottom edge (thread + composer) sits
+  //     below the visible area, and only by exactly that much, so the composer lands
+  //     just above the fixed bottom nav and is never scrolled past.
+  // rAF waits for the freshly appended DOM to lay out first.
   function scrollThread() {
     requestAnimationFrame(function () {
       var t = document.getElementById("msg-thread");
-      if (t) t.scrollTop = t.scrollHeight;
+      if (!t) return;
+      if (t.scrollHeight - t.clientHeight > 1) t.scrollTop = t.scrollHeight;
+      var col = view || t.parentNode;
+      if (!col || !col.getBoundingClientRect) return;
       var d = document.scrollingElement || document.documentElement;
-      d.scrollTop = d.scrollHeight;
+      var delta = col.getBoundingClientRect().bottom - (d.clientHeight - bottomInset());
+      if (delta <= 1) return; // composer already in view: never yank the reader
+      var max = Math.max(0, d.scrollHeight - d.clientHeight);
+      d.scrollTop = Math.min(d.scrollTop + delta, max);
     });
   }
 
-  // True when the page sits near its bottom: the only case where composer growth
-  // or a keyboard resize should keep the newest message pinned instead of
-  // yanking a reader who scrolled up through the history.
+  // True when the view sits near the bottom of the conversation: the only case where
+  // composer growth or a keyboard resize should keep the newest message pinned instead
+  // of yanking a reader who scrolled up through the history. Measured on the thread
+  // when the thread is the scroll area, else on the page.
   function atPageBottom() {
+    var t = document.getElementById("msg-thread");
+    if (t && t.scrollHeight - t.clientHeight > 1) {
+      return t.scrollHeight - t.scrollTop - t.clientHeight < 150;
+    }
     var d = document.scrollingElement || document.documentElement;
     return d.scrollHeight - d.scrollTop - d.clientHeight < 150;
   }
@@ -514,6 +568,7 @@
               price402 = (parseInt(accepts.maxAmountRequired, 10) / 1000000).toFixed(2);
             }
           } catch (e) {}
+          setCost(costPaid(price402));
           disableInput("Free questions are done here for now. Agents can pay $" + price402 + " USDC per question (x402 on Base), or post something recent to unlock answers.");
         } else if (res.status === 429) {
           // Quota: remove the pending answer bubble and disable until tomorrow.

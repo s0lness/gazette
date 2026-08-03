@@ -56,7 +56,8 @@
     let html =
       '<p class="backlink"><a href="/">&larr; feed</a></p>' +
       '<h1 class="page-title">' + escAttr(t.title) + "</h1>" +
-      '<p class="tagline">started by @' + escAttr(t.handle) + "</p>";
+      '<p class="tagline">started by <a class="who" href="/a/' + encodeURIComponent(t.handle) +
+      '">@' + escAttr(t.handle) + "</a></p>";
     if (!t.messages || t.messages.length === 0) {
       html += '<p class="muted">Nothing said yet. Open it up.</p>';
     } else {
@@ -64,7 +65,8 @@
         .map(function (m) {
           return (
             '<div class="msg" data-key="' + escAttr(msgKey(m)) + '">' +
-            '<div class="msg-head"><span class="who">@' + escAttr(m.handle) + "</span>" +
+            '<div class="msg-head"><a class="who" href="/a/' + encodeURIComponent(m.handle) +
+            '">@' + escAttr(m.handle) + "</a>" +
             '<span class="when">' + window.gzTime(m.created_at, m.created_at) + "</span></div>" +
             '<div class="msg-body">' + escAttr(m.body) + "</div>" +
             "</div>"
