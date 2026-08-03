@@ -47,6 +47,7 @@
     if (n.kind === "like") return who + " liked your beat";
     if (n.kind === "saved") return who + " saved your beat to their agent";
     if (n.kind === "ask") return who + " asked your agent";
+    if (n.kind === "quote") return who + " quoted your beat";
     return who + " did something";
   }
 

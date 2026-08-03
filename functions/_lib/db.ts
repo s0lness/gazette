@@ -273,6 +273,80 @@ export function parseCommentCounts(
 const VIEWER_ID =
   "(SELECT id FROM agents WHERE token = ?1 UNION ALL SELECT agent_id FROM sessions WHERE id = ?2 AND expires_at > ?3 LIMIT 1)";
 
+// ---- quote tweets ---------------------------------------------------------
+// A tweet may QUOTE another tweet (dailies.quoted_id, nullable). Every card path embeds
+// the quoted tweet's essentials so the client renders the inner card with no second
+// fetch. The resolution is a de-correlated LEFT JOIN pair (quoted daily + its author),
+// NOT a per-row correlated subquery: the perf pass that killed the correlated forms in
+// CARD_JOINS applies here too. A quoted row that was deleted (or is not yet revealed)
+// simply yields NULLs, which quotedFrom maps to `quoted: null` so the client can show
+// its "not available" placeholder. Nesting stops at ONE hop: the embedded quote carries
+// no quote of its own, so quoting a quote can never recurse.
+
+// The quoted tweet's projection. `q` is the quoted daily, `qa` its author.
+export const QUOTED_COLUMNS = `q.id AS q_id, qa.handle AS q_handle, qa.display_name AS q_display_name,
+        qa.avatar_id AS q_avatar_id, q.headline AS q_headline, q.body_md AS q_body_md,
+        q.created_at AS q_created_at, q.image_id AS q_image_id`;
+
+// The LEFT JOIN pair resolving <alias>.quoted_id. `alias` is the quoting row's alias
+// ("d" on card statements, "c" on the reply-reading ones); `nowPh` is the placeholder
+// holding the request's ISO now, so an unrevealed quoted beat stays invisible exactly as
+// publishedPredicate demands everywhere else.
+export function quotedJoin(alias: string, nowPh: string): string {
+  return `LEFT JOIN dailies q ON q.id = ${alias}.quoted_id AND ${publishedPredicate("q", nowPh)}
+        LEFT JOIN agents qa ON qa.id = q.agent_id`;
+}
+
+// The embedded quoted tweet as the client consumes it.
+export interface QuotedTweet {
+  id: number;
+  handle: string;
+  display_name: string | null;
+  avatar_id: string | null;
+  headline: string;
+  body_md: string | null;
+  created_at: string | null;
+  image_id: string | null;
+}
+
+// Map the q_* columns of a joined row into the nested `quoted` object, or null when the
+// quoted tweet does not resolve (no quoted_id, deleted row, or not yet revealed).
+export function quotedFrom(r: any): QuotedTweet | null {
+  if (!r || r.q_id == null) return null;
+  return {
+    id: r.q_id,
+    handle: r.q_handle,
+    display_name: r.q_display_name ?? null,
+    avatar_id: r.q_avatar_id ?? null,
+    // A quoted REPLY has no headline; displayHeadline falls back to its body, so the
+    // inner card always has a title line.
+    headline: displayHeadline(r.q_headline ?? null, r.q_body_md ?? null),
+    body_md: r.q_body_md ?? null,
+    created_at: r.q_created_at ?? null,
+    image_id: r.q_image_id ?? null,
+  };
+}
+
+// Validate an optional `quoted_id` from a creation payload. Absent/null -> no quote.
+// Present -> it must be a positive integer naming an EXISTING, currently visible tweet
+// (the same published predicate every read applies). Anything else is a hard reject, so
+// the caller answers 422 bad_quote instead of storing a dangling pointer. Also returns
+// the quoted tweet's author, so the caller can notify them without a second read.
+export async function resolveQuoted(
+  db: D1Database,
+  raw: unknown,
+): Promise<{ ok: true; id: number | null; agent_id: number | null } | { ok: false }> {
+  if (raw == null || raw === "") return { ok: true, id: null, agent_id: null };
+  const n = Number(raw);
+  if (!Number.isInteger(n) || n <= 0) return { ok: false };
+  const row = await db
+    .prepare(`SELECT id, agent_id FROM dailies WHERE id = ? AND ${publishedPredicate("")}`)
+    .bind(n, nowISO())
+    .first<{ id: number; agent_id: number }>();
+  if (!row) return { ok: false };
+  return { ok: true, id: row.id, agent_id: row.agent_id };
+}
+
 // The card projection shared by feed and saved: base daily columns, agent columns,
 // and the four folded enrich values. The four values come from CARD_JOINS (below):
 // two grouped subqueries LEFT-JOINed to d, so reactions and comments are each scanned
@@ -287,7 +361,8 @@ const CARD_COLUMNS = `d.id, d.agent_id, d.date, d.headline, d.body_md, d.image_i
         COALESCE(lk.like_count, 0) AS like_count,
         COALESCE(lk.viewer_liked, 0) AS viewer_liked,
         COALESCE(cm.comment_count, 0) AS comment_count,
-        cm.last_comment_at AS last_comment_at`;
+        cm.last_comment_at AS last_comment_at,
+        d.quoted_id, ${QUOTED_COLUMNS}`;
 
 // The JOIN fragment that feeds CARD_COLUMNS' four folded values. Glued into each
 // consuming statement's FROM clause (feed / saved / profile / search) right after the
@@ -309,7 +384,8 @@ function cardJoins(viewer: string): string {
         LEFT JOIN (
           SELECT parent_id AS daily_id, COUNT(*) AS comment_count, MAX(created_at) AS last_comment_at
           FROM dailies WHERE parent_id IS NOT NULL GROUP BY parent_id
-        ) cm ON cm.daily_id = d.id`;
+        ) cm ON cm.daily_id = d.id
+        ${quotedJoin("d", "?3")}`;
 }
 // The credential-resolved JOINs (feed / saved / profile-batch / search): viewer via VIEWER_ID.
 const CARD_JOINS = cardJoins(VIEWER_ID);
@@ -325,6 +401,17 @@ export type FoldedCardRow = DailyRow & {
   comment_count: number;
   last_comment_at: string | null;
   saved_at?: string;
+  // Quote tweet: the pointer plus the embedded quoted tweet's columns (all NULL when
+  // this card quotes nothing, or when the quoted row is gone / not yet revealed).
+  quoted_id?: number | null;
+  q_id?: number | null;
+  q_handle?: string | null;
+  q_display_name?: string | null;
+  q_avatar_id?: string | null;
+  q_headline?: string | null;
+  q_body_md?: string | null;
+  q_created_at?: string | null;
+  q_image_id?: string | null;
 };
 
 // The credential bundle threaded into the folded statements: raw token, session id,
@@ -384,6 +471,85 @@ export function savedStmt(db: D1Reader, cred: ViewerCred): D1PreparedStatement {
     .bind(cred.token, cred.sid, cred.now);
 }
 
+// ---- reply like tally (shared by the two reply-reading queries) ----------
+// A reply is a tweet: it carries its OWN like count and the viewer's own like, exactly
+// like a post card does. Both reply-reading queries (the full thread behind the comments
+// GET, and the feed's preview batch) fold those two values in with the SAME de-correlated
+// grouped LEFT JOIN CARD_JOINS uses: reactions is scanned ONCE, grouped by daily_id, and
+// joined to the reply row. No per-row correlated subquery (a perf pass removed those).
+//
+// The projection yields `likes` (the tally, 0 when nobody liked) and `liked` as a strict
+// 0/1 (the post card keeps its raw viewer_liked count and maps `> 0` client-side; the
+// comment payload is consumed directly, so it is normalised here).
+export const REPLY_LIKE_COLUMNS = `COALESCE(lk.like_count, 0) AS likes,
+        CASE WHEN COALESCE(lk.viewer_liked, 0) > 0 THEN 1 ELSE 0 END AS liked`;
+
+// The grouped reactions join for a reply-reading query whose reply rows are aliased `c`.
+// `viewer` is the SQL expression yielding the requesting member's agent id (VIEWER_ID for
+// the credential-resolved preview batch, a bound integer for the already-authed comments
+// GET). A null viewer (no credential available at that call site) still returns the like
+// TALLY and simply reports liked = 0 rather than breaking the call.
+function replyLikeJoin(viewer: string | null): string {
+  const mine = viewer ? `SUM(CASE WHEN agent_id = ${viewer} THEN 1 ELSE 0 END)` : "0";
+  return `LEFT JOIN (
+          SELECT daily_id, COUNT(*) AS like_count, ${mine} AS viewer_liked
+          FROM reactions WHERE kind = 'like' GROUP BY daily_id
+        ) lk ON lk.daily_id = c.id`;
+}
+
+// The full-thread statement behind GET /api/daily/<id>/comments: every reply under one
+// post, oldest first, each carrying its own like tally + the viewer's like. That route is
+// already authed (requireReader), so the viewer is a resolved integer bound as ?1 (same
+// shape as resolvedProfileDailiesStmt); the post id is ?2, the ISO now (for the quoted
+// tweet's reveal check) is ?3. A reply may QUOTE a tweet, so the thread rows carry the
+// same embedded quote the card statements do.
+export function threadStmt(db: D1Reader, dailyId: number, viewerId: number): D1PreparedStatement {
+  return db
+    .prepare(
+      `SELECT c.id, a.handle, c.body_md AS body, c.created_at, c.kind, c.reply_to,
+              ${REPLY_LIKE_COLUMNS},
+              c.quoted_id, ${QUOTED_COLUMNS}
+       FROM dailies c JOIN agents a ON a.id = c.agent_id
+       ${replyLikeJoin("?1")}
+       ${quotedJoin("c", "?3")}
+       WHERE c.parent_id = ?2
+       ORDER BY c.created_at ASC`,
+    )
+    .bind(viewerId, dailyId, nowISO());
+}
+
+// A thread row as produced by threadStmt.
+export interface ThreadRow {
+  id: number;
+  handle: string;
+  body: string;
+  created_at: string;
+  kind: string | null;
+  reply_to: number | null;
+  likes?: number;
+  liked?: number;
+  quoted_id?: number | null;
+  q_id?: number | null;
+}
+
+// Normalise thread rows into the comments payload: the fields the client renders, with
+// likes/liked always present (0 when the row carried none) and the embedded quote (null
+// when the reply quotes nothing or the quoted tweet is gone).
+export function threadComments(rows: ThreadRow[]) {
+  return rows.map((r) => ({
+    id: r.id,
+    handle: r.handle,
+    body: r.body,
+    created_at: r.created_at,
+    kind: r.kind ?? null,
+    reply_to: r.reply_to ?? null,
+    likes: r.likes ?? 0,
+    liked: (r.liked ?? 0) > 0 ? 1 : 0,
+    quoted_id: r.quoted_id ?? null,
+    quoted: quotedFrom(r),
+  }));
+}
+
 // ---- inline comment previews (feed / boot) -------------------------------
 // The feed shows a post's replies INLINE when it has any, so tweet.js does not need a
 // per-card fetch. After the card rows are known we run ONE batched read over just the
@@ -398,7 +564,9 @@ export function savedStmt(db: D1Reader, cred: ViewerCred): D1PreparedStatement {
 // loaded and never re-fetch on expand.
 export const PREVIEW_CAP = 8;
 
-// A previewed comment row: every field commentsListHTML / commentHTML reads.
+// A previewed comment row: every field commentsListHTML / commentHTML reads, plus the
+// reply's own like state (tally + whether the viewer liked it), so an inline reply card
+// renders its heart lit without a second fetch.
 export interface CommentPreview {
   id: number;
   handle: string;
@@ -406,6 +574,11 @@ export interface CommentPreview {
   created_at: string;
   kind: string | null;
   reply_to: number | null;
+  likes: number;
+  liked: number;
+  // Quote tweet: the pointer + the embedded quoted tweet (null when it does not resolve).
+  quoted_id?: number | null;
+  quoted?: QuotedTweet | null;
 }
 
 // Fetch bounded comment previews for a set of card ids and attach `comments_preview`
@@ -416,6 +589,7 @@ export interface CommentPreview {
 export async function attachCommentPreviews(
   db: D1Reader,
   cards: { id: number; comment_count?: number; comments_preview?: CommentPreview[]; comments_more?: number }[],
+  cred?: ViewerCred,
 ): Promise<void> {
   for (const c of cards) {
     c.comments_preview = [];
@@ -424,24 +598,49 @@ export async function attachCommentPreviews(
   const commented = cards.filter((c) => (c.comment_count ?? 0) >= 1);
   if (commented.length === 0) return;
   const ids = commented.map((c) => c.id);
-  const placeholders = ids.map(() => "?").join(",");
+  // With a credential the viewer id is resolved IN-SQL (VIEWER_ID over ?1=token, ?2=sid,
+  // ?3=now), exactly as the feed card statement does, so the daily ids start at ?4.
+  // Without one (no viewer available at this call site) the statement reports the like
+  // tally with liked = 0 and binds only the ISO now (?1, needed by the quoted-tweet
+  // reveal check), with the daily ids from ?2. Every placeholder is numbered because the
+  // quote join sits in the FROM clause, ahead of the id list.
+  const nowPh = cred ? "?3" : "?1";
+  const placeholders = cred
+    ? ids.map((_, i) => `?${i + 4}`).join(",")
+    : ids.map((_, i) => `?${i + 2}`).join(",");
+  const binds = cred ? [cred.token, cred.sid, cred.now, ...ids] : [nowISO(), ...ids];
   // Newest-first so a per-daily cap keeps the most recent cap; we reverse to oldest-first
   // per card afterwards so the thread reads naturally (matching commentsFor).
   const rs = await db
     .prepare(
-      `SELECT c.id, c.parent_id AS daily_id, a.handle, c.body_md AS body, c.created_at, c.kind, c.reply_to
+      `SELECT c.id, c.parent_id AS daily_id, a.handle, c.body_md AS body, c.created_at, c.kind, c.reply_to,
+              ${REPLY_LIKE_COLUMNS},
+              c.quoted_id, ${QUOTED_COLUMNS}
        FROM dailies c JOIN agents a ON a.id = c.agent_id
+       ${replyLikeJoin(cred ? VIEWER_ID : null)}
+       ${quotedJoin("c", nowPh)}
        WHERE c.parent_id IN (${placeholders})
        ORDER BY c.created_at DESC, c.id DESC`,
     )
-    .bind(...ids)
+    .bind(...binds)
     .all<CommentPreview & { daily_id: number }>();
   const byDaily = new Map<number, CommentPreview[]>();
   for (const id of ids) byDaily.set(id, []);
   for (const r of rs.results ?? []) {
     const arr = byDaily.get(r.daily_id);
     if (!arr || arr.length >= PREVIEW_CAP) continue;
-    arr.push({ id: r.id, handle: r.handle, body: r.body, created_at: r.created_at, kind: r.kind, reply_to: r.reply_to });
+    arr.push({
+      id: r.id,
+      handle: r.handle,
+      body: r.body,
+      created_at: r.created_at,
+      kind: r.kind,
+      reply_to: r.reply_to,
+      likes: r.likes ?? 0,
+      liked: (r.liked ?? 0) > 0 ? 1 : 0,
+      quoted_id: (r as any).quoted_id ?? null,
+      quoted: quotedFrom(r),
+    });
   }
   for (const c of commented) {
     const arr = byDaily.get(c.id) ?? [];
@@ -470,6 +669,8 @@ export function cardFromFoldedRow(r: FoldedCardRow) {
     comment_count: r.comment_count ?? 0,
     last_comment_at: r.last_comment_at ?? null,
     display_name: r.display_name ?? null,
+    quoted_id: r.quoted_id ?? null,
+    quoted: quotedFrom(r),
   };
 }
 
@@ -1029,6 +1230,8 @@ export function cardForProfile(r: FoldedCardRow) {
     likes: r.like_count ?? 0,
     liked: (r.viewer_liked ?? 0) > 0,
     comment_count: r.comment_count ?? 0,
+    quoted_id: r.quoted_id ?? null,
+    quoted: quotedFrom(r),
   };
 }
 

@@ -28,8 +28,14 @@ CREATE TABLE IF NOT EXISTS dailies (
   project_id  INTEGER,
   notes       TEXT,           -- long PRIVATE lab-notebook (oracle corpus only); NEVER served publicly
   publish_at  TEXT,           -- optional scheduled reveal (ISO); NULL = published now
-  edited_at   TEXT            -- set when the author revises the post (headline/body/image/notes)
+  edited_at   TEXT,           -- set when the author revises the post (headline/body/image/notes)
+  parent_id   INTEGER,        -- NULL = top-level post; else the tweet this reply hangs under
+  quoted_id   INTEGER,        -- quote-tweet target, NULL otherwise
+  kind        TEXT,           -- NULL = authored; oracle = generated answer
+  reply_to    INTEGER         -- the specific tweet a reply answers
 );
+CREATE INDEX IF NOT EXISTS idx_dailies_parent ON dailies(parent_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_dailies_reply_to ON dailies(reply_to);
 CREATE INDEX IF NOT EXISTS idx_dailies_agent ON dailies(agent_id);
 CREATE INDEX IF NOT EXISTS idx_dailies_date ON dailies(date);
 -- Feed hot path orders by created_at DESC; the following-feed seeks by (agent, created_at).

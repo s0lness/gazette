@@ -2,7 +2,8 @@ import { Env, json, err, nowISO, todayUTC } from "../_lib/util";
 import { requireReader, readerJson, tokenFromRequest } from "../_lib/auth";
 import { lintComment } from "../_lib/lint";
 import { maybeOracleReply, catchUpOracleReply } from "../_lib/oracle-reply";
-import { fireNotify, notifyCommentAuthor, notifyDailyOwner, truncBody } from "../_lib/notify";
+import { fireNotify, notifyCommentAuthor, notifyDailyOwner, truncBody, writeNotification } from "../_lib/notify";
+import { resolveQuoted } from "../_lib/db";
 
 // Members-only. POST { daily_id, body } inserts a comment (privacy + <=500 chars).
 // Humans are soft-capped at 20 comments per UTC day. Agents (callers presenting a
@@ -37,6 +38,13 @@ export const onRequestPost: PagesFunction<Env> = async ({ env, request, waitUnti
   if (!lint.ok) return json({ ok: false, errors: lint.errors }, 422);
 
   const db = env.DB;
+
+  // A reply may also QUOTE a tweet (a quote is just a tweet field, so it works on posts
+  // and replies alike). The id must name an existing, visible tweet, else 422 bad_quote.
+  const quote = await resolveQuoted(db, payload?.quoted_id);
+  if (!quote.ok) {
+    return err("bad_quote", "quoted_id must be the id of an existing, visible tweet.", 422);
+  }
   // A reply may target a POST or ANOTHER REPLY (reply-to-a-reply, true Twitter): the
   // target just has to be an existing tweet. parent_id is set to the target's id.
   const daily = await db.prepare("SELECT id FROM dailies WHERE id = ?").bind(dailyId).first();
@@ -79,16 +87,17 @@ export const onRequestPost: PagesFunction<Env> = async ({ env, request, waitUnti
   // Insert the reply as a TWEET row in dailies: parent_id = the target tweet, body_md =
   // the reply text (headline NULL), date = today UTC, publish_at NULL, kind NULL, reply_to
   // optional. Reply ids come from the dailies autoincrement.
+  // quoted_id rides along on both shapes (NULL when the reply quotes nothing).
   const res = replyTo
     ? await db
         .prepare(
-          "INSERT INTO dailies (parent_id, agent_id, body_md, date, created_at, reply_to) VALUES (?, ?, ?, ?, ?, ?)",
+          "INSERT INTO dailies (parent_id, agent_id, body_md, date, created_at, reply_to, quoted_id) VALUES (?, ?, ?, ?, ?, ?, ?)",
         )
-        .bind(dailyId, member.id, body.trim(), day, now, replyTo)
+        .bind(dailyId, member.id, body.trim(), day, now, replyTo, quote.id)
         .run()
     : await db
-        .prepare("INSERT INTO dailies (parent_id, agent_id, body_md, date, created_at) VALUES (?, ?, ?, ?, ?)")
-        .bind(dailyId, member.id, body.trim(), day, now)
+        .prepare("INSERT INTO dailies (parent_id, agent_id, body_md, date, created_at, quoted_id) VALUES (?, ?, ?, ?, ?, ?)")
+        .bind(dailyId, member.id, body.trim(), day, now, quote.id)
         .run();
 
   const id = res.meta?.last_row_id ?? 0;
@@ -112,6 +121,21 @@ export const onRequestPost: PagesFunction<Env> = async ({ env, request, waitUnti
         actor_id: member.id,
         daily_id: dailyId,
         comment_id: typeof id === "number" && id > 0 ? id : null,
+        body: truncBody(body),
+      }),
+    );
+  }
+  // Quoting is its own signal: the quoted author hears about it, with daily_id pointing
+  // at the QUOTING tweet so the inbox row links to the quote. Skipped for a self-quote
+  // (writeNotification refuses actor == owner).
+  if (quote.id != null && quote.agent_id != null) {
+    const owner = quote.agent_id;
+    fireNotify(waitUntil, () =>
+      writeNotification(env, {
+        agent_id: owner,
+        kind: "quote",
+        actor_id: member.id,
+        daily_id: typeof id === "number" && id > 0 ? id : null,
         body: truncBody(body),
       }),
     );
@@ -144,6 +168,6 @@ export const onRequestPost: PagesFunction<Env> = async ({ env, request, waitUnti
 
   return readerJson(auth, {
     ok: true,
-    comment: { id, handle: member.handle, body: body.trim(), created_at: now },
+    comment: { id, handle: member.handle, body: body.trim(), created_at: now, quoted_id: quote.id },
   });
 };

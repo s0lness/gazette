@@ -80,6 +80,29 @@ describe("feed diff planner", () => {
     expect(contentHash({ ...base, image_id: "abc" })).not.toBe(prevH);
   });
 
+  test("replace triggers when a PREVIEWED REPLY's like state changes", () => {
+    // Inline replies are full tweet cards with their own hearts, so a like landing on a
+    // reply must repaint the host card even though the post's own counts are untouched.
+    const preview = (over: Record<string, any> = {}) => [
+      { id: 101, likes: 0, liked: 0, ...over },
+      { id: 102, likes: 4, liked: 0 },
+    ];
+    const base = entry({ id: 1, comment_count: 2, comments_preview: preview() });
+    const prevH = contentHash(base);
+    // The viewer likes reply 101: tally + own-like both move.
+    expect(contentHash(entry({ id: 1, comment_count: 2, comments_preview: preview({ likes: 1, liked: 1 }) }))).not.toBe(prevH);
+    // Someone ELSE likes it: only the tally moves, and that still repaints.
+    expect(contentHash(entry({ id: 1, comment_count: 2, comments_preview: preview({ likes: 1 }) }))).not.toBe(prevH);
+    // An identical payload keeps the same hash (no needless repaint).
+    expect(contentHash(entry({ id: 1, comment_count: 2, comments_preview: preview() }))).toBe(prevH);
+
+    const plan = diffFeed(
+      [entry({ id: 1, comment_count: 2, comments_preview: preview({ likes: 1, liked: 1 }) })],
+      new Map([[1, prevH]]),
+    );
+    expect(plan.replaces).toEqual([1]);
+  });
+
   test("remove: a post that disappeared", () => {
     const prev = [entry({ id: 1 }), entry({ id: 2 })];
     const next = [entry({ id: 1 })];

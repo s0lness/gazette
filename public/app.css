@@ -1235,6 +1235,58 @@ pre.rt-code { font-size: 0.82rem; margin: 0; white-space: pre; overflow-x: auto;
 .tw-c-body ul { margin: 0.25rem 0; padding-left: 1.1rem; }
 .tw-c-body h2 { font-size: 0.95rem; margin: 0.35rem 0 0.15rem; }
 
+/* ---- Quote tweets --------------------------------------------------------
+   A tweet that quotes another embeds it as a bordered, muted inner card under its own
+   text: who said it, when, what, and its image when it has one. The whole card is one
+   link to the quoted tweet's permalink. No action row inside (a quote is not a nested
+   tweet), so the card stays quiet next to its host. */
+.tw-quote {
+  display: block; margin: 0.1rem 0 0.7rem;
+  border: 1px solid var(--line); border-radius: var(--radius-sm);
+  background: var(--surface-2, transparent);
+  padding: 0.6rem 0.7rem; text-decoration: none; color: inherit;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+a.tw-quote:hover { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); background: color-mix(in srgb, var(--accent) 6%, var(--surface-2, transparent)); }
+.tw-quote-head { display: flex; align-items: center; gap: 0.35rem; min-width: 0; font-size: 0.85rem; line-height: 1.2; }
+.tw-quote-avatar { width: 20px; height: 20px; flex: 0 0 auto; }
+.tw-quote-who { font-weight: 700; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 45%; }
+.tw-quote-handle { color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.tw-quote-when { color: var(--ink-3); white-space: nowrap; flex: 0 0 auto; }
+.tw-quote-text {
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
+  margin: 0.3rem 0 0; color: var(--ink-2, var(--ink)); font-size: 0.92rem; line-height: 1.45;
+  white-space: pre-wrap; word-break: break-word;
+}
+.tw-quote-img { display: block; margin: 0.5rem 0 0; }
+.tw-quote-img img { display: block; max-width: 100%; max-height: 11rem; height: auto; border-radius: var(--radius-sm); border: 1px solid var(--line); }
+/* The quoted tweet is gone (deleted, or not revealed yet): a quiet placeholder, never a
+   broken card. */
+.tw-quote-gone { color: var(--ink-3); font-size: 0.88rem; }
+
+/* Share popover: "Copy link" / "Quote", anchored under the share button so the action
+   row keeps its four icons instead of growing a fifth. */
+.tw-share-wrap { position: relative; display: inline-flex; }
+.tw-share-menu {
+  /* Anchored to the button's RIGHT edge so it opens leftward: the share icon is the last
+     of the four, so a left-anchored menu would run off a 390px screen. */
+  position: absolute; top: calc(100% + 0.2rem); right: 0; left: auto; z-index: 40;
+  min-width: 9.5rem; max-width: calc(100vw - 2rem);
+  display: flex; flex-direction: column; padding: 0.25rem;
+  border: 1px solid var(--line); border-radius: var(--radius-sm);
+  background: var(--surface); box-shadow: var(--shadow);
+}
+.tw-share-menu button {
+  font: inherit; font-size: 0.86rem; font-weight: 600; text-align: left;
+  background: none; border: 0; color: var(--ink); cursor: pointer;
+  padding: 0.5rem 0.6rem; border-radius: var(--radius-sm); min-height: 36px;
+}
+.tw-share-menu button:hover { background: var(--accent-soft); color: var(--accent); }
+
+/* Quote composer: the inline reply composer, with the quoted tweet previewed inside. */
+.tw-quote-in { width: 100%; min-height: 3rem; resize: vertical; border-radius: var(--radius-sm); box-sizing: border-box; }
+.tw-quote-composer .tw-quote { margin-top: 0.45rem; margin-bottom: 0; }
+
 /* Inline reply composer, opened directly under any tweet (not a modal). */
 .tw-c-composer { margin: 0.45rem 0 0.2rem; }
 .tw-c-reply-in { width: 100%; min-height: 2.2rem; resize: vertical; border-radius: var(--radius-sm); box-sizing: border-box; }

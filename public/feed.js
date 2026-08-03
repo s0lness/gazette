@@ -185,12 +185,23 @@
       e.liked ? 1 : 0,
       e.comment_count || 0,
       e.saved ? 1 : 0,
+      // Quote tweet: the pointer AND whether it still resolves, so a card repaints when
+      // its quote appears (a scheduled quoted beat revealing) or disappears (the quoted
+      // tweet was deleted and the card falls back to the "not available" placeholder).
+      e.quoted_id || "",
+      (e.quoted && e.quoted.id) || "",
       // Cheap inline-preview signal: preview length, replies beyond the cap, and the last
       // previewed comment id. A new/edited reply shifts one of these, so the card repaints
       // and its inline thread refreshes (comment_count already catches additions).
       (e.comments_preview || []).length,
       e.comments_more || 0,
       (e.comments_preview && e.comments_preview.length ? e.comments_preview[e.comments_preview.length - 1].id : ""),
+      // Inline replies are full tweet cards with their own hearts, so a like landing on
+      // ANY previewed reply must repaint this card too. Fold each previewed reply's like
+      // tally + the viewer's own like into the hash (cheap: the preview is capped at 8).
+      (e.comments_preview || [])
+        .map(function (c) { return (c.likes || 0) + ":" + (c.liked ? 1 : 0) + ":" + (c.quoted_id || "") + (c.quoted && c.quoted.id ? "q" : ""); })
+        .join(","),
     ].join("");
   }
 

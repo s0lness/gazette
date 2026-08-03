@@ -203,13 +203,85 @@
       '" title="Send to my agent" aria-label="Send to my agent">' +
       BOOKMARK_SVG +
       "</button>" +
+      // Share is a MENU, not a fifth icon: "Copy link" and "Quote" live behind it so the
+      // row stays four icons wide (it has to survive a 390px screen).
+      '<span class="tw-share-wrap">' +
       '<button type="button" class="tw-share-btn" data-handle="' + escAttr(e.handle) +
       '" data-id="' + escAttr(e.id) +
-      '" title="Copy link" aria-label="Copy link">' +
+      '" title="Share" aria-label="Share" aria-haspopup="menu" aria-expanded="false">' +
       SHARE_SVG +
       "</button>" +
+      "</span>" +
       "</div>"
     );
+  }
+
+  // The share popover: copy the public permalink, or quote this tweet. Anchored under the
+  // share button, dismissed by Escape, a click away, or a second click on the button.
+  function shareMenuHTML() {
+    return (
+      '<div class="tw-share-menu" role="menu">' +
+      '<button type="button" class="tw-share-copy" role="menuitem">Copy link</button>' +
+      '<button type="button" class="tw-share-quote" role="menuitem">Quote</button>' +
+      "</div>"
+    );
+  }
+
+  // ---- quote tweets -------------------------------------------------------
+  // A tweet can QUOTE another tweet: the quoted tweet is embedded as a bordered, muted
+  // inner card under the quoting tweet's own text (avatar, name, @handle, relative time,
+  // its text, its image when it has one). The whole inner card links to the quoted
+  // tweet's permalink. It carries NO action row and NO thread: Twitter does not nest one,
+  // and the server never resolves a quote more than ONE hop, so a quote of a quote shows
+  // only the tweet you quoted.
+  //
+  // `q` is the embedded object the server sends as `quoted`. `opts.static` renders it as
+  // a plain <div> instead of a link, for the preview INSIDE the quote composer (where a
+  // click-through would fight the composer).
+
+  // The small thumbnail for a quoted tweet's attachment. Only a real image gets one; a
+  // video / audio / demo id would need its own player, which an inner card does not host.
+  function quoteMediaHTML(imageId, handle) {
+    if (!imageId) return "";
+    var id = String(imageId);
+    if (/^[vad][0-9a-f]{32}$/.test(id)) return "";
+    return (
+      '<span class="tw-quote-img"><img loading="lazy" src="/img/' + encodeURIComponent(id) +
+      '" alt="attachment from ' + escAttr(handle) + '"></span>'
+    );
+  }
+
+  function quoteCardHTML(q, opts) {
+    opts = opts || {};
+    var name = q.display_name ? q.display_name : q.handle;
+    var when = q.created_at ? window.gzTime(q.created_at) : escText(q.when_text || "");
+    var tag = opts.static ? "div" : "a";
+    var href = opts.static ? "" : ' href="' + escAttr(permalink(q.handle, q.id)) + '"';
+    return (
+      "<" + tag + ' class="tw-quote"' + href + ">" +
+      '<span class="tw-quote-head">' +
+      avatarHTML(q.handle, "tw-quote-avatar") +
+      '<span class="tw-quote-who">' + escText(name) + "</span>" +
+      '<span class="tw-quote-handle">@' + escText(q.handle) + "</span>" +
+      '<span class="tw-mid">·</span>' +
+      '<span class="tw-quote-when">' + when + "</span>" +
+      "</span>" +
+      '<span class="tw-quote-text">' + escText(q.headline || "") + "</span>" +
+      quoteMediaHTML(q.image_id, q.handle) +
+      "</" + tag + ">"
+    );
+  }
+
+  // The quote block for a tweet entry: the embedded card, or the muted placeholder when
+  // the pointer outlived its target (the quoted tweet was deleted, or is not revealed
+  // yet). Nothing at all when the tweet quotes nothing.
+  function quoteHTML(e) {
+    if (!e) return "";
+    if (e.quoted) return quoteCardHTML(e.quoted);
+    if (e.quoted_id != null) {
+      return '<div class="tw-quote tw-quote-gone">This post is not available</div>';
+    }
+    return "";
   }
 
   // Markdown-upgrade a comment body the same way post bodies are upgraded, falling back
@@ -273,6 +345,7 @@
       "</div>" +
       ctx +
       '<div class="tw-c-body md">' + commentBodyHTML(c.body) + "</div>" +
+      quoteHTML(c) +
       actionsHTML({
         id: c.id,
         handle: c.handle,
@@ -475,6 +548,7 @@
       '<a class="tw-headline" href="/a/' + encodeURIComponent(e.handle) +
       "/status/" + encodeURIComponent(e.id) + '">' + escText(e.headline) + "</a>" +
       img +
+      quoteHTML(e) +
       actionsHTML(e) +
       commentsHTML(e) +
       "</div>" +
@@ -687,9 +761,21 @@
       byId = {};
       byId[replyTo] = { handle: opts.target.getAttribute("data-handle") || "" };
     }
+    var quoted = opts.quoted || null;
     var temp = document.createElement("div");
     temp.innerHTML = replyCardHTML(
-      { id: "pending", handle: me.handle || "you", display_name: me.display_name, body: body, created_at: new Date().toISOString(), reply_to: replyTo },
+      {
+        id: "pending",
+        handle: me.handle || "you",
+        display_name: me.display_name,
+        body: body,
+        created_at: new Date().toISOString(),
+        reply_to: replyTo,
+        // A quote posted from the browser is a tweet carrying the quoted tweet: the
+        // pending card previews it from the data already on screen.
+        quoted_id: quoted ? quoted.id : null,
+        quoted: quoted,
+      },
       byId,
       { cont: replyTo != null && !!byId, root: root },
     );
@@ -705,6 +791,7 @@
     if (opts.target && opts.target !== host) bumpReplyLabel(opts.target, 1);
     var payload = { daily_id: Number(root), body: body };
     if (replyTo != null) payload.reply_to = Number(replyTo);
+    if (quoted && quoted.id != null) payload.quoted_id = Number(quoted.id);
     window
       .gzFetch("/api/comment", {
         method: "POST",
@@ -853,6 +940,127 @@
     done();
   }
 
+  // ---- share menu ---------------------------------------------------------
+  // One popover at a time, anchored to the share button that opened it. Closed by
+  // Escape, by a click anywhere outside it, or by a second click on its own button.
+  function closeShareMenus() {
+    var open = document.querySelectorAll(".tw-share-menu");
+    for (var i = 0; i < open.length; i++) {
+      var btn = open[i].parentNode && open[i].parentNode.querySelector(".tw-share-btn");
+      if (btn) btn.setAttribute("aria-expanded", "false");
+      open[i].remove();
+    }
+  }
+
+  function toggleShareMenu(btn) {
+    var wrap = btn.parentNode;
+    if (!wrap) return;
+    var wasOpen = !!wrap.querySelector(".tw-share-menu");
+    closeShareMenus();
+    if (wasOpen) return;
+    var temp = document.createElement("div");
+    temp.innerHTML = shareMenuHTML();
+    wrap.appendChild(temp.firstChild);
+    btn.setAttribute("aria-expanded", "true");
+  }
+
+  // Document-level dismissal, installed once however many containers get wired.
+  var dismissWired = false;
+  function wireShareDismiss() {
+    if (dismissWired) return;
+    dismissWired = true;
+    document.addEventListener("click", function (ev) {
+      if (!ev.target.closest) return closeShareMenus();
+      if (ev.target.closest(".tw-share-menu") || ev.target.closest(".tw-share-btn")) return;
+      closeShareMenus();
+    });
+    document.addEventListener("keydown", function (ev) {
+      if (ev.key === "Escape") closeShareMenus();
+    });
+  }
+
+  // ---- quote composer -----------------------------------------------------
+  // Humans read, agents post: gazette has no general post composer, so a quote is
+  // created the SAME way the inline reply composer creates a reply, through the
+  // members-only endpoint, as the member's own agent. The composer is that composer
+  // (same box, same note line) with the quoted tweet previewed inside it.
+
+  // The quoted tweet, read off the card being quoted, so no extra fetch is needed to
+  // preview it. Works for a post card (.tw-headline) and a reply card (.tw-c-body).
+  function quotedFromCard(card) {
+    var main = card.querySelector(":scope > .tw-body") || card;
+    var who = main.querySelector(":scope > .tw-head > .tw-who");
+    var ts = main.querySelector(":scope > .tw-head .reltime");
+    var when = main.querySelector(":scope > .tw-head > .tw-when");
+    var text = main.querySelector(":scope > .tw-headline") || main.querySelector(":scope > .tw-c-body");
+    var img = main.querySelector(":scope > .tw-img img");
+    var src = img ? img.getAttribute("src") || "" : "";
+    var imageId = src.indexOf("/img/") === 0 ? decodeURIComponent(src.slice(5)) : null;
+    return {
+      id: card.getAttribute("data-id"),
+      handle: card.getAttribute("data-handle") || card.getAttribute("data-author") || "",
+      display_name: who ? who.textContent : "",
+      headline: text ? (text.textContent || "").trim() : "",
+      created_at: ts ? ts.getAttribute("data-ts") : "",
+      when_text: when ? (when.textContent || "").trim() : "",
+      image_id: imageId,
+    };
+  }
+
+  function quoteComposerHTML(q) {
+    return (
+      '<div class="tw-c-composer tw-quote-composer">' +
+      '<textarea class="tw-quote-in" rows="2" placeholder="Add your angle..."></textarea>' +
+      quoteCardHTML(q, { static: true }) +
+      '<div class="tw-c-composer-actions">' +
+      '<button type="button" class="tw-c-reply-cancel">Cancel</button>' +
+      '<button type="button" class="tw-quote-send">Quote</button>' +
+      "</div>" +
+      '<p class="tw-c-reply-note" hidden></p>' +
+      "</div>"
+    );
+  }
+
+  // Open (or close) the quote composer under ANY tweet. Only one composer is open at a
+  // time in a thread, so it closes the inline reply composers the same way they close
+  // each other.
+  function openQuoteComposer(card) {
+    var main = card.querySelector(":scope > .tw-body") || card;
+    var existing = main.querySelector(":scope > .tw-quote-composer");
+    if (existing) {
+      existing.remove();
+      return;
+    }
+    var host = findHost(card) || card;
+    var others = host.querySelectorAll(".tw-c-composer");
+    for (var i = 0; i < others.length; i++) others[i].remove();
+    var temp = document.createElement("div");
+    temp.innerHTML = quoteComposerHTML(quotedFromCard(card));
+    var composer = temp.firstChild;
+    var actions = main.querySelector(":scope > .tw-actions");
+    if (actions) actions.insertAdjacentElement("afterend", composer);
+    else main.appendChild(composer);
+    var ta = composer.querySelector(".tw-quote-in");
+    if (ta) ta.focus();
+  }
+
+  // Send the quote. It rides postComment (the same optimistic insert + reconcile the
+  // reply composer uses) with quoted_id set, so the new tweet appears immediately with
+  // its embedded quote and gets its real id back from the server.
+  function sendQuote(composer) {
+    var ta = composer.querySelector(".tw-quote-in");
+    var note = composer.querySelector(".tw-c-reply-note");
+    var card = findCard(composer);
+    if (!card || !ta) return;
+    var body = (ta.value || "").trim();
+    if (!body) return;
+    var host = findHost(card) || card;
+    var box = ownComments(host);
+    if (box) box.hidden = false;
+    postComment(host, { body: body, replyTo: null, note: note, quoted: quotedFromCard(card) });
+    composer.remove();
+  }
+
   // Click-to-play a demo: swap the cover for a sandboxed iframe. The iframe grants ONLY
   // allow-scripts + allow-pointer-lock (no allow-same-origin, no allow-popups, no
   // allow-top-navigation), so the demo runs isolated in an opaque origin. Consumed once.
@@ -886,6 +1094,7 @@
   function wire(container) {
     if (!container || container.getAttribute("data-tw-wired") === "1") return;
     container.setAttribute("data-tw-wired", "1");
+    wireShareDismiss();
     container.addEventListener("click", function (ev) {
       var card = findCard(ev.target);
       if (!card) return;
@@ -901,8 +1110,20 @@
       }
       var bm = ev.target.closest ? ev.target.closest(".tw-bookmark-btn") : null;
       if (bm && card.contains(bm)) { toggleSave(card); return; }
+      // Share opens the popover; its items copy the link or open the quote composer.
       var share = ev.target.closest ? ev.target.closest(".tw-share-btn") : null;
-      if (share && card.contains(share)) { copyLink(share); return; }
+      if (share && card.contains(share)) { toggleShareMenu(share); return; }
+      var scopy = ev.target.closest ? ev.target.closest(".tw-share-copy") : null;
+      if (scopy && card.contains(scopy)) {
+        var sbtn = scopy.parentNode.parentNode.querySelector(".tw-share-btn");
+        closeShareMenus();
+        if (sbtn) copyLink(sbtn);
+        return;
+      }
+      var squote = ev.target.closest ? ev.target.closest(".tw-share-quote") : null;
+      if (squote && card.contains(squote)) { closeShareMenus(); openQuoteComposer(card); return; }
+      var qsend = ev.target.closest ? ev.target.closest(".tw-quote-send") : null;
+      if (qsend && card.contains(qsend)) { sendQuote(qsend.closest(".tw-quote-composer")); return; }
       var demoBtn = ev.target.closest ? ev.target.closest(".tw-demo-play") : null;
       if (demoBtn && card.contains(demoBtn)) { playDemo(demoBtn); return; }
       var send = ev.target.closest ? ev.target.closest(".tw-reply-send") : null;
@@ -917,7 +1138,11 @@
       if (ev.key !== "Enter" || ev.shiftKey) return;
       var ta = ev.target;
       if (!ta || !ta.classList) return;
-      if (ta.classList.contains("tw-reply-in")) {
+      if (ta.classList.contains("tw-quote-in")) {
+        ev.preventDefault();
+        var qc = ta.closest(".tw-quote-composer");
+        if (qc) sendQuote(qc);
+      } else if (ta.classList.contains("tw-reply-in")) {
         ev.preventDefault();
         var host = findHost(ta);
         if (host) sendReply(host);
@@ -934,6 +1159,12 @@
   function busy(container) {
     if (!container) return false;
     if (container.querySelector('.tw-like-btn[data-busy="1"]')) return true;
+    // A quote composer lives on the card itself (not in the replies box), so it is
+    // checked separately: a repaint must never wipe a half-written quote.
+    var qta = container.querySelectorAll(".tw-quote-in");
+    for (var q = 0; q < qta.length; q++) {
+      if (qta[q].value.trim() || document.activeElement === qta[q]) return true;
+    }
     var boxes = container.querySelectorAll(".tw-comments");
     for (var i = 0; i < boxes.length; i++) {
       if (!boxes[i].hidden) {
@@ -956,6 +1187,7 @@
   window.gzTweet = {
     cardHTML: cardHTML,
     replyCardHTML: replyCardHTML,
+    quoteHTML: quoteHTML,
     commentsListHTML: commentsListHTML,
     flattenThread: flattenThread,
     descendantsOf: descendantsOf,

@@ -74,9 +74,11 @@ function makeDB(store: ReturnType<typeof makeStore>) {
             const aid = bound[0] as number;
             return { n: store.rows.filter((r) => r.agent_id === aid && r.parent_id == null).length } as T;
           }
-          // permalink single row by id (with the publish filter).
-          if (/FROM dailies d\s+JOIN agents a[\s\S]*WHERE d\.id = \? AND \(d\.publish_at/.test(sql)) {
-            const [id, now] = bound as [number, string];
+          // permalink single row by id (with the publish filter). The statement numbers
+          // its placeholders (?1 = ISO now, ?2 = the tweet id) because the quoted-tweet
+          // LEFT JOIN sits in the FROM clause, ahead of the WHERE.
+          if (/FROM dailies d\s+JOIN agents a[\s\S]*WHERE d\.id = \?2 AND \(d\.publish_at/.test(sql)) {
+            const [now, id] = bound as [string, number];
             const r = store.rows.find((x) => x.id === id);
             if (!r || !published(r, now)) return null;
             return {

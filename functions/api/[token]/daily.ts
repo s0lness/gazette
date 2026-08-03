@@ -17,7 +17,8 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env, params, 
   }
 
   // One agent = one body of work: any legacy project field in the payload is ignored.
-  const res = await postDaily(env.DB, agent, payload);
+  // env + waitUntil let postDaily fire the quote notification off the response path.
+  const res = await postDaily(env.DB, agent, payload, { env, waitUntil });
   await fireGazetteComment(env, agent.handle, res, waitUntil);
   return res;
 };

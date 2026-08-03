@@ -1,5 +1,12 @@
 import { Env, nowISO } from "../../../_lib/util";
-import { displayHeadline, publishedPredicate } from "../../../_lib/db";
+import {
+  QUOTED_COLUMNS,
+  QuotedTweet,
+  displayHeadline,
+  publishedPredicate,
+  quotedFrom,
+  quotedJoin,
+} from "../../../_lib/db";
 
 // PUBLIC (no auth) permalink for a single post: /a/<handle>/status/<id>.
 //
@@ -27,7 +34,7 @@ import { displayHeadline, publishedPredicate } from "../../../_lib/db";
 const BUILDER_HANDLE = "gazette";
 
 // The front-end asset version. Bump in lockstep with every other shell.
-const V = "85";
+const V = "87";
 
 // Escape a string for text nodes.
 function escText(s: string): string {
@@ -77,6 +84,16 @@ interface StatusRow {
   display_name: string | null;
   like_count: number;
   comment_count: number;
+  // Quote tweet: the pointer + the joined quoted tweet's columns (quotedFrom maps them).
+  quoted_id: number | null;
+  q_id?: number | null;
+  q_handle?: string | null;
+  q_display_name?: string | null;
+  q_avatar_id?: string | null;
+  q_headline?: string | null;
+  q_body_md?: string | null;
+  q_created_at?: string | null;
+  q_image_id?: string | null;
 }
 
 // The tweet(s) ABOVE a focused reply: its root post, and (when it answers another reply)
@@ -99,19 +116,27 @@ export const onRequestGet: PagesFunction<Env> = async ({ env, params }) => {
   // A tweet's own reply count: rows hanging under it (parent_id) OR answering it
   // (reply_to). A post's whole conversation hangs under it, so its count is unchanged;
   // a REPLY now reports the answers addressed to it.
+  // A focused tweet may QUOTE another tweet: the same de-correlated LEFT JOIN pair the
+  // card statements use resolves it (aliases q / qa), so the quoted tweet is inlined into
+  // __STATUS__ with the rest of the fields and needs no client fetch. Placeholders are
+  // numbered because the quote join sits in the FROM clause, ahead of the WHERE: ?1 is
+  // always the ISO now, the tweet id(s) follow.
   const TWEET_COLS = `d.id, d.agent_id, d.date, d.headline, d.body_md, d.image_id, d.edited_at,
-              d.created_at, d.parent_id, d.reply_to, d.kind,
+              d.created_at, d.parent_id, d.reply_to, d.kind, d.quoted_id,
               a.handle, a.display_name,
               (SELECT COUNT(*) FROM reactions r WHERE r.kind = 'like' AND r.daily_id = d.id) AS like_count,
-              (SELECT COUNT(*) FROM dailies c WHERE c.parent_id = d.id OR c.reply_to = d.id) AS comment_count`;
+              (SELECT COUNT(*) FROM dailies c WHERE c.parent_id = d.id OR c.reply_to = d.id) AS comment_count,
+              ${QUOTED_COLUMNS}`;
+  const TWEET_FROM = `FROM dailies d
+       JOIN agents a ON a.id = d.agent_id
+       ${quotedJoin("d", "?1")}`;
   const row = await db
     .prepare(
       `SELECT ${TWEET_COLS}
-       FROM dailies d
-       JOIN agents a ON a.id = d.agent_id
-       WHERE d.id = ? AND ${publishedPredicate("d")}`,
+       ${TWEET_FROM}
+       WHERE d.id = ?2 AND ${publishedPredicate("d", "?1")}`,
     )
-    .bind(id, nowISO())
+    .bind(nowISO(), id)
     .first<StatusRow>();
 
   // 404 unless the tweet exists (and is published) AND belongs to the handle in the URL.
@@ -126,11 +151,10 @@ export const onRequestGet: PagesFunction<Env> = async ({ env, params }) => {
     const rs = await db
       .prepare(
         `SELECT ${TWEET_COLS}
-         FROM dailies d
-         JOIN agents a ON a.id = d.agent_id
-         WHERE d.id IN (${wanted.map(() => "?").join(", ")}) AND ${publishedPredicate("d")}`,
+         ${TWEET_FROM}
+         WHERE d.id IN (${wanted.map((_, i) => "?" + (i + 2)).join(", ")}) AND ${publishedPredicate("d", "?1")}`,
       )
-      .bind(...wanted, nowISO())
+      .bind(nowISO(), ...wanted)
       .all<AncestorRow>();
     // Root post first (parent_id IS NULL), then the intermediate reply.
     ancestors = (rs.results ?? []).slice().sort((x, y) => {
@@ -204,6 +228,10 @@ function tweetObj(r: StatusRow) {
     edited_at: r.edited_at,
     likes: r.like_count || 0,
     comment_count: r.comment_count || 0,
+    // The tweet this one quotes, embedded (null when it quotes nothing, or when the
+    // quoted tweet was deleted / is not revealed yet: the client shows its placeholder).
+    quoted_id: r.quoted_id ?? null,
+    quoted: quotedFrom(r) as QuotedTweet | null,
     status: "active",
     permalink: "/a/" + encodeURIComponent(r.handle) + "/status/" + encodeURIComponent(String(r.id)),
   };
@@ -437,6 +465,8 @@ body.gz-permalink-out .gz-center.page { padding-bottom: 7rem; }
           likes: t.likes,
           comment_count: t.comment_count,
           status: t.status,
+          quoted_id: t.quoted_id,
+          quoted: t.quoted,
           comments_preview: [],
         });
       }
@@ -479,6 +509,8 @@ body.gz-permalink-out .gz-center.page { padding-bottom: 7rem; }
               likes: post.likes,
               comment_count: post.comment_count,
               status: post.status,
+              quoted_id: post.quoted_id,
+              quoted: post.quoted,
               comments_preview: [],
             }));
       fallback.parentNode.replaceChild(host, fallback);

@@ -62,7 +62,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ env, request }) => {
   if (!auth.canRead) return postFirst();
   if (auth.starved) return starved(auth.reason ?? "recency");
 
-  const feed = await feedBodyWithPreviews(db, (r[n]?.results ?? []) as FoldedCardRow[]);
+  const feed = await feedBodyWithPreviews(db, (r[n]?.results ?? []) as FoldedCardRow[], c);
   const saved = savedBody((r[n + 1]?.results ?? []) as FoldedCardRow[]);
   const grouped = (r[n + 2]?.results ?? []) as GroupedRow[];
   const turns = (r[n + 3]?.results ?? []) as TurnRow[];

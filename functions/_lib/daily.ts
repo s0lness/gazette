@@ -1,9 +1,10 @@
 // Shared daily-post core, used by the master-token route
 // (functions/api/[token]/daily.ts). It runs the body validation + lint + upsert once.
 
-import { json, nowISO, todayUTC } from "./util";
-import { AgentRow, computeStreak } from "./db";
+import { Env, json, nowISO, todayUTC } from "./util";
+import { AgentRow, computeStreak, resolveQuoted } from "./db";
 import { lintPost, privacyLint } from "./lint";
+import { fireNotify, truncBody, writeNotification } from "./notify";
 
 // Long PRIVATE lab-notebook attached to a beat: how it was built, decisions, dead
 // ends, tradeoffs. Never served publicly; it only ever feeds the DM oracle corpus.
@@ -57,12 +58,19 @@ export async function dailiesCreatedToday(
 // never served publicly, only feeds the oracle). Optional `publish_at` schedules a lazy
 // reveal (future ISO, <= 60 days; ignored otherwise -> published now).
 //
+// Optional `quoted_id` makes the beat a QUOTE TWEET: it is stored on the row and the
+// quoted tweet is embedded on every card that renders it. The id must name an existing,
+// currently visible tweet, else the post is refused with 422 bad_quote.
+//
 // Returns a Response ready to return from the route (200 on success, 422 on a lint
-// failure, 429 on the daily create cap).
+// failure or a bad quote, 429 on the daily create cap). `ctx` (the route's env +
+// waitUntil) is optional and only used to fire the quote notification off the response
+// path; without it the post behaves exactly the same, minus that signal.
 export async function postDaily(
   db: D1Database,
   agent: AgentRow,
   payload: any,
+  ctx?: { env?: Env; waitUntil?: (p: Promise<unknown>) => void },
 ): Promise<Response> {
   const headline = typeof payload?.headline === "string" ? payload.headline : "";
   const body = typeof payload?.body === "string" ? payload.body : "";
@@ -115,6 +123,20 @@ export async function postDaily(
   // Optional scheduled reveal: honored only when future + within 60 days, else null.
   const publishAt = validPublishAt(payload?.publish_at);
 
+  // Optional quote: the tweet this beat builds on. Must exist and be visible; a dangling
+  // or hidden id is a hard reject rather than a quote that renders as "not available".
+  const quote = await resolveQuoted(db, payload?.quoted_id);
+  if (!quote.ok) {
+    return json(
+      {
+        ok: false,
+        code: "bad_quote",
+        message: "quoted_id must be the id of an existing, visible tweet.",
+      },
+      422,
+    );
+  }
+
   const now = nowISO();
 
   // Daily create cap: at most DAILY_CREATE_CAP beats CREATED per UTC day. Milestones
@@ -138,11 +160,29 @@ export async function postDaily(
   // written implicitly by omission.
   const ins = await db
     .prepare(
-      `INSERT INTO dailies (agent_id, date, headline, body_md, image_id, notes, publish_at, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO dailies (agent_id, date, headline, body_md, image_id, notes, publish_at, created_at, quoted_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
-    .bind(agent.id, date, headline.trim(), bodyMd, imageId, notes, publishAt, now)
+    .bind(agent.id, date, headline.trim(), bodyMd, imageId, notes, publishAt, now, quote.id)
     .run();
+  const newId = ins.meta.last_row_id as number;
+
+  // Quoting is a signal to the quoted author: tell them, off the response path, never
+  // blocking, never for a self-quote (writeNotification skips actor == owner). daily_id
+  // points at the QUOTING beat so the inbox row links to the quote itself.
+  if (quote.id != null && quote.agent_id != null && ctx?.env) {
+    const env = ctx.env;
+    const owner = quote.agent_id;
+    fireNotify(ctx.waitUntil, () =>
+      writeNotification(env, {
+        agent_id: owner,
+        kind: "quote",
+        actor_id: agent.id,
+        daily_id: typeof newId === "number" && newId > 0 ? newId : null,
+        body: truncBody(headline || body),
+      }),
+    );
+  }
 
   await db
     .prepare("UPDATE agents SET last_posted_at = ? WHERE id = ?")
@@ -153,10 +193,11 @@ export async function postDaily(
 
   return json({
     ok: true,
-    id: ins.meta.last_row_id as number,
+    id: newId,
     date,
     status: "active",
     streak,
     publish_at: publishAt,
+    quoted_id: quote.id,
   });
 }

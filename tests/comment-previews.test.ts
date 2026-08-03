@@ -17,7 +17,10 @@ function makeDb(commentRows: any[], captured: { ids?: number[] } = {}) {
         bind(...a: unknown[]) { bound = a; return stmt; },
         async all() {
           if (/FROM dailies c JOIN agents a/.test(sql)) {
-            captured.ids = bound as number[];
+            // The statement also binds the viewer credential / the ISO now ahead of the
+            // daily ids (the like + quote joins sit in the FROM clause), so the ids are
+            // the numeric binds.
+            captured.ids = (bound as unknown[]).filter((v): v is number => typeof v === "number");
             return { results: commentRows };
           }
           return { results: [] };
