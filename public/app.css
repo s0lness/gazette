@@ -1832,23 +1832,36 @@ audio.status-media { width: 100%; }
 .ma-section { margin: 1.6rem 0 2rem; }
 .ma-h2 { font-size: 1.05rem; font-weight: 700; letter-spacing: -0.01em; margin: 0 0 0.8rem; color: var(--ink); }
 .ma-lead { margin: -0.4rem 0 1rem; font-size: 0.9rem; }
+/* The one line pointing at the profile, where editing now lives. */
+.ma-profile-link a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+.ma-profile-link a:hover { color: var(--accent-h); }
 .ma-empty { margin: 0.5rem 0; }
 
 /* ---- Profile editor (the human edits its own agent's profile) -------------
-   One card holding every editable profile field: avatar (saves on pick, via the
-   image + avatar endpoints), display name, description with a live counter, the
-   two project links, and the pinned-post chooser. Everything but the avatar saves
-   in ONE partial POST to the profile endpoint. */
-.ma-edit {
-  border: 1px solid var(--line); border-radius: var(--radius);
-  background: var(--surface); padding: 1.1rem 1.15rem 1.2rem; margin: 1.2rem 0 1.8rem;
-}
-.ma-edit .ma-h2 { margin-bottom: 0.35rem; }
-.ma-edit .ma-lead { margin: 0 0 1.1rem; }
+   Twitter's shape: an "Edit profile" button in the Follow slot of your OWN profile
+   opens this as a modal (reusing .wall-modal / -sheet / -backdrop / -x / -title).
+   It holds every editable profile field: avatar (saves on pick, via the image +
+   avatar endpoints), display name, description with a live counter, the two project
+   links, and the pinned-post chooser. Everything but the avatar saves in ONE partial
+   POST to the profile endpoint. */
 
-.pe-skel { display: flex; gap: 0.9rem; align-items: center; }
-.pe-skel-avatar { width: 72px; height: 72px; }
-.pe-skel .gz-skel-body { flex: 1 1 auto; min-width: 0; }
+/* The button itself: same pill geometry as .follow-btn, quiet outline (Follow is the
+   accent action, and it only ever shows on someone ELSE's profile). */
+.follow-btn.pe-edit-btn {
+  background: transparent; color: var(--ink); border-color: var(--line);
+}
+.follow-btn.pe-edit-btn:hover { border-color: var(--ink); opacity: 1; }
+
+/* The sheet: wider than the login modal (the link fields sit side by side) and
+   scrollable when the form is taller than the viewport. --gz-bnav-h is only set on
+   phones, so the fallback keeps desktop at the plain 1rem inset. */
+.pe-modal { padding-bottom: calc(1rem + var(--gz-bnav-h, 0px)); }
+.pe-sheet {
+  width: min(34rem, 100%);
+  max-height: calc(100dvh - 2rem - var(--gz-bnav-h, 0px));
+  overflow-y: auto; overscroll-behavior: contain;
+}
+.pe-token-note { margin-bottom: 1rem; }
 
 .pe-avatar-row { display: flex; gap: 1rem; align-items: center; margin-bottom: 1.2rem; }
 .pe-avatar-row .tw-avatar.pe-avatar { width: 84px; height: 84px; flex: 0 0 auto; }
@@ -1863,23 +1876,30 @@ audio.status-media { width: 100%; }
 }
 .pe-count { margin-left: auto; font-variant-numeric: tabular-nums; letter-spacing: 0; text-transform: none; font-weight: 600; }
 .pe-count.over { color: var(--accent); }
-.pe-input, .pe-textarea, .pe-select {
+.pe-input, .pe-textarea {
   width: 100%; box-sizing: border-box; min-height: 44px;
 }
 .pe-textarea { min-height: 5.5rem; resize: vertical; line-height: 1.5; }
 .pe-hint { margin: 0; color: var(--ink-3); font-size: 0.8rem; line-height: 1.5; }
 .pe-err { margin: 0; color: var(--accent); font-size: 0.82rem; line-height: 1.45; }
-.pe-field.bad .pe-input, .pe-field.bad .pe-textarea, .pe-field.bad .pe-select {
+.pe-field.bad .pe-input, .pe-field.bad .pe-textarea {
   border-color: var(--accent);
 }
 .pe-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 1rem; }
+/* Save leads (it is the point of the dialog), Cancel sits quietly to its right. */
 .pe-actions { display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; margin-top: 0.2rem; }
+.pe-actions .pe-save { order: 1; }
+.pe-actions .pe-cancel { order: 2; }
+.pe-actions .pe-status { order: 3; }
 .pe-status { font-size: 0.85rem; }
 @media (max-width: 700px) {
   .pe-grid { grid-template-columns: 1fr; }
   .pe-avatar-row { gap: 0.85rem; }
   .pe-avatar-row .tw-avatar.pe-avatar { width: 68px; height: 68px; }
-  .pe-save, .pe-photo { min-height: 44px; }
+  .pe-save, .pe-photo, .pe-cancel { min-height: 44px; }
+  /* Full-width sheet on a phone, with room for the fixed bottom nav. */
+  .pe-modal { padding: 0.75rem; padding-bottom: calc(0.75rem + var(--gz-bnav-h, 0px)); }
+  .pe-sheet { width: 100%; padding: 1.25rem 1.1rem 1.35rem; }
 }
 
 .ma-list { display: flex; flex-direction: column; gap: 0.9rem; }

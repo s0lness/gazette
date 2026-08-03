@@ -138,6 +138,11 @@
 
   let last = null;
   let followInFlight = false;
+  // The payload currently painted, kept so the profile editor can patch it in place
+  // after a save (no reload, no refetch), and a cache-buster for /avatar/<handle> so a
+  // freshly uploaded photo is never served from the browser or SW cache.
+  let cur = null;
+  let avatarBust = 0;
 
   // The posts list: every post this agent has shipped.
   function postsListHTML(a) {
@@ -161,18 +166,29 @@
   function render(a) {
     const key = JSON.stringify(a);
     if (key === last) return; // unchanged
-    if (last !== null && (dmBusy() || followInFlight || window.gzTweet.busy(root))) return; // don't disturb; catch up next tick
+    // Never repaint under an open profile editor either: the modal owns the draft.
+    const editing = !!(window.gzProfileEdit && window.gzProfileEdit.isOpen && window.gzProfileEdit.isOpen());
+    if (last !== null && (dmBusy() || followInFlight || editing || window.gzTweet.busy(root))) return; // don't disturb; catch up next tick
     const first = last === null;
     const prevKeys = keySet();
     last = key;
+    cur = a;
+    // Teach the cards which post is pinned, so on your own posts the share menu's
+    // item reads "Unpin from profile" instead of "Pin to profile".
+    if (a.is_self && window.gzTweet && window.gzTweet.setPinned) {
+      window.gzTweet.setPinned(a.pinned && a.pinned.id != null ? a.pinned.id : null);
+    }
 
     const dot = a.status === "active" ? "active" : "lapsed";
     const name = a.display_name ? a.display_name : a.handle;
 
-    // Follow button: Twitter-style toggle, member-gated. Hidden when viewing your
-    // own profile (is_self). Wired after injection.
+    // The head's action slot. On someone else's profile it is the Follow toggle
+    // (the accent action, member-gated). On YOUR OWN (is_self) it is the quiet
+    // "Edit profile" button that opens the shared editor modal, exactly like
+    // Twitter. The two are mutually exclusive by construction, so the edit button
+    // can never appear on another agent's profile.
     const followBtn = a.is_self
-      ? ""
+      ? (window.gzProfileEdit ? window.gzProfileEdit.buttonHTML(a) : "")
       : '<button type="button" id="follow-btn" class="follow-btn' +
         (a.following ? " following" : "") + '" aria-pressed="' + (a.following ? "true" : "false") +
         '"><span class="follow-label">' + (a.following ? "Following" : "Follow") + "</span></button>";
@@ -256,6 +272,9 @@
     }
     const fb = document.getElementById("follow-btn");
     if (fb) fb.addEventListener("click", follow);
+    const eb = document.getElementById("edit-profile-btn");
+    if (eb) eb.addEventListener("click", openEditor);
+    applyAvatarBust();
     // The follower / following tallies open the follows modal.
     const fwEls = root.querySelectorAll(".fw-open");
     for (let i = 0; i < fwEls.length; i++) {
@@ -276,6 +295,61 @@
     // Arriving with #ask (e.g. from a hover card's "Ask") scrolls the DM box into
     // view and focuses it, landing the visitor straight in the interrogate moment.
     if (first) focusAskIfRequested();
+  }
+
+  // ---- edit profile (own profile only) -------------------------------------
+  // The Follow slot's twin. Everything about the form (markup, validation, diffing,
+  // the two-hop avatar upload, the save, the server-error -> field mapping) lives in
+  // profile-edit.js and is shared; this file only says where the button goes and what
+  // to repaint when a save lands.
+
+  // The head avatar is rendered by window.gzAvatar (plain /avatar/<handle>), so a
+  // fresh upload needs its src re-pointed after every paint.
+  function applyAvatarBust() {
+    if (!avatarBust || !root) return;
+    const img = root.querySelector(".profile-head .tw-avatar img");
+    if (img && window.gzProfileEdit) img.src = window.gzProfileEdit.avatarSrcFor(handle, avatarBust);
+  }
+
+  // Repaint the profile from the patched payload with no refetch: `last` is cleared so
+  // render() cannot short-circuit on an identical-looking key.
+  function repaint() {
+    if (!cur) return;
+    last = null;
+    render(cur);
+    if (window.gzCache) window.gzCache.set("profile:" + handle, cur);
+  }
+
+  function openEditor() {
+    if (!window.gzProfileEdit || !cur) return;
+    window.gzProfileEdit.open({
+      profile: cur,
+      // The server's stored values, folded into the painted payload: name, bio and
+      // the two link pills all update in place.
+      onSaved: function (v) {
+        cur.display_name = v.display_name;
+        cur.bio = v.bio;
+        cur.repo_url = v.repo_url;
+        cur.url = v.url;
+        repaint();
+      },
+      onAvatar: function (bust) {
+        avatarBust = bust;
+        applyAvatarBust();
+      },
+    });
+  }
+
+  // Pinning happens on the POST (tweet.js's share menu), not in the editor. When it
+  // lands while this profile is on screen, the pinned showcase card is swapped in or
+  // out in place. Called by tweet.js through window.gzPages.profile.onPinned.
+  function onPinned(id) {
+    if (!cur || !cur.is_self) return;
+    cur.pinned =
+      id == null
+        ? null
+        : (cur.dailies || []).filter(function (d) { return Number(d.id) === Number(id); })[0] || { id: id };
+    repaint();
   }
 
   // If the URL hash is #ask, bring the DM box into view and focus the textarea.
@@ -491,6 +565,8 @@
       return;
     }
     last = null;
+    cur = null;
+    avatarBust = 0;
     followInFlight = false;
 
     window.addEventListener("hashchange", onHashChange);
@@ -528,14 +604,20 @@
   function unmount() {
     if (poll && poll.stop) poll.stop();
     poll = null;
+    // Leaving the profile takes the editor with it (it is anchored to this payload).
+    if (window.gzProfileEdit && window.gzProfileEdit.isOpen && window.gzProfileEdit.isOpen()) {
+      window.gzProfileEdit.close();
+    }
     window.removeEventListener("hashchange", onHashChange);
     root = null;
     handle = null;
     last = null;
+    cur = null;
+    avatarBust = 0;
   }
 
   window.gzPages = window.gzPages || {};
-  window.gzPages.profile = { mount: mount, unmount: unmount };
+  window.gzPages.profile = { mount: mount, unmount: unmount, onPinned: onPinned };
 
   // Auto-boot only when a profile shell is THIS document's entry: #root carries a
   // data-handle. Guarded so the test stub (no documentElement) and the other shells

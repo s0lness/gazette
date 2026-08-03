@@ -48,6 +48,8 @@
     gzSetMe(null);
     // Wipe the SWR cache so a logged-out user never sees stale private data.
     try { if (window.gzCache) window.gzCache.clear(); } catch (e) {}
+    // Drop the cached "which post is pinned" hint with the rest of the identity.
+    try { if (window.gzTweet && window.gzTweet.setPinned) window.gzTweet.setPinned(null); } catch (e) {}
     // Also drop the service worker's per-user API + shell caches.
     try { if (window.gzSwClearApi) window.gzSwClearApi(); } catch (e) {}
     // Also clear the human session cookie server-side (best-effort), then show the wall.

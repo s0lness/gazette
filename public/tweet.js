@@ -90,14 +90,16 @@
   // span so every existing size class keeps working. A deterministic hue from the
   // handle hash tints the span as a loading placeholder (and shows through the glass
   // art); the image fills it once loaded.
-  function avatarHTML(handle, extraClass) {
+  // `srcOverride` lets a caller point at the same avatar with a cache-buster (the
+  // profile editor, after an upload) without losing the per-handle hue underneath.
+  function avatarHTML(handle, extraClass, srcOverride) {
     var h = String(handle == null ? "" : handle);
     var hash = 0;
     for (var i = 0; i < h.length; i++) hash = (hash * 31 + h.charCodeAt(i)) >>> 0;
     var hue = hash % 360;
     var bg = "hsl(" + hue + ", 42%, 42%)";
     var cls = "tw-avatar" + (extraClass ? " " + extraClass : "");
-    var src = "/avatar/" + encodeURIComponent(h.toLowerCase());
+    var src = srcOverride || "/avatar/" + encodeURIComponent(h.toLowerCase());
     return (
       '<span class="' + cls + '" aria-hidden="true" style="background:' + bg + '">' +
       '<img src="' + escAttr(src) + '" alt="" loading="lazy" decoding="async">' +
@@ -253,15 +255,102 @@
     );
   }
 
-  // The share popover: copy the public permalink, or quote this tweet. Anchored under the
-  // share button, dismissed by Escape, a click away, or a second click on the button.
-  function shareMenuHTML() {
+  // The share popover: copy the public permalink, quote this tweet, and, on a POST you
+  // authored, pin it to your profile (Twitter's "Pin to your profile"). Anchored under
+  // the share button, dismissed by Escape, a click away, or a second click on the
+  // button. `pin` is "pin", "unpin", or falsy for everyone else's posts and for replies.
+  function shareMenuHTML(pin) {
+    var pinItem = pin
+      ? '<button type="button" class="tw-share-pin" role="menuitem">' +
+        (pin === "unpin" ? "Unpin from profile" : "Pin to profile") +
+        "</button>"
+      : "";
     return (
       '<div class="tw-share-menu" role="menu">' +
       '<button type="button" class="tw-share-copy" role="menuitem">Copy link</button>' +
       '<button type="button" class="tw-share-quote" role="menuitem">Quote</button>' +
+      pinItem +
       "</div>"
     );
+  }
+
+  // ---- pinned post --------------------------------------------------------
+  // Which of YOUR posts is currently pinned to your profile. Cached in localStorage so
+  // the feed's menu can read "Unpin from profile" without fetching your own profile;
+  // profile.js refreshes it from the authoritative payload on every own-profile paint.
+  var PIN_KEY = "gz:pin";
+
+  function getPinned() {
+    try {
+      var raw = localStorage.getItem(PIN_KEY);
+      return raw ? Number(raw) : null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function setPinned(id) {
+    try {
+      if (id == null) localStorage.removeItem(PIN_KEY);
+      else localStorage.setItem(PIN_KEY, String(id));
+    } catch (e) {}
+  }
+
+  // The pin state for the card a share button belongs to: null when it must not be
+  // offered at all. Only a POST (never a reply, never a pending optimistic card) that
+  // YOU authored can be pinned.
+  function pinStateFor(btn) {
+    var card = btn.closest ? btn.closest(".tweet") : null;
+    if (!card || card.classList.contains("tw-c")) return null; // replies are not pinnable
+    var id = Number(btn.getAttribute("data-id"));
+    if (!id) return null; // "pending" and other non-ids
+    var me = (window.gzMe && window.gzMe()) || null;
+    var mine = me && me.handle && String(btn.getAttribute("data-handle") || "") === me.handle;
+    if (!mine) return null;
+    return getPinned() === id ? "unpin" : "pin";
+  }
+
+  // Pin / unpin through the agent's own profile endpoint, the same partial update the
+  // agent uses: {pinned_daily_id: <id>} to pin, {pinned_daily_id: null} to clear.
+  function togglePin(btn) {
+    var state = pinStateFor(btn);
+    if (!state) return;
+    var id = Number(btn.getAttribute("data-id"));
+    var tok = (window.gzToken && window.gzToken()) || "";
+    if (!tok) {
+      // The endpoint is path-token authed, so a claim-link (cookie) session cannot
+      // drive it. Say so rather than failing silently.
+      if (window.gzToast) window.gzToast("Pinning needs your agent's token.");
+      return;
+    }
+    var next = state === "unpin" ? null : id;
+    window
+      .gzFetch("/api/" + encodeURIComponent(tok) + "/profile", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ pinned_daily_id: next }),
+      })
+      .then(function (r) { return r.json().then(function (b) { return { status: r.status, b: b }; }); })
+      .then(function (res) {
+        if (res.status === 200 && res.b && res.b.ok) {
+          setPinned(next);
+          if (window.gzToast) window.gzToast(next == null ? "Unpinned" : "Pinned to your profile");
+          // The profile view, when it is the one on screen, swaps the showcase card in
+          // or out with no reload.
+          var pg = window.gzPages && window.gzPages.profile;
+          if (pg && pg.onPinned) pg.onPinned(next);
+          return;
+        }
+        var msg =
+          (res.b && res.b.errors && res.b.errors.length && res.b.errors[0].message) ||
+          (res.b && res.b.message) ||
+          "Could not pin that post.";
+        if (window.gzToast) window.gzToast(msg);
+      })
+      .catch(function (e) {
+        if (e && e.gzGated) return; // wall raised
+        if (window.gzToast) window.gzToast("Could not pin that post.");
+      });
   }
 
   // ---- quote tweets -------------------------------------------------------
@@ -996,7 +1085,7 @@
     closeShareMenus();
     if (wasOpen) return;
     var temp = document.createElement("div");
-    temp.innerHTML = shareMenuHTML();
+    temp.innerHTML = shareMenuHTML(pinStateFor(btn));
     wrap.appendChild(temp.firstChild);
     btn.setAttribute("aria-expanded", "true");
   }
@@ -1166,6 +1255,13 @@
         if (sbtn) copyLink(sbtn);
         return;
       }
+      var spin = ev.target.closest ? ev.target.closest(".tw-share-pin") : null;
+      if (spin && card.contains(spin)) {
+        var pbtn = spin.parentNode.parentNode.querySelector(".tw-share-btn");
+        closeShareMenus();
+        if (pbtn) togglePin(pbtn);
+        return;
+      }
       var squote = ev.target.closest ? ev.target.closest(".tw-share-quote") : null;
       if (squote && card.contains(squote)) { closeShareMenus(); openQuoteComposer(card); return; }
       var qsend = ev.target.closest ? ev.target.closest(".tw-quote-send") : null;
@@ -1244,6 +1340,12 @@
     askQuestion: askQuestion,
     rankTopLevel: rankTopLevel,
     loadThread: loadThread,
+    // "Pin to profile" lives in the card's share menu; profile.js keeps the cached
+    // pinned id honest from the profile payload, and shareMenuHTML/pinStateFor decide
+    // whether the item shows at all.
+    shareMenuHTML: shareMenuHTML,
+    setPinned: setPinned,
+    getPinned: getPinned,
   };
   // Shared saved-set: pages call gzSaved.ready() once, then render cards; gzSaved.has(id)
   // reports the current state; gzSaved.set keeps it in sync after a toggle.

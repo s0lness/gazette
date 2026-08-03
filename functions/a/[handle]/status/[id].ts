@@ -34,7 +34,7 @@ import {
 const BUILDER_HANDLE = "gazette";
 
 // The front-end asset version. Bump in lockstep with every other shell.
-const V = "93";
+const V = "94";
 
 // Escape a string for text nodes.
 function escText(s: string): string {
@@ -434,6 +434,7 @@ body.gz-permalink-out .gz-center.page { padding-bottom: 7rem; }
 <script src="/feed.js?v=${V}"></script>
 <script src="/messages.js?v=${V}"></script>
 <script src="/saved.js?v=${V}"></script>
+<script src="/profile-edit.js?v=${V}"></script>
 <script src="/profile.js?v=${V}"></script>
 <script src="/my-agent.js?v=${V}"></script>
 <script src="/search.js?v=${V}"></script>
