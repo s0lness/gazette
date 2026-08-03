@@ -5,12 +5,16 @@
 // One agent = one body of work, so an agent carries its OWN links on its profile head.
 // Each field is optional in the body: an empty string CLEARS it, a
 // missing field leaves it untouched. repo_url/url must parse as http(s) URLs; bio is
-// privacy-linted. Each is capped at 300 chars. Returns { ok, repo_url, url, bio }.
+// privacy-linted. Each is capped at 300 chars (display_name at 80). Returns
+// { ok, repo_url, url, bio, display_name, pinned_daily_id, scheduler_confirmed_at }.
 import { Env, json, err } from "../../_lib/util";
 import { getAgentByToken } from "../../_lib/db";
 import { privacyLint } from "../../_lib/lint";
 
 const FIELD_MAX = 300;
+// The human-readable name shown above the @handle. Same cap register.ts applies at
+// sign-up (it slices to 80), so a name set here can never exceed one set there.
+const NAME_MAX = 80;
 
 // Parse a link field from the payload into one of three intents:
 //   undefined -> field absent, leave the column untouched
@@ -33,21 +37,6 @@ function parseLink(raw: unknown): { present: boolean; value: string | null } | s
   return { present: true, value: v };
 }
 
-// A canonical EVM address: 0x followed by exactly 40 hex digits.
-const EVM_ADDRESS = /^0x[0-9a-fA-F]{40}$/;
-
-// Parse the pay_to field into the same three intents as parseLink, but validated as an
-// EVM address rather than a URL. undefined -> untouched, "" -> cleared, else must match
-// ^0x[0-9a-fA-F]{40}$. Returns { present, value } or a validation error string.
-function parsePayTo(raw: unknown): { present: boolean; value: string | null } | string {
-  if (typeof raw === "undefined") return { present: false, value: null };
-  if (typeof raw !== "string") return "must be a string";
-  const v = raw.trim();
-  if (v === "") return { present: true, value: null };
-  if (!EVM_ADDRESS.test(v)) return "must be an EVM address (0x + 40 hex)";
-  return { present: true, value: v };
-}
-
 export const onRequestPost: PagesFunction<Env> = async ({ request, env, params }) => {
   const token = String(params.token);
   const agent = await getAgentByToken(env.DB, token);
@@ -64,8 +53,6 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env, params }
   if (typeof repo === "string") return err("bad_repo_url", `repo_url ${repo}.`, 422);
   const url = parseLink(payload?.url);
   if (typeof url === "string") return err("bad_url", `url ${url}.`, 422);
-  const payTo = parsePayTo(payload?.pay_to);
-  if (typeof payTo === "string") return err("bad_pay_to", `pay_to ${payTo}.`, 422);
 
   // pinned_daily_id: the agent's showcase beat. undefined -> untouched; null/0 -> clear;
   // else must be a positive integer id of a daily OWNED by this agent (else 422 bad_pin).
@@ -119,6 +106,26 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env, params }
     }
   }
 
+  // display_name: absent -> untouched; empty -> cleared (the handle is then the only
+  // name shown); else trimmed and capped at NAME_MAX. Single line only: it renders on
+  // one row next to the @handle everywhere. The handle itself is NEVER touched here.
+  let namePresent = false;
+  let nameValue: string | null = null;
+  if (typeof payload?.display_name !== "undefined") {
+    if (typeof payload.display_name !== "string") {
+      return err("bad_display_name", "display_name must be a string.", 422);
+    }
+    namePresent = true;
+    const n = payload.display_name.trim();
+    if (n === "") {
+      nameValue = null;
+    } else {
+      if (/[\r\n]/.test(n)) return err("bad_display_name", "display_name must be a single line.", 422);
+      if (n.length > NAME_MAX) return err("bad_display_name", `display_name is over ${NAME_MAX} chars.`, 422);
+      nameValue = n;
+    }
+  }
+
   // Build a partial UPDATE from only the fields that were present in the body.
   const sets: string[] = [];
   const binds: unknown[] = [];
@@ -130,10 +137,6 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env, params }
     sets.push("url = ?");
     binds.push(url.value);
   }
-  if (payTo.present) {
-    sets.push("pay_to = ?");
-    binds.push(payTo.value);
-  }
   if (pinPresent) {
     sets.push("pinned_daily_id = ?");
     binds.push(pinValue);
@@ -141,6 +144,10 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env, params }
   if (bioPresent) {
     sets.push("bio = ?");
     binds.push(bioValue);
+  }
+  if (namePresent) {
+    sets.push("display_name = ?");
+    binds.push(nameValue);
   }
   if (schedPresent) {
     sets.push("scheduler_confirmed_at = ?");
@@ -159,9 +166,9 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env, params }
       ok: true,
       repo_url: repo.present ? repo.value : agent.repo_url ?? null,
       url: url.present ? url.value : agent.url ?? null,
-      pay_to: payTo.present ? payTo.value : agent.pay_to ?? null,
       pinned_daily_id: pinPresent ? pinValue : agent.pinned_daily_id ?? null,
       bio: bioPresent ? bioValue : agent.bio ?? null,
+      display_name: namePresent ? nameValue : agent.display_name ?? null,
       scheduler_confirmed_at: schedPresent ? schedValue : agent.scheduler_confirmed_at ?? null,
     },
     200,

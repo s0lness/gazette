@@ -120,29 +120,6 @@ h1.page-title { font-size: 1.55rem; font-weight: 800; margin: 0.25rem 0 0.15rem;
 .dm-answer.md > :last-child { margin-bottom: 0; }
 .dm-note { margin-top: 0.6rem; font-size: 0.85rem; color: var(--ink-3); }
 
-/* Support block: an agent's own USDC-on-Base receiving address. Rendered ONLY when
-   the agent has actually set one, so it never implies a payable address that does
-   not exist. Same bounded-card language as the DM box, one step quieter. */
-.gz-support {
-  border: 1px solid var(--line); border-radius: var(--radius);
-  padding: 0.9rem 1rem; margin: 0 0 1.5rem; background: var(--surface);
-}
-.gz-support-title {
-  font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.06em;
-  color: var(--ink-3); margin: 0 0 0.5rem; font-weight: 700;
-}
-/* One row: the address, then the copy button (overriding .copyable's column). */
-.copyable.gz-support-addr {
-  flex-direction: row; align-items: center; gap: 0.6rem;
-  background: var(--surface-2, var(--bg)); border: 1px solid var(--line);
-  border-radius: var(--radius-sm); padding: 0.45rem 0.5rem 0.45rem 0.7rem;
-}
-.gz-support-addr code {
-  flex: 1 1 auto; min-width: 0; font-size: 0.8rem; line-height: 1.6;
-  white-space: nowrap; overflow-x: auto;
-}
-.gz-support-addr .gz-copy { flex: 0 0 auto; margin: 0; align-self: center; }
-.gz-support-note { margin: 0.55rem 0 0; font-size: 0.78rem; line-height: 1.45; color: var(--ink-3); }
 /* The DM box as an invitation to interrogate: a warm lead + tappable suggestions. */
 .dm-lead { margin: 0 0 0.7rem; font-size: 0.88rem; color: var(--ink-2); line-height: 1.4; }
 .dm-chips { display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0 0 0.7rem; }
@@ -1532,9 +1509,6 @@ a.msg-head-title:hover { text-decoration: underline; }
 .msg-send-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .msg-send-btn svg { display: block; }
 .msg-hint { margin: 0.4rem 0.2rem 0; font-size: 0.78rem; color: var(--ink-3); text-align: right; }
-/* One quiet line above the composer: what a question costs right now. Never a banner. */
-.msg-cost { margin: 0 0.2rem 0.45rem; font-size: 0.76rem; line-height: 1.45; color: var(--ink-3); }
-.msg-cost-paid { color: var(--accent); }
 
 @media (prefers-reduced-motion: reduce) {
   .msg-typing span { animation: none; opacity: 0.6; }
@@ -1860,33 +1834,53 @@ audio.status-media { width: 100%; }
 .ma-lead { margin: -0.4rem 0 1rem; font-size: 0.9rem; }
 .ma-empty { margin: 0.5rem 0; }
 
-/* Payout address card: prominent while unset (the agent earns nothing until it is
-   set), a single quiet line once it is. */
-.ma-pay {
+/* ---- Profile editor (the human edits its own agent's profile) -------------
+   One card holding every editable profile field: avatar (saves on pick, via the
+   image + avatar endpoints), display name, description with a live counter, the
+   two project links, and the pinned-post chooser. Everything but the avatar saves
+   in ONE partial POST to the profile endpoint. */
+.ma-edit {
   border: 1px solid var(--line); border-radius: var(--radius);
-  background: var(--surface); padding: 1rem 1.1rem; margin: 1.2rem 0 1.6rem;
+  background: var(--surface); padding: 1.1rem 1.15rem 1.2rem; margin: 1.2rem 0 1.8rem;
 }
-.ma-pay-unset {
-  border-color: color-mix(in srgb, var(--accent) 40%, var(--line));
-  background: var(--accent-soft);
+.ma-edit .ma-h2 { margin-bottom: 0.35rem; }
+.ma-edit .ma-lead { margin: 0 0 1.1rem; }
+
+.pe-skel { display: flex; gap: 0.9rem; align-items: center; }
+.pe-skel-avatar { width: 72px; height: 72px; }
+.pe-skel .gz-skel-body { flex: 1 1 auto; min-width: 0; }
+
+.pe-avatar-row { display: flex; gap: 1rem; align-items: center; margin-bottom: 1.2rem; }
+.pe-avatar-row .tw-avatar.pe-avatar { width: 84px; height: 84px; flex: 0 0 auto; }
+.pe-avatar-side { min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 0.4rem; }
+.pe-photo { padding: 0.45rem 1rem; font-size: 0.88rem; min-height: 38px; }
+
+.pe-field { display: flex; flex-direction: column; gap: 0.35rem; margin-bottom: 1.05rem; min-width: 0; }
+.pe-label {
+  display: flex; align-items: baseline; gap: 0.5rem;
+  font-size: 0.78rem; font-weight: 700; letter-spacing: 0.04em;
+  text-transform: uppercase; color: var(--ink-3);
 }
-.ma-pay .ma-h2 { margin-bottom: 0.45rem; }
-.ma-pay .ma-lead { margin: 0 0 0.8rem; color: var(--ink-2); }
-.ma-pay-addr { font-size: 0.95rem; }
-.copyable.ma-pay-cmd {
-  flex-direction: row; align-items: center; gap: 0.6rem;
-  background: var(--surface-2, var(--bg)); border: 1px solid var(--line);
-  border-radius: var(--radius-sm); padding: 0.45rem 0.5rem 0.45rem 0.7rem;
+.pe-count { margin-left: auto; font-variant-numeric: tabular-nums; letter-spacing: 0; text-transform: none; font-weight: 600; }
+.pe-count.over { color: var(--accent); }
+.pe-input, .pe-textarea, .pe-select {
+  width: 100%; box-sizing: border-box; min-height: 44px;
 }
-.ma-pay-cmd code {
-  flex: 1 1 auto; min-width: 0; font-size: 0.8rem; line-height: 1.6;
-  white-space: nowrap; overflow-x: auto;
+.pe-textarea { min-height: 5.5rem; resize: vertical; line-height: 1.5; }
+.pe-hint { margin: 0; color: var(--ink-3); font-size: 0.8rem; line-height: 1.5; }
+.pe-err { margin: 0; color: var(--accent); font-size: 0.82rem; line-height: 1.45; }
+.pe-field.bad .pe-input, .pe-field.bad .pe-textarea, .pe-field.bad .pe-select {
+  border-color: var(--accent);
 }
-.ma-pay-cmd .gz-copy { flex: 0 0 auto; margin: 0; align-self: center; }
-.ma-pay-change > summary {
-  cursor: pointer; color: var(--ink-3); font-size: 0.82rem; margin-bottom: 0.5rem;
+.pe-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 1rem; }
+.pe-actions { display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; margin-top: 0.2rem; }
+.pe-status { font-size: 0.85rem; }
+@media (max-width: 700px) {
+  .pe-grid { grid-template-columns: 1fr; }
+  .pe-avatar-row { gap: 0.85rem; }
+  .pe-avatar-row .tw-avatar.pe-avatar { width: 68px; height: 68px; }
+  .pe-save, .pe-photo { min-height: 44px; }
 }
-.ma-pay-change > summary:hover { color: var(--accent); }
 
 .ma-list { display: flex; flex-direction: column; gap: 0.9rem; }
 .ma-row {
@@ -1991,8 +1985,11 @@ audio.status-media { width: 100%; }
   -webkit-appearance: none; appearance: none;
 }
 .gz-search-input::placeholder { color: var(--ink-3); }
-.gz-search-input:focus {
-  outline: none; border-color: var(--accent);
+.gz-search-input:focus,
+.gz-search-input:focus-visible {
+  outline: none;
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 14%, transparent);
   background: var(--surface);
 }
 .gz-search-input::-webkit-search-cancel-button { -webkit-appearance: none; }
@@ -2004,7 +2001,7 @@ audio.status-media { width: 100%; }
    the tokens; sits above other content. */
 .gz-ta {
   position: absolute;
-  top: calc(100% + 6px);
+  top: calc(100% + 4px);
   left: 0;
   right: 0;
   z-index: 60;
@@ -2013,15 +2010,15 @@ audio.status-media { width: 100%; }
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: var(--radius-md, 12px);
-  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.28);
-  padding: 0.25rem;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.22);
+  padding: 0.2rem;
 }
 .gz-ta[hidden] { display: none; }
 .gz-ta-row {
   display: flex;
   align-items: center;
-  gap: 0.6rem;
-  padding: 0.45rem 0.55rem;
+  gap: 0.55rem;
+  padding: 0.38rem 0.5rem;
   border-radius: var(--radius-sm, 8px);
   cursor: pointer;
   min-width: 0;
@@ -2029,16 +2026,15 @@ audio.status-media { width: 100%; }
 .gz-ta-row.on,
 .gz-ta-row:hover { background: var(--hover); }
 .gz-ta-avatar { flex: 0 0 auto; }
-.gz-ta-avatar .tw-avatar { width: 34px; height: 34px; }
-.gz-ta-names { display: flex; flex-direction: column; min-width: 0; line-height: 1.25; }
+.gz-ta-avatar .tw-avatar { width: 28px; height: 28px; }
+.gz-ta-names { display: flex; align-items: baseline; gap: 0.35rem; min-width: 0; overflow: hidden; }
 .gz-ta-name {
-  font-weight: 700; color: var(--ink);
+  font-weight: 600; font-size: 0.92rem; color: var(--ink); flex: 0 1 auto;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.gz-ta-handle { font-size: 0.82rem; color: var(--ink-3); }
-.gz-ta-followers {
-  flex: 0 0 auto; margin-left: auto; padding-left: 0.5rem;
-  font-size: 0.78rem; color: var(--ink-3); font-variant-numeric: tabular-nums;
+.gz-ta-handle {
+  font-size: 0.84rem; color: var(--ink-3); flex: 0 1 auto;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 
 /* Mobile: the query box lives in the top bar / search view. Keep the panel inside the

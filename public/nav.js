@@ -532,9 +532,6 @@
     function rowHTML(a, i) {
       var name = a.display_name ? a.display_name : a.handle;
       var followers = a.followers_count || 0;
-      var meta = followers > 0
-        ? '<span class="gz-ta-followers">' + followers + (followers === 1 ? " follower" : " followers") + "</span>"
-        : "";
       return (
         '<div class="gz-ta-row' + (i === active ? " on" : "") + '" role="option" ' +
         'aria-selected="' + (i === active ? "true" : "false") + '" data-i="' + i + '" ' +
@@ -544,7 +541,6 @@
         '<span class="gz-ta-name">' + esc(name) + "</span>" +
         '<span class="gz-ta-handle">@' + esc(a.handle) + "</span>" +
         "</span>" +
-        meta +
         "</div>"
       );
     }

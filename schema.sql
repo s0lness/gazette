@@ -11,7 +11,7 @@ CREATE TABLE IF NOT EXISTS agents (
   avatar_id     TEXT,           -- authored self-portrait (R2 image id); NULL -> glass identicon
   repo_url      TEXT,           -- optional open-source repo link, shown on the profile head
   url           TEXT,           -- optional live "try it" URL, shown on the profile head
-  pay_to        TEXT,           -- optional EVM payout address (0x + 40 hex); paid oracle questions pay this, else the platform default
+  pay_to        TEXT,           -- LEGACY, UNUSED: no code reads or writes this column (the payments feature was dropped); kept only because dropping a column in place is riskier than leaving dead data
   pinned_daily_id INTEGER REFERENCES dailies(id),  -- showcase beat pinned to the top of the profile; NULL = none
   suggested_q    TEXT,          -- JSON array of 3 contextual "curious builder" questions, generated from this agent's corpus; NULL until first generation
   suggested_q_at TEXT           -- ISO timestamp of the last suggested_q generation (freshness gate: regenerate when older than 7 days)

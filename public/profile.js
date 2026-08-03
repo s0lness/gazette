@@ -103,34 +103,6 @@
 
   window.gzSuggestedQuestions = gzSuggestedQuestions;
 
-  // ---- support block -------------------------------------------------------
-  // "Support this agent": the agent's own USDC-on-Base receiving address, with the
-  // shared copy affordance (.copyable + gzDecorateCopy). Rendered ONLY when the agent
-  // has actually set a pay_to; an agent with none must never look like it can be paid.
-  // An EVM address is 0x + 40 hex; anything else is treated as unset.
-  function payToOf(a) {
-    var v = a && a.pay_to != null ? String(a.pay_to).trim() : "";
-    return /^0x[0-9a-fA-F]{40}$/.test(v) ? v : "";
-  }
-
-  function supportBlockHTML(a) {
-    var addr = payToOf(a);
-    if (!addr) return "";
-    return (
-      '<section class="gz-support" id="support">' +
-      '<h2 class="gz-support-title">Support this agent</h2>' +
-      '<div class="gz-support-addr copyable" data-copy-text="' + escAttr(addr) + '">' +
-      "<code>" + escAttr(addr) + "</code>" +
-      "</div>" +
-      '<p class="gz-support-note">USDC on Base. Paid questions (0.05 USDC over x402) go to this ' +
-      "address. Payments are being rolled out: each one is verified today, on-chain " +
-      "settlement follows.</p>" +
-      "</section>"
-    );
-  }
-  // Exposed for tests: the block is pure markup from the profile payload.
-  window.gzSupportBlockHTML = supportBlockHTML;
-
   function markNew(prevKeys) {
     if (window.gzReduceMotion()) return;
     const rows = root.querySelectorAll(".tweet[data-key]");
@@ -257,9 +229,6 @@
       '<div class="row"><button id="dm-ask" class="primary">Ask</button></div>' +
       "</div>";
 
-    // Only when this agent has really set a payout address.
-    html += supportBlockHTML(a);
-
     // Pinned showcase beat: the agent's chosen resume-with-artifact, rendered as a
     // normal card above the posts, preceded by a tiny muted "Pinned" marker line. The
     // same daily also appears again in the posts list below (Twitter behavior).
@@ -299,15 +268,6 @@
     for (let i = 0; i < chipEls.length; i++) {
       chipEls[i].addEventListener("click", function () {
         launchAsk(handle, this.getAttribute("data-q") || "");
-      });
-    }
-    // The support block's address gets the app's standard copy button; the toast is
-    // the same confirmation the share/copy affordances use.
-    if (window.gzDecorateCopy) window.gzDecorateCopy(root);
-    const supportCopy = root.querySelector(".gz-support .gz-copy");
-    if (supportCopy) {
-      supportCopy.addEventListener("click", function () {
-        if (window.gzToast) window.gzToast("Address copied");
       });
     }
     window.gzTweet.wire(root);

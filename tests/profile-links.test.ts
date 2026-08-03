@@ -6,7 +6,7 @@ import { onRequestPost } from "../functions/api/[token]/profile";
 // repo_url/url must be http(s) URLs (422 otherwise); bio is privacy-linted and capped.
 // The fake D1 resolves the token to an agent and records the UPDATE it runs.
 
-const AGENT = { id: 5, handle: "yuka", token: "tok-yuka", bio: "old bio", repo_url: null, url: null, pay_to: null, pinned_daily_id: null, scheduler_confirmed_at: null };
+const AGENT = { id: 5, handle: "yuka", token: "tok-yuka", display_name: "Yuka", bio: "old bio", repo_url: null, url: null, pinned_daily_id: null, scheduler_confirmed_at: null };
 
 // ownedDailyIds: the daily ids the agent owns, so the pin ownership check can pass/fail.
 function makeDB(ownedDailyIds: number[] = []) {
@@ -137,36 +137,27 @@ describe("profile links endpoint", () => {
   });
 });
 
-// ---- pay_to (the agentic creator economy payout address) -----------------
-describe("profile pay_to", () => {
-  const ADDR = "0x499eB561220eb358CcBc5a72d4cDD4F5b76A2d2A";
-
-  test("sets a valid EVM address and echoes it", async () => {
+// ---- display_name (the human-readable name above the @handle) -------------
+// Same partial-update contract as bio: absent -> untouched, "" -> cleared to null,
+// else trimmed + capped at 80. The handle is never touched.
+describe("profile display_name", () => {
+  test("sets a display name and echoes the stored value", async () => {
     const DB = makeDB();
-    const r = await call(DB, { pay_to: ADDR });
+    const r = await call(DB, { display_name: "  Yuka the Second  " });
     expect(r.status).toBe(200);
     const b: any = await r.json();
-    expect(b.pay_to).toBe(ADDR);
+    expect(b.display_name).toBe("Yuka the Second"); // trimmed
     expect(DB._updates.length).toBe(1);
-    expect(DB._updates[0].sql).toMatch(/pay_to = \?/);
-    expect(DB._updates[0].binds[0]).toBe(ADDR);
-  });
-
-  test("trims surrounding whitespace before validating", async () => {
-    const DB = makeDB();
-    const r = await call(DB, { pay_to: "  " + ADDR + "  " });
-    expect(r.status).toBe(200);
-    const b: any = await r.json();
-    expect(b.pay_to).toBe(ADDR);
+    expect(DB._updates[0].sql).toMatch(/display_name = \?/);
+    expect(DB._updates[0].binds[0]).toBe("Yuka the Second");
   });
 
   test("empty string clears it (null)", async () => {
     const DB = makeDB();
-    const r = await call(DB, { pay_to: "" });
+    const r = await call(DB, { display_name: "" });
     expect(r.status).toBe(200);
     const b: any = await r.json();
-    expect(b.pay_to).toBe(null);
-    expect(DB._updates[0].sql).toMatch(/pay_to = \?/);
+    expect(b.display_name).toBe(null);
     expect(DB._updates[0].binds[0]).toBe(null);
   });
 
@@ -175,33 +166,47 @@ describe("profile pay_to", () => {
     const r = await call(DB, { url: "https://x.dev" });
     expect(r.status).toBe(200);
     const b: any = await r.json();
-    expect(b.pay_to).toBe(null); // current agent row value
-    expect(DB._updates[0].sql).not.toMatch(/pay_to/);
+    expect(b.display_name).toBe("Yuka"); // current agent row value
+    expect(DB._updates[0].sql).not.toMatch(/display_name/);
   });
 
-  test("422 bad_pay_to on a malformed address (too short)", async () => {
+  test("422 bad_display_name over 80 chars", async () => {
     const DB = makeDB();
-    const r = await call(DB, { pay_to: "0x1234" });
+    const r = await call(DB, { display_name: "a".repeat(81) });
     expect(r.status).toBe(422);
     const b: any = await r.json();
-    expect(b.code).toBe("bad_pay_to");
+    expect(b.code).toBe("bad_display_name");
     expect(DB._updates.length).toBe(0);
   });
 
-  test("422 bad_pay_to on non-hex characters", async () => {
+  test("422 bad_display_name on a multi-line name", async () => {
     const DB = makeDB();
-    const r = await call(DB, { pay_to: "0x" + "z".repeat(40) });
+    const r = await call(DB, { display_name: "Yuka\nthe Second" });
     expect(r.status).toBe(422);
     const b: any = await r.json();
-    expect(b.code).toBe("bad_pay_to");
+    expect(b.code).toBe("bad_display_name");
+    expect(DB._updates.length).toBe(0);
   });
 
-  test("422 bad_pay_to when the 0x prefix is missing", async () => {
+  test("422 bad_display_name on a non-string", async () => {
     const DB = makeDB();
-    const r = await call(DB, { pay_to: "a".repeat(40) });
+    const r = await call(DB, { display_name: 42 });
     expect(r.status).toBe(422);
     const b: any = await r.json();
-    expect(b.code).toBe("bad_pay_to");
+    expect(b.code).toBe("bad_display_name");
+  });
+
+  test("a partial update touches ONLY the fields sent", async () => {
+    const DB = makeDB();
+    const r = await call(DB, { display_name: "Yuka II", bio: "ships things" });
+    expect(r.status).toBe(200);
+    const sql = DB._updates[0].sql;
+    expect(sql).toMatch(/display_name = \?/);
+    expect(sql).toMatch(/bio = \?/);
+    expect(sql).not.toMatch(/repo_url/);
+    expect(sql).not.toMatch(/pinned_daily_id/);
+    expect(sql).not.toMatch(/scheduler_confirmed_at/);
+    expect(DB._updates[0].binds.length).toBe(3); // bio, display_name, agent id
   });
 });
 

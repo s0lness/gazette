@@ -2,10 +2,10 @@ import { expect, test, describe, afterEach } from "bun:test";
 import { onRequestPost } from "../functions/api/dm/[handle]";
 import { DEEPSEEK_MODEL } from "../functions/_lib/dm";
 
-// The three ORACLE ECONOMY changes:
+// The two ORACLE ECONOMY rules:
 //   1. provider swap (DeepSeek when DEEPSEEK_API_KEY set, else Anthropic),
 //   2. LOCK (the oracle answers active posters: >= 1 own daily created in the last 7d),
-//   3. PAID (x402 402 challenge + facilitator verify past the free tier).
+//      plus the 10/day per-conversation quota.
 //
 // One tunable fake D1 (mirrors dm-chat's style): `used` = today's dm_log count for this
 // (visitor, agent), `recency` = the requester's own dailies created in the last 7 days.
@@ -13,9 +13,9 @@ import { DEEPSEEK_MODEL } from "../functions/_lib/dm";
 const AGENT = { id: 5, handle: "yuka" };
 const REQUESTER = { id: 42, handle: "asker", token: "tok-asker" };
 
-function makeDB(state: { used: number; recency: number; agentPayTo?: string | null }) {
+function makeDB(state: { used: number; recency: number }) {
   const dailies = [{ date: "2026-07-30", headline: "shipped a fix", body_md: "work" }];
-  const agentRow = { ...AGENT, pay_to: state.agentPayTo ?? null };
+  const agentRow = { ...AGENT };
   function resolveFirst(sql: string, bound: unknown[]): any {
     if (/FROM agents WHERE token/.test(sql)) return bound[0] === REQUESTER.token ? REQUESTER : null;
     // dailiesCount (canRead): the requester HAS posted at least once historically.
@@ -80,22 +80,6 @@ function stubDeepSeek(text: string, seen?: { url?: string; body?: any; headers?:
   }) as any;
 }
 
-// A facilitator stub for /verify (+ /settle) that records the body it received.
-function stubFacilitator(seen: { verifyBody?: any; settleBody?: any }, opts: { isValid?: boolean } = {}) {
-  globalThis.fetch = (async (url: string, init: any) => {
-    const body = JSON.parse(init.body);
-    if (/\/verify$/.test(url)) {
-      seen.verifyBody = body;
-      return new Response(JSON.stringify({ isValid: opts.isValid !== false, payer: "0xabc" }), { status: 200 });
-    }
-    if (/\/settle$/.test(url)) {
-      seen.settleBody = body;
-      return new Response(JSON.stringify({ success: true, transaction: "0xdeadbeef", network: "base", payer: "0xabc" }), { status: 200 });
-    }
-    return new Response("{}", { status: 200 });
-  }) as any;
-}
-
 function call(env: any, opts: { question?: string; headers?: Record<string, string> } = {}) {
   const request = new Request("https://gazette.sylve.org/api/dm/yuka", {
     method: "POST",
@@ -105,32 +89,17 @@ function call(env: any, opts: { question?: string; headers?: Record<string, stri
   return onRequestPost({ request, env, params: { handle: "yuka" } } as any);
 }
 
-// A valid-looking exact/base PaymentPayload, base64-encoded for the X-PAYMENT header.
-function paymentHeader(): string {
-  const payload = {
-    x402Version: 1,
-    scheme: "exact",
-    network: "base",
-    payload: {
-      signature: "0x" + "a".repeat(130),
-      authorization: {
-        from: "0xfrom", to: "0xto", value: "50000",
-        validAfter: "0", validBefore: "9999999999", nonce: "0x" + "1".repeat(64),
-      },
-    },
-  };
-  return btoa(JSON.stringify(payload));
-}
-
 describe("LOCK: the oracle answers active posters", () => {
-  test("locked (last post 8 days old) with x402 disabled -> 403 post_to_ask", async () => {
+  test("locked (last post 8 days old) -> 403 post_to_ask", async () => {
     stubAnthropic("should not be reached");
-    const env: any = { DB: makeDB({ used: 0, recency: 0 }), ANTHROPIC_API_KEY: "sk-test", X402_ENABLED: "0" };
+    const env: any = { DB: makeDB({ used: 0, recency: 0 }), ANTHROPIC_API_KEY: "sk-test" };
     const r = await call(env);
     expect(r.status).toBe(403);
     const b: any = await r.json();
     expect(b.code).toBe("post_to_ask");
     expect(b.message).toContain("active posters");
+    // The refusal is the free rule, and nothing else: no payment path is offered.
+    expect(b.message).toContain("Post something recent");
   });
 
   test("active poster within quota is unaffected (200)", async () => {
@@ -143,159 +112,32 @@ describe("LOCK: the oracle answers active posters", () => {
   });
 });
 
-describe("PAID: x402 challenge past the free tier", () => {
-  test("locked with empty env -> 402 with defaults (committed defaults kick in)", async () => {
+describe("QUOTA: the free tier is the only tier", () => {
+  test("over quota -> plain 429 quota", async () => {
     stubAnthropic("should not be reached");
-    const env: any = {
-      DB: makeDB({ used: 0, recency: 0 }),
-      ANTHROPIC_API_KEY: "sk-test",
-      // X402_ENABLED, X402_PAY_TO, X402_PRICE all unset; defaults apply
-    };
-    const r = await call(env);
-    expect(r.status).toBe(402);
-    const b: any = await r.json();
-    expect(b.x402Version).toBe(1);
-    expect(Array.isArray(b.accepts)).toBe(true);
-    const acc = b.accepts[0];
-    expect(acc.scheme).toBe("exact");
-    expect(acc.network).toBe("base");
-    expect(acc.payTo).toBe("0x499eB561220eb358CcBc5a72d4cDD4F5b76A2d2A"); // default address
-    expect(acc.maxAmountRequired).toBe("50000"); // default 0.05 USDC
-    expect(acc.asset).toBe("0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"); // USDC on Base mainnet
-    expect(acc.resource).toContain("/api/dm/yuka");
-  });
-
-  test("locked + X402_ENABLED=1 -> 402 with the challenge shape", async () => {
-    stubAnthropic("should not be reached");
-    const env: any = {
-      DB: makeDB({ used: 0, recency: 0 }),
-      ANTHROPIC_API_KEY: "sk-test",
-      X402_ENABLED: "1",
-      X402_PAY_TO: "0xPayee",
-    };
-    const r = await call(env);
-    expect(r.status).toBe(402);
-    const b: any = await r.json();
-    expect(b.x402Version).toBe(1);
-    expect(Array.isArray(b.accepts)).toBe(true);
-    const acc = b.accepts[0];
-    expect(acc.scheme).toBe("exact");
-    expect(acc.network).toBe("base");
-    expect(acc.payTo).toBe("0xPayee");
-    expect(acc.maxAmountRequired).toBe("50000"); // default 0.05 USDC
-    expect(acc.asset).toBe("0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"); // USDC on Base mainnet
-    expect(acc.resource).toContain("/api/dm/yuka");
-  });
-
-  test("challenge pays the ANSWERING agent's pay_to when set (creator economy)", async () => {
-    stubAnthropic("should not be reached");
-    const AGENT_ADDR = "0x1111111111111111111111111111111111111111";
-    const env: any = {
-      DB: makeDB({ used: 0, recency: 0, agentPayTo: AGENT_ADDR }),
-      ANTHROPIC_API_KEY: "sk-test",
-      X402_ENABLED: "1",
-      X402_PAY_TO: "0xPlatformDefault", // platform default, overridden by the agent's own
-    };
-    const r = await call(env);
-    expect(r.status).toBe(402);
-    const b: any = await r.json();
-    // The agent's own address wins over the platform default.
-    expect(b.accepts[0].payTo).toBe(AGENT_ADDR);
-    // The description names the handle it is answering.
-    expect(b.accepts[0].description).toBe("One question to @yuka.");
-  });
-
-  test("challenge falls back to the platform default when the agent has no pay_to", async () => {
-    stubAnthropic("should not be reached");
-    const env: any = {
-      DB: makeDB({ used: 0, recency: 0, agentPayTo: null }),
-      ANTHROPIC_API_KEY: "sk-test",
-      X402_ENABLED: "1",
-      X402_PAY_TO: "0xPlatformDefault",
-    };
-    const r = await call(env);
-    expect(r.status).toBe(402);
-    const b: any = await r.json();
-    expect(b.accepts[0].payTo).toBe("0xPlatformDefault");
-    // Description still names the target handle even on the fallback address.
-    expect(b.accepts[0].description).toBe("One question to @yuka.");
-  });
-
-  test("over-quota + X402_ENABLED=1 -> 402 (over-quota path)", async () => {
-    stubAnthropic("should not be reached");
-    const env: any = {
-      DB: makeDB({ used: 10, recency: 1 }), // active poster but at the cap
-      ANTHROPIC_API_KEY: "sk-test",
-      X402_ENABLED: "1",
-      X402_PAY_TO: "0xPayee",
-      X402_PRICE: "70000",
-    };
-    const r = await call(env);
-    expect(r.status).toBe(402);
-    const b: any = await r.json();
-    expect(b.accepts[0].maxAmountRequired).toBe("70000");
-  });
-
-  test("over-quota with x402 disabled -> plain 429 quota (fallback)", async () => {
-    stubAnthropic("should not be reached");
-    const env: any = { DB: makeDB({ used: 10, recency: 1 }), ANTHROPIC_API_KEY: "sk-test", X402_ENABLED: "0" };
+    const env: any = { DB: makeDB({ used: 10, recency: 1 }), ANTHROPIC_API_KEY: "sk-test" };
     const r = await call(env);
     expect(r.status).toBe(429);
     const b: any = await r.json();
     expect(b.code).toBe("quota");
+    expect(b.message).toContain("Come back tomorrow");
   });
 
-  test("valid X-PAYMENT verified via facilitator bypasses the lock and answers 200", async () => {
-    const seen: { verifyBody?: any; settleBody?: any } = {};
-    stubFacilitator(seen);
-    const env: any = {
-      DB: makeDB({ used: 0, recency: 0 }), // locked
-      ANTHROPIC_API_KEY: "sk-test",
-      X402_ENABLED: "1",
-      X402_PAY_TO: "0xPayee",
-      X402_FACILITATOR: "https://facilitator.example",
-    };
-    // The facilitator stub answers verify+settle; the oracle answer also goes through
-    // fetch, so we let the facilitator stub short-circuit only its two endpoints and
-    // return the Anthropic shape for the messages call.
-    globalThis.fetch = (async (url: string, init: any) => {
-      const body = JSON.parse(init.body);
-      if (/\/verify$/.test(url)) { seen.verifyBody = body; return new Response(JSON.stringify({ isValid: true, payer: "0xabc" }), { status: 200 }); }
-      if (/\/settle$/.test(url)) { seen.settleBody = body; return new Response(JSON.stringify({ success: true, transaction: "0xtx", network: "base", payer: "0xabc" }), { status: 200 }); }
-      return new Response(JSON.stringify({ stop_reason: "end_turn", content: [{ type: "text", text: "Paid answer." }] }), { status: 200 });
-    }) as any;
-
-    const r = await call(env, { headers: { "x-payment": paymentHeader() } });
-    expect(r.status).toBe(200);
-    const b: any = await r.json();
-    expect(b.answer).toBe("Paid answer.");
-    // Facilitator was called with the documented { x402Version, paymentPayload, paymentRequirements } body.
-    expect(seen.verifyBody.x402Version).toBe(1);
-    expect(seen.verifyBody.paymentPayload.scheme).toBe("exact");
-    expect(seen.verifyBody.paymentRequirements.payTo).toBe("0xPayee");
-    // Settlement echoed in the X-PAYMENT-RESPONSE header (base64 of the settle response).
-    const respHeader = r.headers.get("x-payment-response");
-    expect(respHeader).toBeTruthy();
-    expect(JSON.parse(atob(respHeader as string)).transaction).toBe("0xtx");
+  test("an X-PAYMENT header buys nothing: locked stays 403", async () => {
+    stubAnthropic("should not be reached");
+    const env: any = { DB: makeDB({ used: 0, recency: 0 }), ANTHROPIC_API_KEY: "sk-test" };
+    const r = await call(env, { headers: { "x-payment": "anything-at-all" } });
+    expect(r.status).toBe(403);
+    expect((await r.json() as any).code).toBe("post_to_ask");
+    expect(r.headers.get("x-payment-response")).toBe(null);
   });
 
-  test("failed X-PAYMENT verification -> 402 again with an error field", async () => {
-    const seen: { verifyBody?: any } = {};
-    globalThis.fetch = (async (url: string, init: any) => {
-      if (/\/verify$/.test(url)) { seen.verifyBody = JSON.parse(init.body); return new Response(JSON.stringify({ isValid: false, invalidReason: "insufficient_funds" }), { status: 200 }); }
-      return new Response("{}", { status: 200 });
-    }) as any;
-    const env: any = {
-      DB: makeDB({ used: 0, recency: 0 }),
-      ANTHROPIC_API_KEY: "sk-test",
-      X402_ENABLED: "1",
-      X402_PAY_TO: "0xPayee",
-      X402_FACILITATOR: "https://facilitator.example",
-    };
-    const r = await call(env, { headers: { "x-payment": paymentHeader() } });
-    expect(r.status).toBe(402);
-    const b: any = await r.json();
-    expect(b.error).toBe("insufficient_funds");
+  test("an X-PAYMENT header buys nothing: over quota stays 429", async () => {
+    stubAnthropic("should not be reached");
+    const env: any = { DB: makeDB({ used: 10, recency: 1 }), ANTHROPIC_API_KEY: "sk-test" };
+    const r = await call(env, { headers: { "x-payment": "anything-at-all" } });
+    expect(r.status).toBe(429);
+    expect((await r.json() as any).code).toBe("quota");
   });
 });
 

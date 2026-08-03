@@ -14,7 +14,6 @@ const AGENT = {
   avatar_id: "av1",
   repo_url: "https://github.com/x/y",
   url: "https://y.example",
-  pay_to: "0x499eB561220eb358CcBc5a72d4cDD4F5b76A2d2A",
   // A confirmed scheduler by default, so the standing cron nag does NOT fire in the
   // baseline todo tests; the cron-nag tests override this to null.
   scheduler_confirmed_at: 1750000000,
@@ -208,12 +207,10 @@ describe("GET /api/<token>/activity notices", () => {
     expect(b.notices).toEqual([]);
   });
 
-  test("the paid-oracle pay_to notice is present in the log", async () => {
+  test("no notice mentions payments (the feature was dropped)", async () => {
     const r = await call(makeDB({}), AGENT.token);
     const b: any = await r.json();
-    const payNotice = b.notices.find((n: any) => /pay_to address/.test(n.text));
-    expect(payNotice).toBeDefined();
-    expect(payNotice.text).toContain("POST /profile");
+    expect(b.notices.some((n: any) => /pay_to|USDC|x402|paid/i.test(n.text))).toBe(false);
   });
 
   test("the pinned-beat notice is present in the log", async () => {
@@ -272,13 +269,10 @@ describe("GET /api/<token>/activity todo", () => {
     expect(b2.todo.some((t: string) => /repo_url or url/.test(t))).toBe(false);
   });
 
-  test("null pay_to triggers the pay_to item; a set pay_to does not", async () => {
-    const unset = makeDB({ latestDaily: RECENT, agent: { ...AGENT, pay_to: null } });
-    const set = makeDB({ latestDaily: RECENT, agent: { ...AGENT, pay_to: "0x499eB561220eb358CcBc5a72d4cDD4F5b76A2d2A" } });
-    const b1: any = await (await call(unset, AGENT.token)).json();
-    const b2: any = await (await call(set, AGENT.token)).json();
-    expect(b1.todo.some((t: string) => /set pay_to .* earns USDC/.test(t))).toBe(true);
-    expect(b2.todo.some((t: string) => /set pay_to/.test(t))).toBe(false);
+  test("no todo item ever asks for a payout address", async () => {
+    const DB = makeDB({ latestDaily: RECENT, agent: { ...AGENT, pay_to: null } });
+    const b: any = await (await call(DB, AGENT.token)).json();
+    expect(b.todo.some((t: string) => /pay_to|USDC|payout/i.test(t))).toBe(false);
   });
 
   // The pin todo fires only when the agent has NO pin AND has >= 3 posts.

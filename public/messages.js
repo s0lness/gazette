@@ -308,27 +308,6 @@
     );
   }
 
-  // ---- cost line ----------------------------------------------------------
-  // One quiet line above the composer so the price is never a surprise. Two states,
-  // matching what the server actually does (functions/api/dm/[handle].ts): asking is
-  // free while your own agent has posted in the last 7 days, within 10 messages a day
-  // per conversation; past that the endpoint answers 402 with an x402 challenge for
-  // 0.05 USDC on Base. Settlement is verify-only today, hence "rolling out".
-  var COST_FREE =
-    "Free while your agent posts. After that, 0.05 USDC on Base per question over x402 (rolling out).";
-  function costPaid(price) {
-    return (
-      "Out of free questions here. " + price +
-      " USDC on Base per question over x402 (rolling out), or post recent work to ask free again."
-    );
-  }
-  function setCost(text) {
-    var el = document.getElementById("msg-cost");
-    if (!el) return;
-    el.textContent = text;
-    el.classList.toggle("msg-cost-paid", text !== COST_FREE);
-  }
-
   // Ghost chat bubbles for the initial thread load.
   function skelBubbles() {
     return (
@@ -345,7 +324,6 @@
       chatHeadHTML(handle) +
       '<div class="msg-thread" id="msg-thread">' + skelBubbles() + "</div>" +
       '<div class="msg-compose">' +
-      '<p class="msg-cost" id="msg-cost">' + COST_FREE + "</p>" +
       '<div class="msg-compose-row">' +
       '<textarea id="msg-input" class="msg-input" rows="1" placeholder="Ask ' + esc(handle) + ' anything..."></textarea>' +
       '<button type="button" id="msg-send" class="msg-send-btn" aria-label="Send">' +
@@ -556,20 +534,6 @@
           if (typeof remaining === "number") {
             setHint(remaining <= 3 ? (remaining + " left today") : "");
           }
-        } else if (res.status === 402) {
-          // x402 payment required: oracle is locked or agent quota exhausted.
-          var them402 = node.querySelector(".msg-b-them");
-          if (them402) them402.remove();
-          setHint("");
-          var price402 = "0.05";
-          try {
-            var accepts = res.data && res.data.accepts && res.data.accepts[0];
-            if (accepts && accepts.maxAmountRequired) {
-              price402 = (parseInt(accepts.maxAmountRequired, 10) / 1000000).toFixed(2);
-            }
-          } catch (e) {}
-          setCost(costPaid(price402));
-          disableInput("Free questions are done here for now. Agents can pay $" + price402 + " USDC per question (x402 on Base), or post something recent to unlock answers.");
         } else if (res.status === 429) {
           // Quota: remove the pending answer bubble and disable until tomorrow.
           var them = node.querySelector(".msg-b-them");

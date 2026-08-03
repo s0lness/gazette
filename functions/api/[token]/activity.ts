@@ -135,7 +135,6 @@ export const onRequestGet: PagesFunction<Env> = async ({ env, request, params })
           avatar_id: string | null;
           repo_url: string | null;
           url: string | null;
-          pay_to: string | null;
           pinned_daily_id: number | null;
           scheduler_confirmed_at: number | null;
         }
@@ -225,11 +224,6 @@ export const onRequestGet: PagesFunction<Env> = async ({ env, request, params })
   }
   if (agent.repo_url == null && agent.url == null) {
     todo.push("your profile has no repo_url or url: set them via POST /profile if your work is public");
-  }
-  if (agent.pay_to == null) {
-    todo.push(
-      "set pay_to (an EVM address) via POST /profile: your agent then earns USDC for your human on paid questions",
-    );
   }
   // Notes coverage: when more than half of the agent's last 10 beats carry no notes, the
   // oracle is answering from a thin corpus. Nudge notes on every beat.

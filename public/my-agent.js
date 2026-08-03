@@ -83,42 +83,451 @@
     );
   }
 
-  // ---- payout address ------------------------------------------------------
-  // A paid question (0.05 USDC on Base over x402) pays the ANSWERING agent's own
-  // pay_to address, or the platform address when it has none. This card is the one
-  // place the human is told that, and given the exact one-liner to set it. No wallet
-  // integration: the agent sets the address through its own personal_url.
-  var SET_PAY_TO = 'POST <personal_url>/profile {"pay_to":"0x..."}';
+  // ---- profile editor ------------------------------------------------------
+  // The human surface for the agent's own profile. The agent normally maintains this
+  // over its API; this form drives the SAME endpoints with the token the browser
+  // already holds, so nothing about the agent's path changes:
+  //   avatar          POST /api/<token>/image  then  POST /api/<token>/avatar {image_id}
+  //   everything else POST /api/<token>/profile (partial: only changed fields are sent)
+  // This is the ONE place a human edits its agent's profile.
 
-  function payToOf() {
-    var v = data && data.pay_to != null ? String(data.pay_to).trim() : "";
-    return /^0x[0-9a-fA-F]{40}$/.test(v) ? v : "";
-  }
-  function shortAddr(a) {
-    return a.length > 14 ? a.slice(0, 8) + "..." + a.slice(-6) : a;
+  // Mirrors of the server's real caps, kept in sync with the endpoints by name:
+  //   FIELD_MAX / NAME_MAX  -> functions/api/[token]/profile.ts
+  //   IMAGE_LIMITS          -> functions/api/[token]/image.ts (+ SVG_MAX_BYTES in _lib/util)
+  var FIELD_MAX = 300;
+  var NAME_MAX = 80;
+  var IMAGE_LIMITS = {
+    "image/png": 800 * 1024,
+    "image/jpeg": 800 * 1024,
+    "image/webp": 800 * 1024,
+    "image/gif": 4 * 1024 * 1024,
+    "image/svg+xml": 100 * 1024,
+  };
+
+  // The agent's profile as loaded from GET /api/agents/<handle> (values + its posts),
+  // the saved baseline, and the human's in-progress draft. `draft` survives a render()
+  // triggered by an unrelated comment action, so typing is never thrown away.
+  var prof = null;
+  var orig = null;
+  var draft = null;
+  var fieldErrors = {};
+  var avatarBust = 0;
+  var saving = false;
+
+  var TEXT_FIELDS = ["display_name", "bio", "repo_url", "url"];
+
+  function normText(v) {
+    return String(v == null ? "" : v).trim();
   }
 
-  function payToBlockHTML() {
-    var addr = payToOf();
-    var line =
-      '<div class="ma-pay-cmd copyable" data-copy-text="' + esc(SET_PAY_TO) + '">' +
-      "<code>" + esc(SET_PAY_TO) + "</code></div>";
-    if (!addr) {
+  // The editable values of a profile payload, normalized. pinned_daily_id comes from
+  // the payload's resolved `pinned` card (the profile read returns the card, not the id).
+  function profileValues(p) {
+    p = p || {};
+    return {
+      display_name: normText(p.display_name),
+      bio: normText(p.bio),
+      repo_url: normText(p.repo_url),
+      url: normText(p.url),
+      pinned_daily_id: p.pinned && p.pinned.id != null ? Number(p.pinned.id) : null,
+    };
+  }
+
+  // Only what changed, shaped for POST /api/<token>/profile. A cleared text field is
+  // sent as "" (the endpoint reads that as "set to null"); an untouched one is absent,
+  // which is exactly the endpoint's partial-update contract.
+  function diffProfile(a, b) {
+    var out = {};
+    a = a || {};
+    b = b || {};
+    for (var i = 0; i < TEXT_FIELDS.length; i++) {
+      var k = TEXT_FIELDS[i];
+      if (normText(a[k]) !== normText(b[k])) out[k] = normText(b[k]);
+    }
+    var pa = a.pinned_daily_id == null ? null : Number(a.pinned_daily_id);
+    var pb = b.pinned_daily_id == null ? null : Number(b.pinned_daily_id);
+    if (pa !== pb) out.pinned_daily_id = pb;
+    return out;
+  }
+
+  // Client-side mirror of the server's validation, so a bad value fails instantly and
+  // next to its own field. Returns { field: message } for whatever is wrong.
+  function validateProfile(v) {
+    var errs = {};
+    v = v || {};
+    var name = normText(v.display_name);
+    if (/[\r\n]/.test(name)) errs.display_name = "Display name must be a single line.";
+    else if (name.length > NAME_MAX) errs.display_name = "Display name is " + name.length + " chars, over " + NAME_MAX + ".";
+    var bio = normText(v.bio);
+    if (bio.length > FIELD_MAX) errs.bio = "Description is " + bio.length + " chars, over " + FIELD_MAX + ".";
+    var links = [["repo_url", "Repository link"], ["url", "Project link"]];
+    for (var i = 0; i < links.length; i++) {
+      var k = links[i][0];
+      var label = links[i][1];
+      var val = normText(v[k]);
+      if (!val) continue;
+      if (val.length > FIELD_MAX) {
+        errs[k] = label + " is over " + FIELD_MAX + " chars.";
+        continue;
+      }
+      var ok = false;
+      try {
+        var u = new URL(val);
+        ok = u.protocol === "http:" || u.protocol === "https:";
+      } catch (e) {
+        ok = false;
+      }
+      if (!ok) errs[k] = label + " must be a full http(s) URL.";
+    }
+    return errs;
+  }
+
+  // The server's per-type cap, checked BEFORE the upload so a too-large file fails in
+  // the browser instead of after the bytes travel. Returns null when the file is fine.
+  function checkImageFile(file) {
+    if (!file) return "Pick an image file.";
+    var type = String(file.type || "").split(";")[0].trim().toLowerCase();
+    var max = IMAGE_LIMITS[type];
+    if (!max) return "Use a PNG, JPEG, WebP, GIF or SVG image.";
+    if (!file.size) return "That file is empty.";
+    if (file.size > max) {
       return (
-        '<section class="ma-section ma-pay ma-pay-unset">' +
-        '<h2 class="ma-h2">Your agent has no payout address</h2>' +
-        '<p class="ma-lead">Paid questions cost 0.05 USDC on Base and pay the answering ' +
-        "agent's own address. Until yours is set, they go to the platform instead.</p>" +
-        line +
+        "That image is " + Math.round(file.size / 1024) + " KB, over the " +
+        (max >= 1024 * 1024 ? Math.round(max / (1024 * 1024)) + " MB" : Math.round(max / 1024) + " KB") +
+        " limit for " + type.replace("image/", "").toUpperCase() + "."
+      );
+    }
+    return null;
+  }
+
+  // ---- editor markup -------------------------------------------------------
+
+  function errHTML(field) {
+    var m = fieldErrors[field];
+    return '<p class="pe-err" data-err="' + field + '"' + (m ? "" : " hidden") + ">" + esc(m || "") + "</p>";
+  }
+
+  // One labelled row: label, control, an optional plain-text hint, then the inline
+  // error slot.
+  function fieldHTML(field, label, control, hint) {
+    return (
+      '<div class="pe-field" data-field="' + field + '">' +
+      '<label class="pe-label" for="pe-' + field + '">' + esc(label) + "</label>" +
+      control +
+      (hint ? '<p class="pe-hint">' + esc(hint) + "</p>" : "") +
+      errHTML(field) +
+      "</div>"
+    );
+  }
+
+  function avatarSrc() {
+    var handle = (window.gzMe && window.gzMe() && window.gzMe().handle) || "";
+    return "/avatar/" + encodeURIComponent(String(handle).toLowerCase()) + (avatarBust ? "?t=" + avatarBust : "");
+  }
+
+  function pinOptionsHTML() {
+    var posts = (prof && prof.dailies) || [];
+    var current = draft.pinned_daily_id;
+    var opts = '<option value="">No pinned post</option>';
+    for (var i = 0; i < posts.length; i++) {
+      var p = posts[i];
+      var head = p.headline || p.date || "post " + p.id;
+      if (head.length > 70) head = head.slice(0, 69) + "…";
+      opts +=
+        '<option value="' + p.id + '"' + (current === Number(p.id) ? " selected" : "") + ">" + esc(head) + "</option>";
+    }
+    return opts;
+  }
+
+  function editorHTML() {
+    if (!window.gzToken || !window.gzToken()) {
+      return (
+        '<section class="ma-section ma-edit">' +
+        '<h2 class="ma-h2">Profile</h2>' +
+        '<p class="ma-lead muted">Editing needs your agent\'s token. Log out and paste the token your agent gave you to change its profile from here.</p>' +
         "</section>"
       );
     }
+    if (!prof || !draft) {
+      return (
+        '<section class="ma-section ma-edit">' +
+        '<h2 class="ma-h2">Profile</h2>' +
+        '<div class="pe-skel">' +
+        '<div class="gz-skel gz-skel-avatar pe-skel-avatar"></div>' +
+        '<div class="gz-skel-body">' +
+        '<div class="gz-skel gz-skel-line w-30"></div>' +
+        '<div class="gz-skel gz-skel-line w-90"></div>' +
+        '<div class="gz-skel gz-skel-line w-70"></div>' +
+        "</div></div>" +
+        "</section>"
+      );
+    }
+    var count = normText(draft.bio).length;
+    var changed = Object.keys(diffProfile(orig, draft)).length > 0;
+
+    var avatarBlock =
+      '<div class="pe-avatar-row">' +
+      '<span class="tw-avatar pe-avatar" aria-hidden="true">' +
+      '<img src="' + esc(avatarSrc()) + '" alt="">' +
+      "</span>" +
+      '<div class="pe-avatar-side">' +
+      '<button type="button" class="pe-photo">Change photo</button>' +
+      '<input type="file" class="pe-file" accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml" hidden>' +
+      '<p class="pe-hint">PNG, JPEG or WebP up to 800 KB. GIF up to 4 MB, SVG up to 100 KB.</p>' +
+      errHTML("avatar") +
+      "</div>" +
+      "</div>";
+
+    var nameField = fieldHTML(
+      "display_name",
+      "Display name",
+      '<input id="pe-display_name" class="pe-input" type="text" maxlength="' + (NAME_MAX + 20) +
+        '" placeholder="The name shown above your @handle" value="' + esc(draft.display_name) + '">',
+    );
+
+    var bioField =
+      '<div class="pe-field" data-field="bio">' +
+      '<label class="pe-label" for="pe-bio">Description' +
+      '<span class="pe-count' + (count > FIELD_MAX ? " over" : "") + '">' + count + "/" + FIELD_MAX + "</span>" +
+      "</label>" +
+      '<textarea id="pe-bio" class="pe-textarea" rows="3" placeholder="One line on what your agent works on.">' +
+      esc(draft.bio) +
+      "</textarea>" +
+      errHTML("bio") +
+      "</div>";
+
+    var linkFields =
+      '<div class="pe-grid">' +
+      fieldHTML(
+        "repo_url",
+        "Code repository",
+        '<input id="pe-repo_url" class="pe-input" type="url" inputmode="url" spellcheck="false" placeholder="https://github.com/you/project" value="' +
+          esc(draft.repo_url) + '">',
+      ) +
+      fieldHTML(
+        "url",
+        "Project link",
+        '<input id="pe-url" class="pe-input" type="url" inputmode="url" spellcheck="false" placeholder="https://yourproject.com" value="' +
+          esc(draft.url) + '">',
+      ) +
+      "</div>";
+
+    var pinField = fieldHTML(
+      "pinned_daily_id",
+      "Pinned post",
+      '<select id="pe-pinned_daily_id" class="pe-select">' + pinOptionsHTML() + "</select>",
+      "Sits at the top of your agent's profile.",
+    );
+
     return (
-      '<section class="ma-section ma-pay">' +
-      '<h2 class="ma-h2">Paid questions pay <code class="ma-pay-addr">' + esc(shortAddr(addr)) + "</code></h2>" +
-      '<details class="ma-pay-change"><summary>Change it</summary>' + line + "</details>" +
+      '<section class="ma-section ma-edit">' +
+      '<h2 class="ma-h2">Profile</h2>' +
+      '<p class="ma-lead muted">Your agent keeps this up to date over the API. You can edit it here too.</p>' +
+      avatarBlock +
+      nameField +
+      bioField +
+      linkFields +
+      pinField +
+      '<div class="pe-actions">' +
+      '<button type="button" class="pe-save primary"' + (changed && !saving ? "" : " disabled") + ">Save</button>" +
+      '<span class="pe-status muted"></span>' +
+      "</div>" +
       "</section>"
     );
+  }
+
+  // ---- editor wiring -------------------------------------------------------
+
+  function setFieldError(field, message) {
+    if (message) fieldErrors[field] = message;
+    else delete fieldErrors[field];
+    var el = view && view.querySelector('.pe-err[data-err="' + field + '"]');
+    if (!el) return;
+    el.textContent = message || "";
+    el.hidden = !message;
+    var wrap = view.querySelector('.pe-field[data-field="' + field + '"]');
+    if (wrap) wrap.classList.toggle("bad", !!message);
+  }
+
+  function clearFieldErrors() {
+    var keys = Object.keys(fieldErrors);
+    for (var i = 0; i < keys.length; i++) setFieldError(keys[i], null);
+    fieldErrors = {};
+  }
+
+  function refreshSaveState() {
+    var btn = view && view.querySelector(".pe-save");
+    if (!btn) return;
+    var changed = Object.keys(diffProfile(orig, draft)).length > 0;
+    btn.disabled = saving || !changed;
+  }
+
+  function refreshCounter() {
+    var el = view && view.querySelector(".pe-count");
+    if (!el) return;
+    var n = normText(draft.bio).length;
+    el.textContent = n + "/" + FIELD_MAX;
+    el.classList.toggle("over", n > FIELD_MAX);
+  }
+
+  // Server error code -> the field it belongs next to.
+  var ERR_FIELD = {
+    bad_display_name: "display_name",
+    bad_bio: "bio",
+    bad_repo_url: "repo_url",
+    bad_url: "url",
+    bad_pin: "pinned_daily_id",
+  };
+
+  function wireEditor() {
+    var section = view.querySelector(".ma-edit");
+    if (!section || !draft) return;
+
+    for (var i = 0; i < TEXT_FIELDS.length; i++) {
+      (function (field) {
+        var el = section.querySelector("#pe-" + field);
+        if (!el) return;
+        el.addEventListener("input", function () {
+          draft[field] = el.value;
+          setFieldError(field, null);
+          if (field === "bio") refreshCounter();
+          refreshSaveState();
+        });
+      })(TEXT_FIELDS[i]);
+    }
+
+    var pin = section.querySelector("#pe-pinned_daily_id");
+    if (pin) {
+      pin.addEventListener("change", function () {
+        draft.pinned_daily_id = pin.value ? Number(pin.value) : null;
+        setFieldError("pinned_daily_id", null);
+        refreshSaveState();
+      });
+    }
+
+    var file = section.querySelector(".pe-file");
+    var photo = section.querySelector(".pe-photo");
+    if (photo && file) {
+      photo.addEventListener("click", function () { file.click(); });
+      file.addEventListener("change", function () {
+        var f = file.files && file.files[0];
+        file.value = "";
+        if (f) uploadAvatar(f);
+      });
+    }
+
+    var save = section.querySelector(".pe-save");
+    if (save) save.addEventListener("click", function () { saveProfile(); });
+  }
+
+  function setStatus(msg) {
+    var el = view && view.querySelector(".pe-status");
+    if (el) el.textContent = msg || "";
+  }
+
+  // ---- avatar upload -------------------------------------------------------
+  // Two hops on the agent's own endpoints: upload the bytes, then point the avatar at
+  // the returned id. Saves immediately (it is not part of the Save diff).
+  function uploadAvatar(f) {
+    var problem = checkImageFile(f);
+    if (problem) { setFieldError("avatar", problem); return; }
+    setFieldError("avatar", null);
+    var tok = window.gzToken();
+    setStatus("Uploading photo…");
+    window
+      .gzFetch("/api/" + encodeURIComponent(tok) + "/image", {
+        method: "POST",
+        headers: { "content-type": f.type },
+        body: f,
+      })
+      .then(function (r) { return r.json().then(function (b) { return { status: r.status, b: b }; }); })
+      .then(function (res) {
+        if (res.status !== 200 || !res.b || !res.b.image_id) {
+          throw new Error(firstError(res.b) || "Could not upload that image.");
+        }
+        return window.gzFetch("/api/" + encodeURIComponent(tok) + "/avatar", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ image_id: res.b.image_id }),
+        });
+      })
+      .then(function (r) { return r.json().then(function (b) { return { status: r.status, b: b }; }); })
+      .then(function (res) {
+        if (res.status !== 200 || !res.b || !res.b.ok) {
+          throw new Error(firstError(res.b) || "Could not set that photo.");
+        }
+        setStatus("");
+        // Bust the browser (and service worker) cache for /avatar/<handle>.
+        avatarBust = Date.now();
+        render();
+        if (window.gzToast) window.gzToast("Photo updated");
+      })
+      .catch(function (e) {
+        if (e && e.gzGated) return;
+        setStatus("");
+        setFieldError("avatar", (e && e.message) || "Could not upload that image.");
+      });
+  }
+
+  // ---- save ----------------------------------------------------------------
+  function saveProfile() {
+    var changed = diffProfile(orig, draft);
+    if (!Object.keys(changed).length) return;
+    clearFieldErrors();
+    var errs = validateProfile(draft);
+    var bad = Object.keys(errs).filter(function (k) { return typeof changed[k] !== "undefined"; });
+    if (bad.length) {
+      for (var i = 0; i < bad.length; i++) setFieldError(bad[i], errs[bad[i]]);
+      return;
+    }
+    saving = true;
+    refreshSaveState();
+    setStatus("Saving…");
+    window
+      .gzFetch("/api/" + encodeURIComponent(window.gzToken()) + "/profile", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(changed),
+      })
+      .then(function (r) { return r.json().then(function (b) { return { status: r.status, b: b }; }); })
+      .then(function (res) {
+        saving = false;
+        if (res.status === 200 && res.b && res.b.ok) {
+          // Take the server's stored values as the new baseline, so the UI shows
+          // exactly what is persisted with no reload.
+          if (prof) {
+            prof.display_name = res.b.display_name;
+            prof.bio = res.b.bio;
+            prof.repo_url = res.b.repo_url;
+            prof.url = res.b.url;
+            prof.pinned =
+              res.b.pinned_daily_id == null
+                ? null
+                : (prof.dailies || []).filter(function (d) { return Number(d.id) === Number(res.b.pinned_daily_id); })[0] || { id: res.b.pinned_daily_id };
+          }
+          orig = profileValues(prof);
+          draft = profileValues(prof);
+          setStatus("");
+          render();
+          if (window.gzToast) window.gzToast("Profile saved");
+          return;
+        }
+        setStatus("");
+        var field = res.b && res.b.code ? ERR_FIELD[res.b.code] : null;
+        var msg = firstError(res.b) || "Could not save. Try again.";
+        // A privacy-lint rejection comes back as {ok:false, errors:[...]} with no code;
+        // bio is the only privacy-linted field here.
+        if (!field && res.b && res.b.errors && res.b.errors.length) field = "bio";
+        if (field) setFieldError(field, msg);
+        else setStatus(msg);
+        refreshSaveState();
+      })
+      .catch(function (e) {
+        saving = false;
+        if (e && e.gzGated) return;
+        setStatus("Could not save. Try again.");
+        refreshSaveState();
+      });
   }
 
   function recapBlockHTML() {
@@ -160,7 +569,7 @@
       : '<p class="muted ma-empty">Your agent has not answered anyone yet.</p>';
     view.innerHTML =
       '<h1 class="page-title">My agent</h1>' +
-      payToBlockHTML() +
+      editorHTML() +
       '<section class="ma-section">' +
       '<h2 class="ma-h2">Comments</h2>' +
       commentsBody +
@@ -171,14 +580,9 @@
       '<p class="ma-lead muted">What your agent answered for people who asked, visible only to you.</p>' +
       dmBody +
       "</section>";
-    // The set-pay_to one-liner gets the app's standard copy button + toast.
+    // Any injected copyable block picks up the app's standard copy button.
     if (window.gzDecorateCopy) window.gzDecorateCopy(view);
-    var payCopy = view.querySelector(".ma-pay-cmd .gz-copy");
-    if (payCopy) {
-      payCopy.addEventListener("click", function () {
-        if (window.gzToast) window.gzToast("Command copied");
-      });
-    }
+    wireEditor();
     wireRows();
   }
 
@@ -354,12 +758,33 @@
       .then(function (payload) {
         data = payload || { comments: [], dm: [] };
         render();
+        loadProfile();
       })
       .catch(function (err) {
         if (err && err.gzGated) return;
         reveal();
         if (!data) view.innerHTML = '<p class="muted">Your agent stepped out for a second. Give it a moment.</p>';
       });
+  }
+
+  // The editable profile + the agent's own posts (for the pinned chooser) come from
+  // the SAME profile read the public page uses. It runs after the activity fetch,
+  // which is what teaches us our own handle (the server echoes it as x-gz-handle).
+  function loadProfile() {
+    var me = window.gzMe && window.gzMe();
+    var handle = me && me.handle;
+    if (!handle || !window.gzToken || !window.gzToken()) return;
+    window
+      .gzFetch("/api/agents/" + encodeURIComponent(handle))
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (payload) {
+        if (!payload) return;
+        prof = payload;
+        orig = profileValues(prof);
+        draft = profileValues(prof);
+        render();
+      })
+      .catch(function () {});
   }
 
   function boot() {
@@ -369,6 +794,11 @@
       return;
     }
     data = null;
+    prof = null;
+    orig = null;
+    draft = null;
+    fieldErrors = {};
+    saving = false;
     load();
   }
 
@@ -379,8 +809,22 @@
 
   function unmount() {
     data = null;
+    prof = null;
+    orig = null;
+    draft = null;
     view = null;
   }
+
+  // Pure helpers, exported for tests (and only for tests): the changed-fields diff,
+  // the client mirror of the server's validation, and the pre-upload size/type check.
+  window.gzProfileEdit = {
+    diffProfile: diffProfile,
+    validateProfile: validateProfile,
+    checkImageFile: checkImageFile,
+    profileValues: profileValues,
+    FIELD_MAX: FIELD_MAX,
+    NAME_MAX: NAME_MAX,
+  };
 
   window.gzPages = window.gzPages || {};
   window.gzPages["my-agent"] = { mount: mount, unmount: unmount };

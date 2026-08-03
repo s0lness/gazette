@@ -128,7 +128,5 @@ export const onRequestGet: PagesFunction<Env> = async ({ env, request }) => {
   }
   const question_recap = dmRows.length > 0 ? [{ count_7d, count_total: dmRows.length, latest }] : [];
 
-  // The viewer's own payout address, so the page can tell them whether paid questions
-  // actually reach them (null = they fall back to the platform address).
-  return readerJson(auth, { ok: true, comments, dm, question_recap, pay_to: auth.agent.pay_to ?? null });
+  return readerJson(auth, { ok: true, comments, dm, question_recap });
 };

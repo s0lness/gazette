@@ -10,14 +10,6 @@ import {
   JournalLite,
   ChatTurn,
 } from "../../_lib/dm";
-import {
-  x402Enabled,
-  challengeBody,
-  paymentRequirements,
-  decodePaymentHeader,
-  encodePaymentResponse,
-  verifyPayment,
-} from "../../_lib/x402";
 import { fireNotify, truncBody, writeNotification } from "../../_lib/notify";
 
 // Per (member, agent, UTC day) message cap. The oracle is a multi-turn chat now.
@@ -98,40 +90,13 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env, params, 
   // Locked when the requester has not posted a beat of their own in the last 7 days.
   const locked = ((recencyRes?.results?.[0]?.n as number) ?? 0) === 0;
 
-  // PAID tier: a locked or over-quota requester may pay per question via x402. If a
-  // valid X-PAYMENT is present we verify it and let the request through (bypassing both
-  // the lock and the quota). Otherwise, when x402 is enabled, we answer 402 with the
-  // challenge; when it is not configured, we fall back to the plain 403/429 below.
-  let paid = false;
-  let settlementResponse: unknown;
-  if (locked || overQuota) {
-    const resource = request.url;
-    // Creator economy: the paid question pays the ANSWERING agent's own payout address
-    // (agent.pay_to) so its oracle earns for its human; NULL falls back to the platform
-    // default. The description carries the handle it is answering.
-    const reqs = paymentRequirements(env, resource, agent.pay_to, handle);
-    const payload = decodePaymentHeader(request);
-    if (payload) {
-      const v = await verifyPayment(env, payload, reqs);
-      if (v.ok) {
-        paid = true;
-        settlementResponse = v.settlement;
-      } else if (x402Enabled(env)) {
-        return json(challengeBody(env, resource, v.error || "payment_verification_failed", agent.pay_to, handle), 402, PRIVATE_NO_STORE);
-      }
-    } else if (x402Enabled(env)) {
-      return json(challengeBody(env, resource, "", agent.pay_to, handle), 402, PRIVATE_NO_STORE);
-    }
-  }
-
   // LOCK (rule 2): the oracle answers active posters. Enforced AFTER canRead (post_first
-  // stays first) and only when the requester has NOT paid.
-  if (!paid && locked) {
+  // stays first).
+  if (locked) {
     return json(
       {
         code: "post_to_ask",
-        message:
-          "This agent answers active posters. Post something recent to unlock it, or pay per question.",
+        message: "This agent answers active posters. Post something recent to unlock it.",
       },
       403,
       PRIVATE_NO_STORE,
@@ -139,8 +104,8 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env, params, 
   }
 
   // Quota: 10 messages per (requesting member, agent, UTC day), plus the 60/day/IP
-  // backstop. A paid request bypasses the quota.
-  if (!paid && overQuota) {
+  // backstop.
+  if (overQuota) {
     return json(
       { code: "quota", message: "That's our 10 messages for today. Come back tomorrow." },
       429,
@@ -199,13 +164,8 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env, params, 
     }),
   );
 
-  // A paid request that settled on-chain echoes the settlement in X-PAYMENT-RESPONSE.
-  // Its quota "remaining" is 0 (payment bought exactly this one question).
-  const headers = settlementResponse
-    ? { ...PRIVATE_NO_STORE, "x-payment-response": encodePaymentResponse(settlementResponse) }
-    : PRIVATE_NO_STORE;
-  const remaining = paid ? Math.max(0, DAILY_MESSAGES - used) : DAILY_MESSAGES - used - 1;
-  return json({ answer, remaining }, 200, headers);
+  const remaining = DAILY_MESSAGES - used - 1;
+  return json({ answer, remaining }, 200, PRIVATE_NO_STORE);
 };
 
 // Load the viewer's conversation with this agent (the global, unprojected thread),

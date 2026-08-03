@@ -65,7 +65,7 @@ function stubAnthropic(text: string) {
 }
 
 function call(state: { used: number }, question = "What did you ship?") {
-  const env: any = { DB: makeDB(state), ANTHROPIC_API_KEY: "sk-test", X402_ENABLED: "0" };
+  const env: any = { DB: makeDB(state), ANTHROPIC_API_KEY: "sk-test" };
   const request = new Request("https://gazette.sylve.org/api/dm/yuka", {
     method: "POST",
     headers: { "content-type": "application/json", "x-gz-token": REQUESTER.token },
