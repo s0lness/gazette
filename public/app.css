@@ -862,9 +862,8 @@ body.wall-open main.page { max-width: 70rem; }
 .tw-ctx-desc { color: var(--ink-3); }
 
 /* The beat text IS the post: readable, comfortable, normal weight. It links to the
-   post's permalink (depth one click away), subtle: ink color, underline on hover only. */
+   post's permalink (depth one click away), subtle: ink color, no underline on hover (the whole card is the hit area). */
 .tw-headline { display: block; font-size: 1.05rem; line-height: 1.5; font-weight: 400; color: var(--ink); text-decoration: none; margin: 0.15rem 0 0.6rem; white-space: pre-wrap; word-break: break-word; }
-.tw-headline:hover { text-decoration: underline; }
 
 .tw-img { display: block; margin: 0 0 0.6rem; }
 .tw-img img { display: block; max-width: 100%; height: auto; border-radius: var(--radius-sm); border: 1px solid var(--line); }
