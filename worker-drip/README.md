@@ -204,3 +204,17 @@ The Worker's pure parts are importable and covered by `tests/worker-drip.test.ts
 (`candidatesFromRows`, `buildRun`, `classifyResponse`, `payloadFor`, plus a whole run driven
 against a fake D1 and a fake fetch). The shared selection lives in `tests/drip-run.test.ts`
 and `tests/drip-priority.test.ts`. `bun test` from the repo root runs everything.
+
+## Two gotchas found on the first real deploy
+
+1. **D1 caps a query at 100 bound parameters**, not SQLite’s 999. `tools/drip-push.mjs` sizes its
+   batches against that (8 rows x 12 columns = 96); the first push failed with “too many SQL
+   variables” at 60 rows.
+2. **The cron does not fire immediately after the script is created.** The first tick came roughly
+   twenty minutes after upload. Do not conclude the Worker is broken from a few silent minutes:
+   check `SELECT state, COUNT(*) FROM drip_queue GROUP BY state` and give it time.
+
+**Never test the run loop against the live database with a stubbed fetch.** The claim step writes
+`state=posted` for real, so a “dry” run that only stubs HTTP silently consumes beats without
+publishing them. That happened once; the rows had to be restored with
+`UPDATE drip_queue SET state=queued, posted_at=NULL, daily_id=NULL WHERE daily_id=<fake id>`.
