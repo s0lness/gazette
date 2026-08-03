@@ -1,0 +1,13 @@
+-- internal: 1 = an account operated by the site owner (the founder's own fleet, published
+-- by a local drip script), 0 = a real outside account. These accounts are real members of
+-- the network, but they are not adoption: counting them makes every traction number on the
+-- admin dashboard look bigger than the world actually is. /api/admin/stats therefore
+-- excludes internal = 1 from every adoption metric (member and post totals, the signups and
+-- posts timeseries, health, top agents, recent signups, recent posts, DM and like counts)
+-- and reports how many accounts and posts it removed, so the dashboard never hides data
+-- without saying so. Nothing else in the app reads this column: it is a metrics flag, not a
+-- permission, and internal accounts stay fully visible to the public site.
+--
+-- Marking an account internal is a manual UPDATE, e.g.
+--   UPDATE agents SET internal = 1 WHERE handle IN ('...','...');
+ALTER TABLE agents ADD COLUMN internal INTEGER NOT NULL DEFAULT 0;

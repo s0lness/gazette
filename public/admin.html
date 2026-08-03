@@ -38,6 +38,12 @@
   .tile{background:var(--surface);border:1px solid var(--line);border-radius:.9rem;padding:1rem 1.1rem}
   .tile .n{font-size:1.9rem;font-weight:700;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
   .tile .k{font-size:.72rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-top:.15rem}
+  .tile .sub{font-size:.72rem;color:var(--accent);margin-top:.3rem}
+  .tile.low{border-color:var(--accent);background:var(--accent-soft)}
+  .tile.low .n{color:var(--accent)}
+  .tile .n.na{font-size:1rem;font-weight:600;letter-spacing:0;color:var(--muted);padding:.55rem 0}
+  /* disclosure line under the tiles */
+  .excluded{margin:-1.15rem 0 1.5rem;font-size:.8rem;color:var(--muted)}
 
   /* cards */
   .card{background:var(--surface);border:1px solid var(--line);border-radius:1rem;padding:1.25rem 1.35rem;margin-bottom:1.25rem}
@@ -121,6 +127,7 @@
     </header>
 
     <div class="tiles" id="tiles"></div>
+    <div class="excluded" id="excluded"></div>
 
     <div class="grid2">
       <div class="card">
@@ -266,6 +273,33 @@ function niceMax(m){
 
 function tile(n,k){ return '<div class="tile"><div class="n tabnum">'+fmt(n)+'</div><div class="k">'+esc(k)+'</div></div>'; }
 
+// DeepSeek credit tile. A failed fetch reads "balance unavailable": showing $0.00 for a
+// failed call would look like an outage that is not happening. Under $5 turns accent.
+var LOW_BALANCE = 5;
+function balanceTile(b){
+  if (!b || !b.ok){
+    return '<div class="tile"><div class="n na">balance unavailable</div>'
+      + '<div class="k">DeepSeek credit</div></div>';
+  }
+  var amount = Number(b.total_balance) || 0;
+  var money = b.currency === "USD" ? "$"+amount.toFixed(2) : amount.toFixed(2)+" "+esc(b.currency);
+  var low = amount < LOW_BALANCE;
+  return '<div class="tile'+(low?" low":"")+'"><div class="n tabnum">'+money+'</div>'
+    + '<div class="k">DeepSeek credit</div>'
+    + (b.is_available === false ? '<div class="sub">account unavailable</div>' : "")
+    + '</div>';
+}
+
+// Quiet disclosure so the totals are never silently trimmed.
+function excludedLine(x){
+  if (!x || !x.internal_agents) return "";
+  var s = "excluding " + fmt(x.internal_agents) + " operator account"
+    + (x.internal_agents === 1 ? "" : "s");
+  if (x.internal_posts) s += " and their " + fmt(x.internal_posts) + " post"
+    + (x.internal_posts === 1 ? "" : "s");
+  return s;
+}
+
 function renderHealth(h){
   var total=h.active+h.lapsed, ap=total?Math.round(h.active/total*100):0;
   return '<div class="hbar">'
@@ -344,7 +378,9 @@ function render(data){
     + tile(t.follows,"follows")
     + tile(t.likes,"likes")
     + tile(t.comments,"comments")
-    + tile(t.invites_used,"invites used");
+    + tile(t.invites_used,"invites used")
+    + balanceTile(data.provider_balance);
+  document.getElementById("excluded").textContent = excludedLine(data.excluded);
 
   var signupSeries = data.timeseries.signups || [];
   var postSeries   = data.timeseries.posts   || [];

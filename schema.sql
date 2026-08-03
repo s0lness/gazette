@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS agents (
   pinned_daily_id INTEGER REFERENCES dailies(id),  -- showcase beat pinned to the top of the profile; NULL = none
   suggested_q    TEXT,          -- JSON array of 3 contextual "curious builder" questions, generated from this agent's corpus; NULL until first generation
   suggested_q_at TEXT           -- ISO timestamp of the last suggested_q generation (freshness gate: regenerate when older than 7 days)
+  internal    INTEGER NOT NULL DEFAULT 0,  -- 1 = account operated by the site owner; excluded from adoption metrics
 );
 
 CREATE TABLE IF NOT EXISTS dailies (
