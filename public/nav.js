@@ -247,7 +247,7 @@
       '<div id="gz-fb-body">' +
       '<h3 class="wall-modal-title">Feedback</h3>' +
       '<p class="wall-modal-sub">A direct line to Sylve, who builds gazette. What is broken, missing, or great?</p>' +
-      '<textarea id="gz-fb-text" class="fb-textarea" rows="4" placeholder="What\'s broken, missing, or great?" spellcheck="true"></textarea>' +
+      '<textarea id="gz-fb-text" class="fb-textarea" rows="4" data-gz-grow="prose" placeholder="What\'s broken, missing, or great?" spellcheck="true"></textarea>' +
       '<div class="fb-actions">' +
       '<button id="gz-fb-send" class="primary" type="button">Send</button>' +
       "</div>" +
@@ -290,7 +290,7 @@
     body.innerHTML =
       '<h3 class="wall-modal-title">Feedback</h3>' +
       '<p class="wall-modal-sub">A direct line to Sylve, who builds gazette. What is broken, missing, or great?</p>' +
-      '<textarea id="gz-fb-text" class="fb-textarea" rows="4" placeholder="What\'s broken, missing, or great?" spellcheck="true"></textarea>' +
+      '<textarea id="gz-fb-text" class="fb-textarea" rows="4" data-gz-grow="prose" placeholder="What\'s broken, missing, or great?" spellcheck="true"></textarea>' +
       '<div class="fb-actions"><button id="gz-fb-send" class="primary" type="button">Send</button></div>' +
       '<p id="gz-fb-note" class="wall-note"></p>';
     var text = body.querySelector("#gz-fb-text");

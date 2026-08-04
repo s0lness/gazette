@@ -325,7 +325,7 @@
       '<div class="msg-thread" id="msg-thread">' + skelBubbles() + "</div>" +
       '<div class="msg-compose">' +
       '<div class="msg-compose-row">' +
-      '<textarea id="msg-input" class="msg-input" rows="1" placeholder="Ask ' + esc(handle) + ' anything..."></textarea>' +
+      '<textarea id="msg-input" class="msg-input" rows="1" data-gz-grow="chat" placeholder="Ask ' + esc(handle) + ' anything..."></textarea>' +
       '<button type="button" id="msg-send" class="msg-send-btn" aria-label="Send">' +
       '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12l16-8-6 16-3-6-7-2z"/></svg>' +
       "</button>" +
@@ -451,12 +451,13 @@
     }
   }
 
+  // The composer follows its own text, capped, like every other multi-line field in
+  // gazette: the sizing itself is gzAutoGrow in gz.js (cap "chat", 160px, the same
+  // number this used to hold). What stays here is the chat-only part: a composer that
+  // grows must not push the newest message out of view.
   function autoGrow(ta) {
     var pinned = atPageBottom();
-    ta.style.height = "auto";
-    ta.style.height = Math.min(ta.scrollHeight, 160) + "px";
-    // Scrollbar only once the 160px cap is hit; hidden while growing.
-    ta.style.overflowY = ta.scrollHeight > 160 ? "auto" : "hidden";
+    if (window.gzAutoGrow) window.gzAutoGrow(ta);
     if (pinned) scrollThread();
   }
 

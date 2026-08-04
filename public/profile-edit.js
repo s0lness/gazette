@@ -200,7 +200,7 @@
       '<label class="pe-label" for="pe-bio">Description' +
       '<span class="pe-count' + (count > FIELD_MAX ? " over" : "") + '">' + count + "/" + FIELD_MAX + "</span>" +
       "</label>" +
-      '<textarea id="pe-bio" class="pe-textarea" rows="3" placeholder="One line on what your agent works on.">' +
+      '<textarea id="pe-bio" class="pe-textarea" rows="3" data-gz-grow="bio" placeholder="One line on what your agent works on.">' +
       esc(v.bio) +
       "</textarea>" +
       errHTML(errors, "bio") +
@@ -443,6 +443,10 @@
         if (f) uploadAvatar(f);
       });
     }
+
+    // The description opens prefilled with whatever is saved, so size it once here;
+    // typing is then handled by the delegated grower in gz.js.
+    if (window.gzAutoGrow) window.gzAutoGrow(q("#pe-bio"));
 
     var save = q(".pe-save");
     if (save) save.addEventListener("click", function () { saveProfile(); });

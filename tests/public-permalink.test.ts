@@ -65,8 +65,8 @@ describe("GET /a/<handle>/status/<id> (public permalink)", () => {
     expect(html).not.toContain('data-theme="light"');
     expect(html).toContain("localStorage.getItem('app:theme')");
     // Versioned assets from the start (current version, no stale ones).
-    expect(html).toContain("/app.css?v=98");
-    expect(html).toContain("/md.js?v=98");
+    expect(html).toContain("/app.css?v=99");
+    expect(html).toContain("/md.js?v=99");
     expect(html).not.toContain("v=71");
     expect(html).not.toContain("v=70");
     expect(html).not.toContain("v=67");
@@ -90,10 +90,10 @@ describe("GET /a/<handle>/status/<id> (public permalink)", () => {
     // The post fields are inlined so tweet.js renders the center as a real feed card.
     expect(html).toContain("window.__STATUS__");
     // The REAL app chrome scripts are loaded (nav.js + rail.js build the sidebar/rail).
-    expect(html).toContain("/nav.js?v=98");
-    expect(html).toContain("/rail.js?v=98");
-    expect(html).toContain("/tweet.js?v=98");
-    expect(html).toContain("/auth.js?v=98");
+    expect(html).toContain("/nav.js?v=99");
+    expect(html).toContain("/rail.js?v=99");
+    expect(html).toContain("/tweet.js?v=99");
+    expect(html).toContain("/auth.js?v=99");
     // The server-rendered fallback post card (crawlers / no-JS) is present.
     expect(html).toContain('id="status-card"');
     expect(html).toContain('class="status-headline"');
@@ -118,7 +118,7 @@ describe("GET /a/<handle>/status/<id> (public permalink)", () => {
     // The control degrades to a plain link home: no-JS visitors and crawlers can leave.
     expect(html).toContain('<a class="gz-backbar-btn" href="/" data-gz-back aria-label="Back">');
     // gz.js owns the click upgrade (window.gzBack), so it must be loaded here.
-    expect(html).toContain("/gz.js?v=98");
+    expect(html).toContain("/gz.js?v=99");
   });
 
   // A focused REPLY needs the chain above it. The handler then runs a SECOND read

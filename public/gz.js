@@ -270,6 +270,124 @@
     },
   };
 
+  // ---- auto-growing textareas ---------------------------------------------
+  // No textarea in gazette shows the native resize grip (app.css turns it off for
+  // every one of them: it reads as a rough edge on an otherwise clean card). So a
+  // multi-line field has to follow its own text instead, or a long reply would be
+  // written through a two-line slot. One helper does that for all of them, the DM
+  // composer included: measure the content, take that height up to a cap, and only
+  // past the cap let the box scroll.
+  //
+  // The caps live together, here, because they are a judgement about the SHAPE of
+  // each surface rather than styling: a chat line, a reply and a bio are not the
+  // same object. Values are px; a field opts in from its markup alone, with
+  // data-gz-grow="<name>" (or a raw px number).
+  var GZ_GROW_CAPS = {
+    // The DM composer: a fast back-and-forth where the transcript above matters more
+    // than the draft. Mirrors .msg-input's max-height in app.css; unchanged behaviour.
+    chat: 160,
+    // A reply (under a post, or under a comment) is a short paragraph, and its Reply
+    // button has to stay on screen next to it.
+    reply: 200,
+    // The quote composer is capped at 200 characters anyway, and it sits in a modal
+    // sheet that must not outgrow the viewport.
+    quote: 160,
+    // Free prose: the feedback box and a comment being edited. Roomier, because there
+    // is nothing below them competing for the space.
+    prose: 260,
+    // A description is capped at 300 characters, so this is enough to never scroll.
+    bio: 220,
+  };
+  var GZ_GROW_FALLBACK = 200;
+  // Whatever the cap says, never take more than this share of the window height: the
+  // feedback and quote sheets do not scroll past a point, so a tall box on a short
+  // screen would push its own buttons out of reach.
+  var GZ_GROW_VIEWPORT_SHARE = 0.6;
+
+  // Pure: the height a textarea should take (px) and whether it must scroll, given the
+  // content height it reports, its cap, and the window height. Exported for tests.
+  function gzGrowHeight(scrollHeight, cap, viewportPx) {
+    var sh = Number(scrollHeight);
+    if (!isFinite(sh) || sh < 0) sh = 0;
+    var c = Number(cap);
+    if (!isFinite(c) || c <= 0) c = GZ_GROW_FALLBACK;
+    var vp = Number(viewportPx);
+    if (isFinite(vp) && vp > 0) c = Math.min(c, Math.round(vp * GZ_GROW_VIEWPORT_SHARE));
+    return { height: Math.min(sh, c), scroll: sh > c };
+  }
+
+  // Resolve a cap from a named surface, a raw px number, or the fallback.
+  function gzGrowCap(ta, maxPx) {
+    var raw = maxPx;
+    if (raw == null && ta && ta.getAttribute) raw = ta.getAttribute("data-gz-grow");
+    if (raw == null || raw === "") return GZ_GROW_FALLBACK;
+    if (Object.prototype.hasOwnProperty.call(GZ_GROW_CAPS, raw)) return GZ_GROW_CAPS[raw];
+    var n = Number(raw);
+    return isFinite(n) && n > 0 ? n : GZ_GROW_FALLBACK;
+  }
+
+  // The px to add to scrollHeight to get the height the element should be SET to:
+  // the border on a border-box field, minus the padding on a content-box one.
+  function gzBoxAdjust(ta) {
+    try {
+      var cs = window.getComputedStyle(ta);
+      var f = function (v) { var n = parseFloat(v); return isFinite(n) ? n : 0; };
+      if (cs.boxSizing === "border-box") return f(cs.borderTopWidth) + f(cs.borderBottomWidth);
+      return -(f(cs.paddingTop) + f(cs.paddingBottom));
+    } catch (e) {
+      return 0;
+    }
+  }
+
+  // Size one textarea to its content. Safe on any node (no-ops on everything else) and
+  // safe to call repeatedly: on input, after a paste, and after code sets or clears
+  // .value (a send empties the box, which must then snap back to one line).
+  function gzAutoGrow(ta, maxPx) {
+    if (!ta || ta.tagName !== "TEXTAREA") return;
+    try {
+      if (maxPx != null && ta.setAttribute && !ta.getAttribute("data-gz-grow")) {
+        ta.setAttribute("data-gz-grow", String(maxPx));
+      }
+      // "auto" first, so a shrinking value can actually shrink the box: scrollHeight
+      // on a fixed-height textarea never reports less than the height it already has.
+      ta.style.height = "auto";
+      // scrollHeight is content + padding, with no border. Every field here is
+      // border-box, where `height` covers the border too, so add it back or the box
+      // would lose 2px the moment it is first sized (a visible twitch on first keypress).
+      var r = gzGrowHeight(ta.scrollHeight + gzBoxAdjust(ta), gzGrowCap(ta, maxPx), window.innerHeight || 0);
+      ta.style.height = r.height + "px";
+      ta.style.overflowY = r.scroll ? "auto" : "hidden";
+    } catch (e) {}
+  }
+
+  // One delegated listener covers every grown field, including the ones the feed
+  // re-renders from HTML strings: the attribute alone is the opt-in, no wiring. It
+  // bubbles, so a field's own input handler (the chat composer) still runs first.
+  document.addEventListener("input", function (e) {
+    var t = e.target;
+    if (!t || t.tagName !== "TEXTAREA") return;
+    if (!t.hasAttribute || !t.hasAttribute("data-gz-grow")) return;
+    gzAutoGrow(t);
+  });
+
+  // A width change (rotation, window resize, the mobile keyboard) re-wraps the text,
+  // which makes the pinned pixel height stale. Recompute every mounted field, at most
+  // once per frame.
+  var gzGrowPending = false;
+  try {
+    window.addEventListener("resize", function () {
+      if (gzGrowPending) return;
+      gzGrowPending = true;
+      var run = function () {
+        gzGrowPending = false;
+        var list = document.querySelectorAll("textarea[data-gz-grow]");
+        for (var i = 0; i < list.length; i++) gzAutoGrow(list[i]);
+      };
+      if (typeof requestAnimationFrame === "function") requestAnimationFrame(run);
+      else setTimeout(run, 16);
+    });
+  } catch (e) {}
+
   // ---- toast --------------------------------------------------------------
   // One brief, non-blocking confirmation pill, bottom-center (above the mobile
   // bottom nav via CSS). A new toast REPLACES the current one so rapid actions
@@ -398,7 +516,7 @@
       // the first controllerchange is just the sw claiming a freshly-loaded tab.
       var hadController = !!sw.controller;
 
-      sw.register("/sw.js?v=98").then(function (reg) {
+      sw.register("/sw.js?v=99").then(function (reg) {
         gzSwReg = reg;
 
         // (b) updatefound: a new SW is being installed. Wait for it to activate.
@@ -573,6 +691,8 @@
   window.gzRefreshTimes = refreshTimes;
   window.gzDecorateCopy = gzDecorateCopy;
   window.gzToast = gzToast;
+  window.gzAutoGrow = gzAutoGrow;
+  window.gzGrowHeight = gzGrowHeight;
   window.gzLaunchAsk = gzLaunchAsk;
   window.gzErrorState = gzErrorState;
   window.gzBack = gzBack;

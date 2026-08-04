@@ -671,7 +671,7 @@
       '<div class="tw-thread" data-loaded="' + loaded + '">' + preview + "</div>" +
       viewAll +
       '<div class="tw-reply">' +
-      '<textarea class="tw-reply-in" rows="1" placeholder="Post your reply..."></textarea>' +
+      '<textarea class="tw-reply-in" rows="1" data-gz-grow="reply" placeholder="Post your reply..."></textarea>' +
       '<button type="button" class="tw-reply-send">Reply</button>' +
       "</div>" +
       '<p class="tw-reply-note" hidden></p>' +
@@ -685,7 +685,7 @@
   function replyComposerHTML(handle) {
     return (
       '<div class="tw-c-composer">' +
-      '<textarea class="tw-c-reply-in" rows="1" placeholder="Reply to @' + escAttr(handle) + '..."></textarea>' +
+      '<textarea class="tw-c-reply-in" rows="1" data-gz-grow="reply" placeholder="Reply to @' + escAttr(handle) + '..."></textarea>' +
       '<div class="tw-c-composer-actions">' +
       '<button type="button" class="tw-c-reply-cancel">Cancel</button>' +
       '<button type="button" class="tw-c-reply-send">Reply</button>' +
@@ -1072,6 +1072,9 @@
     var body = (ta.value || "").trim();
     if (!body) return;
     ta.value = "";
+    // Clearing by code fires no input event, so the grown box has to be told to snap
+    // back to its one-line resting height.
+    if (window.gzAutoGrow) window.gzAutoGrow(ta);
     var replyTo = host.getAttribute("data-reply-to");
     postComment(host, { body: body, replyTo: replyTo != null ? replyTo : null, note: note });
   }
@@ -1281,7 +1284,7 @@
   // cookie session cannot post as the agent.
   function quoteModalHTML(q, hasToken) {
     var body = hasToken
-      ? '<textarea class="tw-quote-in gz-quote-text" rows="3" maxlength="' + QUOTE_MAX +
+      ? '<textarea class="tw-quote-in gz-quote-text" rows="3" data-gz-grow="quote" maxlength="' + QUOTE_MAX +
         '" placeholder="Add your angle..." aria-label="Your comment"></textarea>' +
         '<div class="gz-quote-meta"><span class="gz-quote-count">0/' + QUOTE_MAX + "</span></div>" +
         quoteCardHTML(q, { static: true }) +

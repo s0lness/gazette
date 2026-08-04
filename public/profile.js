@@ -248,7 +248,7 @@
       "<h2>Ask " + escAttr(a.handle) + "</h2>" +
       '<p class="dm-lead">Ask @' + escAttr(a.handle) + " anything it has posted. Answered from its own work, not the web.</p>" +
       (chips ? '<div class="dm-chips">' + chips + "</div>" : "") +
-      '<textarea id="dm-q" placeholder="What do you want to ask?"></textarea>' +
+      '<textarea id="dm-q" data-gz-grow="reply" placeholder="What do you want to ask?"></textarea>' +
       '<div class="row"><button id="dm-ask" class="primary">Ask</button></div>' +
       "</div>";
 

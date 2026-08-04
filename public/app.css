@@ -7,6 +7,11 @@
 
 .page { max-width: 62rem; margin: 0 auto; padding: 1.25rem 1.25rem 4rem; }
 .muted { color: var(--ink-3); }
+
+/* No textarea anywhere shows the native resize grip: that little diagonal grabber
+   reads as a rough edge on an otherwise clean card. Every multi-line field grows
+   with its own text instead (gzAutoGrow in gz.js, opted in with data-gz-grow). */
+textarea { resize: none; }
 h1.page-title { font-size: 1.55rem; font-weight: 800; margin: 0.25rem 0 0.15rem; letter-spacing: -0.02em; }
 
 /* Two-column layout: feed + right rail. Stacks on mobile. */
@@ -110,7 +115,7 @@ h1.page-title { font-size: 1.55rem; font-weight: 800; margin: 0.25rem 0 0.15rem;
 /* DM box: a clearly bounded card. */
 .dmbox { border: 1px solid var(--line); border-radius: var(--radius); padding: 1rem; margin: 1rem 0 1.5rem; background: var(--surface); box-shadow: var(--shadow); }
 .dmbox h2 { font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-3); margin: 0 0 0.5rem; font-weight: 700; }
-.dmbox textarea { width: 100%; min-height: 4.5rem; margin-bottom: 0.5rem; }
+.dmbox textarea { width: 100%; min-height: 4.5rem; margin-bottom: 0.5rem; overflow-y: hidden; }
 .dmbox .row { display: flex; align-items: center; gap: 0.6rem; }
 .dm-answer { margin-top: 0.75rem; padding: 0.75rem; border-radius: var(--radius-sm); background: var(--surface-2); border: 1px solid var(--line); font-size: 0.92rem; white-space: pre-wrap; }
 /* When the answer is rendered as markdown (real block elements), drop pre-wrap so the
@@ -416,7 +421,7 @@ body.gz-modal-open { overflow: hidden; }
 /* Feedback modal supplements (reuses .wall-modal / -sheet / -backdrop / -title / -sub
    / -x / .wall-note from above). The .fb- bits are the textarea + the send row. */
 .fb-textarea {
-  width: 100%; box-sizing: border-box; resize: vertical; min-height: 5.5rem;
+  width: 100%; box-sizing: border-box; min-height: 5.5rem; overflow-y: hidden;
   font: inherit; font-size: 0.95rem; line-height: 1.45;
   color: var(--ink); background: var(--surface);
   border: 1px solid var(--line); border-radius: var(--radius-sm);
@@ -1388,7 +1393,7 @@ a.tw-quote:hover { border-color: color-mix(in srgb, var(--accent) 45%, var(--lin
   overflow-y: auto; overscroll-behavior: contain;
 }
 .gz-quote-modal { padding-bottom: calc(1rem + var(--gz-bnav-h, 0px)); }
-.tw-quote-in { width: 100%; min-height: 3rem; resize: vertical; border-radius: var(--radius-sm); box-sizing: border-box; }
+.tw-quote-in { width: 100%; min-height: 3rem; overflow-y: hidden; border-radius: var(--radius-sm); box-sizing: border-box; }
 .gz-quote-text { line-height: 1.5; font-size: 0.98rem; }
 .gz-quote-meta { display: flex; justify-content: flex-end; margin: 0.3rem 0 0.1rem; }
 .gz-quote-count { font-size: 0.78rem; color: var(--ink-3); font-variant-numeric: tabular-nums; }
@@ -1417,7 +1422,7 @@ a.tw-quote:hover { border-color: color-mix(in srgb, var(--accent) 45%, var(--lin
 
 /* Inline reply composer, opened directly under any tweet (not a modal). */
 .tw-c-composer { margin: 0.45rem 0 0.2rem; }
-.tw-c-reply-in { width: 100%; min-height: 2.2rem; resize: vertical; border-radius: var(--radius-sm); box-sizing: border-box; }
+.tw-c-reply-in { width: 100%; min-height: 2.2rem; overflow-y: hidden; border-radius: var(--radius-sm); box-sizing: border-box; }
 .tw-c-composer-actions { display: flex; gap: 0.5rem; justify-content: flex-end; margin-top: 0.4rem; }
 .tw-c-reply-cancel { background: none; border: 0; color: var(--ink-3); font: inherit; font-size: 0.82rem; cursor: pointer; }
 .tw-c-reply-cancel:hover { color: var(--ink); }
@@ -1427,7 +1432,9 @@ a.tw-quote:hover { border-color: color-mix(in srgb, var(--accent) 45%, var(--lin
 .tw-view-all { display: inline-block; color: var(--accent); font-size: 0.86rem; font-weight: 600; text-decoration: none; margin: 0 0 0.7rem; }
 .tw-view-all:hover { text-decoration: underline; }
 .tw-reply { display: flex; gap: 0.5rem; align-items: flex-end; }
-.tw-reply-in { flex: 1 1 auto; min-height: 2.4rem; resize: vertical; border-radius: var(--radius-pill); }
+/* A pill at rest (1.2rem radius on a 2.4rem box) that stays a sanely rounded
+   rectangle once it grows, exactly like the chat composer. */
+.tw-reply-in { flex: 1 1 auto; min-height: 2.4rem; overflow-y: hidden; border-radius: 1.2rem; }
 .tw-reply-send { flex: 0 0 auto; }
 .tw-reply-note { color: var(--ink-3); font-size: 0.82rem; margin: 0.4rem 0 0; }
 
@@ -1981,7 +1988,7 @@ audio.status-media { width: 100%; }
 .pe-input, .pe-textarea {
   width: 100%; box-sizing: border-box; min-height: 44px;
 }
-.pe-textarea { min-height: 5.5rem; resize: vertical; line-height: 1.5; }
+.pe-textarea { min-height: 5.5rem; overflow-y: hidden; line-height: 1.5; }
 .pe-hint { margin: 0; color: var(--ink-3); font-size: 0.8rem; line-height: 1.5; }
 .pe-err { margin: 0; color: var(--accent); font-size: 0.82rem; line-height: 1.45; }
 .pe-field.bad .pe-input, .pe-field.bad .pe-textarea {
@@ -2053,7 +2060,7 @@ audio.status-media { width: 100%; }
 .ma-editor, .ma-flag-editor { display: flex; flex-direction: column; gap: 0.5rem; margin: 0.4rem 0; }
 .ma-textarea, .ma-flag-input {
   width: 100%; border: 1px solid var(--line); border-radius: 12px;
-  background: var(--surface-2); color: var(--ink); padding: 0.55rem 0.7rem; font: inherit; resize: vertical;
+  background: var(--surface-2); color: var(--ink); padding: 0.55rem 0.7rem; font: inherit;
 }
 .ma-editor-actions { display: flex; gap: 0.5rem; align-items: center; }
 .ma-editor-note { font-size: 0.82rem; }

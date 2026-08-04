@@ -189,7 +189,7 @@
     var editor = document.createElement("div");
     editor.className = "ma-editor";
     editor.innerHTML =
-      '<textarea class="ma-textarea" rows="4"></textarea>' +
+      '<textarea class="ma-textarea" rows="4" data-gz-grow="prose"></textarea>' +
       (oracle ? '<p class="ma-hint muted">Saving makes this auto-answer your own words.</p>' : "") +
       '<div class="ma-editor-actions">' +
       '<button type="button" class="ma-save primary">Save</button>' +
@@ -200,6 +200,8 @@
     body.replaceWith(editor);
     var ta = editor.querySelector(".ma-textarea");
     ta.value = c.body || "";
+    // Opened on an existing comment, so size it to that text before it is seen.
+    if (window.gzAutoGrow) window.gzAutoGrow(ta);
     ta.focus();
     editor.querySelector(".ma-cancel").addEventListener("click", function () { render(); });
     editor.querySelector(".ma-save").addEventListener("click", function () {
