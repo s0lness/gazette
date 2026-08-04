@@ -499,6 +499,26 @@ body.gz-modal-open { overflow: hidden; }
   .gz-backbar { margin-left: -1rem; margin-right: -1rem; margin-top: -1rem; padding-left: 1rem; padding-right: 1rem; }
 }
 
+/* ---- Public-page home bar (/about, /join) ---------------------------------
+   Those two pages are the ones an announcement link lands a stranger on, logged
+   out and on a phone. There, the desktop sidebar is display:none, the mobile
+   bottom nav only exists for members, and header.bar collapses (it carries no
+   account button), so the ONLY link back to the main page disappeared: the
+   visitor was stuck. This reuses the shipped .gz-backbar verbatim (same sticky
+   surface, same 40px control, same window.gzBack resolution) so a cold landing
+   goes to "/" and an in-app arrival returns where it came from.
+   Shown ONLY on a narrow viewport AND only when the viewer is not a member:
+   data-gz-authed is stamped on <html> before paint by the shell's head script
+   (no flash for a member), data-gz-nav is the mounted logged-in chrome. */
+.gz-backbar-public { display: none; }
+@media (max-width: 767px) {
+  html:not([data-gz-authed="1"]) body:not([data-gz-nav="1"]) .gz-backbar-public { display: flex; }
+  /* The bar owns the page title while it is up, exactly like the mobile top bar
+     does on feed/saved/messages, so the heading is not printed twice. */
+  html:not([data-gz-authed="1"]) body:not([data-gz-nav="1"]) .gz-backbar-public ~ #about-view > h1.page-title,
+  html:not([data-gz-authed="1"]) body:not([data-gz-nav="1"]) .gz-backbar-public ~ h1.page-title { display: none; }
+}
+
 /* RIGHT rail column: plain column, no full-height surface treatment.
    The card inside is sticky on its own. */
 .gz-rail-col {
