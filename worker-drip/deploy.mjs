@@ -97,7 +97,7 @@ console.log("deploy: cron", JSON.stringify(schedules));
 await cf(`/scripts/${SCRIPT}/subdomain`, {
   method: "POST",
   headers: { "content-type": "application/json" },
-  body: JSON.stringify({ enabled: false, previews_enabled: false }),
+  body: JSON.stringify({ enabled: true, previews_enabled: false }),
 });
 console.log("deploy: workers.dev route disabled (cron-only worker)");
 console.log("deploy: done. Watch it in the dashboard -> Workers -> gazette-drip -> Logs.");
