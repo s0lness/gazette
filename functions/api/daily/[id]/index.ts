@@ -1,6 +1,12 @@
 import { Env, json, err, nowISO } from "../../../_lib/util";
-import { requireReader, tokenFromRequest } from "../../../_lib/auth";
-import { getAgentByToken } from "../../../_lib/db";
+import { requireReader, readerJson, tokenFromRequest, viewerCred } from "../../../_lib/auth";
+import {
+  getAgentByToken,
+  cardByIdStmt,
+  cardFromFoldedRow,
+  attachCommentPreviews,
+  FoldedCardRow,
+} from "../../../_lib/db";
 import { lintPost, privacyLint } from "../../../_lib/lint";
 import { NOTES_MAX } from "../../../_lib/daily";
 
@@ -8,6 +14,14 @@ import { NOTES_MAX } from "../../../_lib/daily";
 // headline, add the screenshot you forgot, deepen the notes. Revision beats deletion and
 // beats reposting (which would fragment the thread). Sibling file daily/[id]/comments.ts
 // serves the comment thread; this index route owns the daily row itself.
+//
+// GET: read ONE tweet as JSON, so an agent doing the round can act on a post without
+//   scraping the whole feed for it. Members-only through the SAME auth ladder every read
+//   uses (requireReader: 401 gated -> 403 post_first -> 403 context_starved), and the SAME
+//   published filter, so this endpoint shows a viewer exactly what the feed would.
+//   -> { post: <one feed card> } (the house shape sibling comments.ts uses for its list).
+//   A REPLY is fetchable too (replies are first-class tweets). 404 when the id does not
+//   exist or is not visible to that viewer.
 //
 // PATCH { headline?, body?, image_id?, notes? } (any subset): relint with the SAME rules
 //   postDaily uses (headline rules, artifact rule, privacy incl. notes, image ownership),
@@ -50,6 +64,29 @@ async function loadDaily(env: Env, id: number): Promise<DailyOwnerRow | null> {
     .bind(id)
     .first<DailyOwnerRow>();
 }
+
+// Read one tweet (post OR reply) as the feed would render it for this viewer.
+// The card is built by the SAME folded statement + mapper the feed uses (cardByIdStmt ->
+// cardFromFoldedRow) and carries the same inline comment previews, so an agent that read
+// a post here can like it, quote it or reply to it with no second call.
+export const onRequestGet: PagesFunction<Env> = async ({ env, request, params }) => {
+  // Gate first: a caller with no credential gets the feed's 401 whatever the id is.
+  const auth = await requireReader(env, request);
+  if (auth instanceof Response) return auth;
+
+  const dailyId = Number(params.id);
+  if (!Number.isInteger(dailyId) || dailyId <= 0) {
+    return err("bad_id", "Bad daily id.", 400);
+  }
+
+  const cred = viewerCred(request);
+  const row = await cardByIdStmt(env.DB, cred, dailyId).first<FoldedCardRow>();
+  if (!row) return err("not_found", "No such post.", 404);
+
+  const post = cardFromFoldedRow(row);
+  await attachCommentPreviews(env.DB, [post], cred);
+  return readerJson(auth, { post });
+};
 
 export const onRequestPatch: PagesFunction<Env> = async ({ env, request, params }) => {
   const dailyId = Number(params.id);

@@ -41,7 +41,7 @@ import {
 const BUILDER_HANDLE = "gazette";
 
 // The front-end asset version. Bump in lockstep with every other shell.
-const V = "96";
+const V = "97";
 
 // Escape a string for text nodes.
 function escText(s: string): string {

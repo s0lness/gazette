@@ -15,13 +15,31 @@ import { hasArtifact as serverHasArtifact } from "../functions/_lib/lint";
 // tools/beat-lint.mjs is a hand-copied mirror of functions/_lib/lint.ts so the drip can
 // reject a bad beat before spending an API call. These tests pin the mirror to the server.
 describe("artifact rule (local mirror of the server lint)", () => {
+  // The shared table both implementations must agree on, byte for byte. Positives and
+  // negatives together: the mirror is only useful if it accepts and refuses exactly what
+  // the server does, so a widening on one side that is not copied to the other fails here.
   const cases = [
+    // positives
     "shipped functions/_lib/db.ts today",
     "see https://gazette.sylve.org/about",
     "commit 261ce26 landed",
     "`functions/_lib/db.ts` in backticks",
+    "rewrote build.mjs from scratch",
+    "index.html now ships the shell",
+    "it is live on plan.sylve.org",
+    'renamed "index.html" to shell.html',
+    "the entry point (src/app.tsx) moved",
+    "attached diagram.png to the beat",
+    // negatives
     "nothing shipped today, just thinking",
     "path with no extension: functions/_lib/db",
+    "e.g. the thing I was building",
+    "i.e. the whole feed",
+    "reviewed the feed, the profile, etc. and moved on",
+    "I shipped it.Then I went to bed",
+    "throughput improved by 3.5 percent",
+    "cut v1.2 of the reader",
+    "I finally understood Next.js",
   ];
 
   test("agrees with the server implementation on every case", () => {
@@ -36,18 +54,26 @@ describe("artifact rule (local mirror of the server lint)", () => {
     expect(hasArtifact("commit 261ce26 landed")).toBe(true);
   });
 
-  test("rejects prose with no artifact, and a backticked path (the live gotcha)", () => {
+  test("accepts a bare filename, a bare host, and a backticked path", () => {
+    expect(hasArtifact("rewrote build.mjs from scratch")).toBe(true);
+    expect(hasArtifact("it is live on plan.sylve.org")).toBe(true);
+    expect(hasArtifact("shipped `tools/drip.mjs` today")).toBe(true);
+  });
+
+  test("rejects prose with no artifact, however many dots it carries", () => {
     expect(hasArtifact("I thought about the feed a lot")).toBe(false);
-    expect(hasArtifact("shipped `tools/drip.mjs` today")).toBe(false);
+    expect(hasArtifact("e.g. the thing I was building")).toBe(false);
+    expect(hasArtifact("I shipped it.Then I went to bed")).toBe(false);
+    expect(hasArtifact("cut v1.2 of the reader")).toBe(false);
   });
 });
 
 describe("repairArtifact", () => {
-  test("unwraps backticked paths only when that is what is missing", () => {
+  test("a backticked path needs no repair any more: the lint accepts it as is", () => {
     const r = repairArtifact({ headline: "shipped", body: "landed `tools/drip.mjs` today" });
-    expect(r.repaired).toBe(true);
-    expect(r.entry.body).toBe("landed tools/drip.mjs today");
-    expect(lintBeat({ handle: "gazette", ...r.entry }).ok).toBe(true);
+    expect(r.repaired).toBe(false);
+    expect(r.entry.body).toBe("landed `tools/drip.mjs` today"); // untouched
+    expect(lintBeat({ handle: "gazette", ...r.entry }).ok).toBe(true); // and it lints clean
   });
 
   test("leaves a beat that already has an artifact untouched", () => {

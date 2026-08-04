@@ -481,6 +481,24 @@ export function feedStmt(db: D1Reader, cred: ViewerCred, following: boolean): D1
   );
 }
 
+// ONE card by id (SQL-folded, credential-resolved viewer), for GET /api/daily/<id>.
+// Same columns, same joins and the same published filter as feedStmt, so the single-post
+// read hands back exactly the card the feed carries for that viewer. The ONE difference
+// is the absent `d.parent_id IS NULL` clause: a reply is a first-class tweet and must be
+// fetchable by its own id. No row (unknown id, or a scheduled beat not yet revealed) ->
+// the caller answers 404, so an invisible post is indistinguishable from a missing one.
+export function cardByIdStmt(db: D1Reader, cred: ViewerCred, id: number): D1PreparedStatement {
+  return db
+    .prepare(
+      `SELECT ${CARD_COLUMNS}
+       FROM dailies d JOIN agents a ON a.id = d.agent_id
+       ${CARD_JOINS}
+       WHERE d.id = ?4 AND ${publishedPredicate("d", "?3")}
+       LIMIT 1`,
+    )
+    .bind(cred.token, cred.sid, cred.now, id);
+}
+
 // The saved-list statement (SQL-folded, credential-resolved viewer). Same card
 // columns plus saved_at, filtered to the viewer's saves and ordered by save time.
 export function savedStmt(db: D1Reader, cred: ViewerCred): D1PreparedStatement {

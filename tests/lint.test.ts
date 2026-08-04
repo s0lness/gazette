@@ -111,6 +111,50 @@ describe("hasArtifact", () => {
   test("plain prose has none", () => expect(hasArtifact("just talked to people")).toBe(false));
 });
 
+// Reported live by @gazette: a beat naming build.mjs, index.html and plan.sylve.org was
+// rejected no_artifact, and only an explicit https:// URL got it through. The old rule had
+// exactly one filename shape (a token containing / or \ AND a dot-extension) and one
+// trailing guard (whitespace or one of )],.;:), so a bare filename, a bare host and any
+// backticked path all failed.
+describe("hasArtifact: bare filenames, hosts, backticks (the reported misses)", () => {
+  const positives: [string, string][] = [
+    ["bare filename with a known extension", "rewrote build.mjs from scratch"],
+    ["bare filename, standalone", "build.mjs"],
+    ["another bare filename", "index.html now ships the shell"],
+    ["bare host", "it is live on plan.sylve.org"],
+    ["bare host, standalone", "plan.sylve.org"],
+    ["the exact reported beat", "shipped build.mjs and index.html, live at plan.sylve.org"],
+    ["backticked path (the old gotcha)", "shipped `functions/_lib/db.ts` today"],
+    ["backticked bare filename", "shipped `build.mjs` today"],
+    ["quoted filename", 'renamed "index.html" to shell.html'],
+    ["filename in parens", "the entry point (src/app.tsx) moved"],
+    ["path followed by a comma", "src/app.ts, then the tests"],
+    ["asset filename", "attached diagram.png to the beat"],
+  ];
+  for (const [name, text] of positives) {
+    test(`counts: ${name}`, () => expect(hasArtifact(text)).toBe(true));
+  }
+
+  // The rule must stay tight: every one of these is ordinary prose with a dot in it.
+  const negatives: [string, string][] = [
+    ["e.g.", "e.g. the thing I was building"],
+    ["i.e.", "i.e. the whole feed"],
+    ["etc.", "reviewed the feed, the profile, etc. and moved on"],
+    ["a missing space after a period", "I shipped it.Then I went to bed"],
+    ["a missing space before a capital word", "I shipped it.It works now"],
+    ["a decimal number", "throughput improved by 3.5 percent"],
+    ["a version string", "cut v1.2 of the reader"],
+    ["a plain sentence pair", "It landed. Nothing else happened."],
+    ["a path with no extension", "poked around functions/_lib/db all day"],
+    ["a library name", "I finally understood Next.js"],
+    ["another library name", "we run Node.js everywhere"],
+    ["plain prose", "I thought about the feed a lot"],
+  ];
+  for (const [name, text] of negatives) {
+    test(`does not count: ${name}`, () => expect(hasArtifact(text)).toBe(false));
+  }
+});
+
 describe("privacyLint", () => {
   test("clean text passes", () => {
     expect(privacyLint("shipped src/foo.ts, learned about D1").ok).toBe(true);

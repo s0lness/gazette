@@ -39,13 +39,81 @@ function splitSections(body: string): Map<string, string> {
   return out;
 }
 
-// A concrete artifact: URL, path-like token with an extension, or a commit-ish hex (7-40).
+// ---- artifact detection ---------------------------------------------------
+// KEEP IN SYNC with `tools/beat-lint.mjs` (the local mirror the drip and the pantry CLI
+// run before spending an API call). Change one, change the other; tests/pantry.test.ts
+// pins the two implementations to a shared table of cases.
+//
+// A beat must carry a CONCRETE artifact. Five shapes count:
+//   1. an http(s) URL;
+//   2. a path with a separator and any extension (src/app.ts, functions\db.ts);
+//   3. a bare filename with a KNOWN code/asset extension (build.mjs, index.html);
+//   4. a bare host with a known TLD (plan.sylve.org);
+//   5. a standalone 7-40 hex commit hash.
+//
+// 2 and 3 match INSIDE backticks and quotes. The old rule required the extension to be
+// followed by whitespace or one of )],.;: so a backticked `src/app.ts` failed on the
+// closing backtick alone; 3 and 4 did not exist at all, so a beat naming build.mjs,
+// index.html and plan.sylve.org was rejected no_artifact. Both were reported live.
+//
+// 3 and 4 are WHITELISTS (extensions, TLDs), never "any dot suffix": that is what keeps
+// ordinary prose out. "e.g.", "i.e.", "etc.", "shipped it.Then", "3.5" and "v1.2" all
+// carry a dot and none of them is an artifact.
+
+// Code / config / asset extensions. Single-letter and English-word suffixes are avoided
+// (no ".r", no ".in", no ".to") so a missing space after a period cannot pass as a file.
+const ARTIFACT_EXT = [
+  // code
+  "js", "mjs", "cjs", "jsx", "ts", "tsx", "mts", "cts", "py", "rb", "go", "rs", "java",
+  "kt", "kts", "swift", "c", "h", "cc", "cpp", "hpp", "cs", "php", "sh", "bash", "zsh",
+  "ps1", "psm1", "bat", "cmd", "lua", "pl", "pm", "ex", "exs", "erl", "hs", "ml", "clj",
+  "cljs", "scala", "dart", "vue", "svelte", "astro", "sol", "zig", "nim", "wat", "wasm",
+  // markup, data, config
+  "html", "htm", "css", "scss", "sass", "less", "json", "jsonc", "json5", "yaml", "yml",
+  "toml", "ini", "cfg", "conf", "env", "xml", "csv", "tsv", "sql", "graphql", "gql",
+  "proto", "md", "mdx", "rst", "txt", "tf", "tfvars", "lock", "gradle", "mk", "nix",
+  "plist", "patch", "diff", "log", "ipynb",
+  // assets and binaries
+  "png", "jpg", "jpeg", "gif", "svg", "webp", "avif", "ico", "mp4", "mov", "webm", "mp3",
+  "wav", "pdf", "zip", "tar", "gz", "tgz", "whl", "jar", "exe", "dll", "dylib", "bin",
+  "ttf", "woff", "woff2", "sqlite",
+];
+
+// TLDs a builder actually links to. Deliberately excludes English words (.in, .it, .is,
+// .me, .us, .so, .at, .be, .to) so "shipped it.It works" cannot read as a host.
+const ARTIFACT_TLD = [
+  "com", "org", "net", "io", "dev", "app", "ai", "co", "sh", "xyz", "cloud", "tech",
+  "site", "blog", "page", "pages", "tools", "works", "wiki", "news", "space", "live",
+  "fyi", "gg", "software", "systems", "team", "studio",
+];
+
+// Library names that LOOK like a bare filename but are just prose ("I finally understood
+// Next.js"). Only rule 3 ignores them: `src/next.js` still counts, via rule 2.
+const NOT_A_FILE = /\b(?:node|next|nuxt|vue|react|three|d3|express|ember|backbone|socket|discord)\.js\b/gi;
+
+// 2: a path (has a separator) with any extension. Backticks and quotes are excluded from
+// the token so a wrapped path still matches; the trailing guard only forbids the
+// extension running into more word characters.
+const PATH_RE = /[^\s`"']*[\/\\][^\s`"']*\.[A-Za-z0-9]{1,10}(?![A-Za-z0-9])/;
+// 3: a bare filename with a whitelisted extension, anywhere (backticks, quotes, parens).
+const FILE_RE = new RegExp(
+  `(?:^|[^A-Za-z0-9_])[A-Za-z0-9_][A-Za-z0-9_./\\\\-]*\\.(?:${ARTIFACT_EXT.join("|")})(?![A-Za-z0-9])`,
+  "i",
+);
+// 4: a bare host. Lowercase only, on purpose: "shipped it.Then" must not read as a host.
+const HOST_RE = new RegExp(
+  `(?:^|[^A-Za-z0-9_.@/\\\\-])(?:[a-z0-9][a-z0-9-]*\\.)+(?:${ARTIFACT_TLD.join("|")})(?![A-Za-z0-9-])`,
+);
+// 5: a standalone 7-40 hex run.
+const COMMIT_RE = /\b[0-9a-f]{7,40}\b/i;
+
 export function hasArtifact(text: string): boolean {
-  if (/https?:\/\/\S+/i.test(text)) return true;
-  // path-like: contains / or \ and a filename with a dot-extension segment.
-  if (/[^\s]*[\/\\][^\s]*\.[A-Za-z0-9]{1,10}(?=$|[\s)\],.;:])/.test(text)) return true;
-  // commit-ish: a standalone 7-40 hex run.
-  if (/\b[0-9a-f]{7,40}\b/i.test(text)) return true;
+  const s = String(text ?? "");
+  if (/https?:\/\/\S+/i.test(s)) return true;
+  if (PATH_RE.test(s)) return true;
+  if (FILE_RE.test(s.replace(NOT_A_FILE, " "))) return true;
+  if (HOST_RE.test(s)) return true;
+  if (COMMIT_RE.test(s)) return true;
   return false;
 }
 
@@ -89,7 +157,7 @@ export function templateLint(body: string): LintResult {
     errors.push({
       code: "no_artifact",
       message:
-        'The "## Shipped" section must reference a concrete artifact: a URL, a path with an extension, or a commit hash (7-40 hex). "nothing shipped" is not accepted.',
+        'The "## Shipped" section must reference a concrete artifact: a URL, a domain, a file path or filename with an extension, or a commit hash (7-40 hex). "nothing shipped" is not accepted.',
     });
   }
 
@@ -188,7 +256,7 @@ export function lintPost({ headline, body, hasImage, isQuote }: PostInput): Lint
     errors.push({
       code: "no_artifact",
       message:
-        "Include a concrete artifact (a URL, a path with an extension, or a commit hash 7-40 hex) in the headline or body, or attach an image.",
+        "Include a concrete artifact (a URL, a domain, a file path or filename with an extension, or a commit hash 7-40 hex) in the headline or body, or attach an image.",
     });
   }
 

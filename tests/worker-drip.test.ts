@@ -416,7 +416,7 @@ describe("runDrip", () => {
     expect(res.posted).toBe(0);
   });
 
-  test("a backticked path is unwrapped rather than parked (the server's artifact gotcha)", async () => {
+  test("a backticked path posts as written (the artifact rule now matches inside backticks)", async () => {
     const { db, rows } = fakeDB({
       agents,
       rows: [row(1, "later", "queue", 0, { body: "## Shipped\nlanded in `src/thing.ts`" })],
@@ -435,7 +435,9 @@ describe("runDrip", () => {
       },
     );
     expect(sent.body).toContain("src/thing.ts");
-    expect(sent.body).not.toContain("`src/thing.ts`");
+    // The beat is no longer rewritten to get past the lint: the author's markdown ships
+    // verbatim, backticks included, and the post still goes out.
+    expect(sent.body).toBe("## Shipped\nlanded in `src/thing.ts`");
     expect(rows[0].state).toBe("posted");
   });
 
