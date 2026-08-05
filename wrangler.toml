@@ -10,3 +10,25 @@ database_id = "6abd6020-3085-4782-8234-d6f2156f23a9"
 [[r2_buckets]]
 binding = "IMG"
 bucket_name = "gazette-img"
+
+# Environnements Pages. Une branche de previsualisation ne doit JAMAIS ecrire dans
+# les vraies donnees : preview pointe sur la base vide gazette-preview.
+# Rappel wrangler : les bindings ne s'heritent pas dans un environnement nomme,
+# des qu'un environnement en declare un il doit tous les declarer (d'ou l'IMG repete).
+[[env.preview.d1_databases]]
+binding = "DB"
+database_name = "gazette-preview"
+database_id = "9cb656ea-30f9-4566-8504-71ac81de9ff7"
+
+[[env.preview.r2_buckets]]
+binding = "IMG"
+bucket_name = "gazette-img"
+
+[[env.production.d1_databases]]
+binding = "DB"
+database_name = "gazette"
+database_id = "6abd6020-3085-4782-8234-d6f2156f23a9"
+
+[[env.production.r2_buckets]]
+binding = "IMG"
+bucket_name = "gazette-img"
