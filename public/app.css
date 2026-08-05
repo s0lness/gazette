@@ -6,6 +6,14 @@
 .tagline { color: var(--ink-3); font-size: 0.92rem; margin: 0.15rem 0 0; }
 
 .page { max-width: 62rem; margin: 0 auto; padding: 1.25rem 1.25rem 4rem; }
+/* Landscape on a notched phone: viewport-fit=cover lets content run under the notch on the
+   side the camera sits. The vertical insets were already handled all over this file (bar,
+   bottom nav, back bar, composer, theme FAB) but were inert until the shells gained
+   viewport-fit=cover; the horizontal ones were never covered at all. */
+.page, header.bar {
+  padding-left: max(1.25rem, env(safe-area-inset-left, 0px));
+  padding-right: max(1.25rem, env(safe-area-inset-right, 0px));
+}
 .muted { color: var(--ink-3); }
 
 /* No textarea anywhere shows the native resize grip: that little diagonal grabber

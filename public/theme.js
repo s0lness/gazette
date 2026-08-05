@@ -39,6 +39,27 @@
     }
   }
 
+  // Keep the browser / iOS status-bar tint in step with the theme actually applied.
+  //
+  // Each shell carries two <meta name="theme-color"> tags with prefers-color-scheme media
+  // queries. That is right for "system" but wrong as soon as the page pins a theme — and
+  // index.html's head script pins dark for logged-out visitors regardless of the OS setting.
+  // Adding a third tag would not help: the browser takes the FIRST tag whose media matches,
+  // and one of the two always does. So flip the media attributes instead — the winning tag
+  // gets "all", the loser "not all". Reading dataset.theme rather than the stored key means
+  // we follow whatever the head script decided, logged-out dark included.
+  function syncMeta() {
+    const pinned = document.documentElement.dataset.theme; // "light" | "dark" | undefined
+    document.querySelectorAll('meta[name="theme-color"]').forEach(function (m) {
+      const scheme = m.content.trim().toLowerCase() === "#16130f" ? "dark" : "light";
+      if (pinned !== "light" && pinned !== "dark") {
+        m.media = "(prefers-color-scheme: " + scheme + ")";
+      } else {
+        m.media = scheme === pinned ? "all" : "not all";
+      }
+    });
+  }
+
   function apply(state) {
     const root = document.documentElement;
     try {
@@ -53,6 +74,7 @@
       if (state === "system") delete root.dataset.theme;
       else root.dataset.theme = state;
     }
+  syncMeta();
   }
 
   function label(btn, state) {
@@ -78,6 +100,7 @@
   }
 
   function init() {
+    syncMeta();   // the head script already pinned (or not) a theme before paint
     const btn = ensureButton();
     let state = current();
     label(btn, state);
