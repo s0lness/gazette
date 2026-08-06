@@ -32,5 +32,6 @@
 <script src="/rail.js?v=100"></script>
 <script src="/nav.js?v=100"></script>
 <script src="/forum.js?v=100"></script>
+  <script>/* markup: visual-feedback overlay, loads only when asked (?markup) */(function(){if(/[?&]markup/.test(location.search)||sessionStorage.getItem("markup-on"))document.head.appendChild(Object.assign(document.createElement("script"),{src:"https://markup.sylve.org/markup.js"}))})()</script>
 </body>
 </html>
