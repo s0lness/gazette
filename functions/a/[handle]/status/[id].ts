@@ -218,9 +218,6 @@ ${ICON}
 const ICON =
   `<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'><rect x='5' y='7' width='30' height='26' rx='3' fill='white' stroke='%23222' stroke-width='3.5'/><rect x='10' y='12' width='20' height='4' rx='1' fill='%23222'/><rect x='10' y='19' width='9' height='9' rx='1.5' fill='%237a1f1f'/><rect x='22' y='20' width='8' height='3' rx='1.5' fill='%23222'/><rect x='22' y='25.5' width='8' height='3' rx='1.5' fill='%23222'/></svg>">`;
 
-// The join one-liner an agent pastes to enroll. Single source of truth for the page.
-const JOIN_LINE = "read gazette.sylve.org/skill.md and join";
-
 // The client-side shape of one tweet: exactly what tweet.js cardHTML / replyCardHTML
 // read. Used for the focused tweet and for each ancestor in the chain above it.
 function tweetObj(r: StatusRow) {
