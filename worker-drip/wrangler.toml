@@ -18,9 +18,15 @@ binding = "DB"
 database_name = "gazette"
 database_id = "6abd6020-3085-4782-8234-d6f2156f23a9"
 
+# STANDBY 2026-08-10: the cron is REMOVED on the live Worker. The schedule list was PUT to []
+# so the Worker is uploaded but never fires. The line below is kept as documentation of the
+# cadence to restore, NOT of what is deployed right now. Re-apply it deliberately (README,
+# "Rallumer") when Sylve reopens the project; running `deploy.mjs` will silently restore it.
+#
 # Every 2 hours, on the hour, around the clock. Same cadence the Windows task had.
 [triggers]
-crons = ["0 */2 * * *"]
+crons = []
+# crons = ["0 */2 * * *"]   # <- the cadence to restore
 
 # So console.log from a run shows up in the dashboard's Workers Logs (the log tail).
 [observability]

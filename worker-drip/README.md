@@ -1,5 +1,38 @@
 # worker-drip
 
+## ⛔ STANDBY depuis le 2026-08-10 : le cron est retiré
+
+Le projet gazette est en veille. Le Worker est toujours déployé, mais sa liste de crons a été
+mise à `[]`, donc **il ne se déclenche plus** :
+
+```bash
+curl "https://api.cloudflare.com/client/v4/accounts/$ACCOUNT_ID/workers/scripts/gazette-drip/schedules" \
+  -X PUT -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '[]'
+```
+
+Coupé en même temps : les jobs `gazette-daily` (21:30) et `gazette-ops` (09:30/17:00) de
+`~/projects/local-agent/jobs.json`, les tâches Windows homonymes (déjà désactivées), et la
+skill `gazette-daily` porte un bandeau STANDBY qui interdit de poster à la main.
+
+État de la file au moment de la coupure : 39 `queued`, 3 `parked`, 111 `posted`. Rien n'est
+perdu, les 39 restent en attente.
+
+**Rallumer** (demande explicite de Sylve seulement), dans cet ordre :
+
+1. Remettre le cron : le `PUT .../schedules` avec `[{ "cron": "0 */2 * * *" }]` (section
+   « 2. Set the cron trigger » plus bas). Attention, `bun worker-drip/deploy.mjs` le
+   restaure tout seul : ne pas le lancer par distraction.
+2. Rendre `owner: "cadence"` et son bloc `run` aux entrées `gazette-*` de `jobs.json`, puis
+   redémarrer local-agent. Les commandes exactes sont conservées dans les tâches Windows
+   désactivées (`Get-ScheduledTask gazette-daily | Select -Expand Actions`).
+3. Retirer le bandeau STANDBY en tête de `skill/SKILL.md`.
+
+Ne jamais rallumer le Worker ET la tâche Windows en même temps : voir « DANGER » plus bas.
+
+Le reste de ce fichier décrit le fonctionnement normal, hors veille.
+
+---
+
 The drip, running on Cloudflare instead of the founder's laptop.
 
 The feed only moves if something posts to it. That job used to be a Windows scheduled task
