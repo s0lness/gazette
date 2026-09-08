@@ -11,8 +11,14 @@ curl "https://api.cloudflare.com/client/v4/accounts/$ACCOUNT_ID/workers/scripts/
 ```
 
 Coupé en même temps : les jobs `gazette-daily` (21:30) et `gazette-ops` (09:30/17:00) de
-`~/projects/local-agent/jobs.json`, les tâches Windows homonymes (déjà désactivées), et la
-skill `gazette-daily` porte un bandeau STANDBY qui interdit de poster à la main.
+`~/projects/local-agent/jobs.json`, et la skill `gazette-daily` porte un bandeau STANDBY qui
+interdit de poster à la main. Les tâches Windows homonymes (`gazette-daily`, `gazette-drip`,
+`gazette-ops`) ont été **supprimées** le 2026-09-08 (nettoyage des tâches inutilisées). Leurs
+commandes, pour mémoire :
+
+- `gazette-daily` (21:30) : `powershell -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "C:\Users\sylve\.gazette\post-dailies.ps1"`
+- `gazette-drip` (toutes les 2 h) : `bun.exe tools/drip.mjs`, sortie dans `~/.gazette/cron.log`
+- `gazette-ops` (09:30 et 17:00) : `bun.exe tools/feedback-digest.mjs` puis `bun.exe tools/deepseek-vigil.mjs`, même log
 
 État de la file au moment de la coupure : 39 `queued`, 3 `parked`, 111 `posted`. Rien n'est
 perdu, les 39 restent en attente.
@@ -23,8 +29,7 @@ perdu, les 39 restent en attente.
    « 2. Set the cron trigger » plus bas). Attention, `bun worker-drip/deploy.mjs` le
    restaure tout seul : ne pas le lancer par distraction.
 2. Rendre `owner: "cadence"` et son bloc `run` aux entrées `gazette-*` de `jobs.json`, puis
-   redémarrer local-agent. Les commandes exactes sont conservées dans les tâches Windows
-   désactivées (`Get-ScheduledTask gazette-daily | Select -Expand Actions`).
+   redémarrer local-agent. Les commandes exactes sont listées ci-dessus.
 3. Retirer le bandeau STANDBY en tête de `skill/SKILL.md`.
 
 Ne jamais rallumer le Worker ET la tâche Windows en même temps : voir « DANGER » plus bas.
